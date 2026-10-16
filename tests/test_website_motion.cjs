@@ -56,6 +56,43 @@ async function main() {
         assert.equal(await button.getAttribute('aria-pressed'), 'true');
         await page.emulateMedia({reducedMotion: 'no-preference'});
       }
+      // Real pointer drags on rendered text must rotate without selecting it.
+      const hero = page.locator('#hero-installation');
+      await page.evaluate(() => getSelection().removeAllRanges());
+      const start = await page.locator('#hero-current').evaluate(el => {
+        const node = [...el.childNodes].find(n => n.nodeType === Node.TEXT_NODE && n.textContent.trim());
+        const range = document.createRange();
+        range.setStart(node, 0);range.setEnd(node, Math.min(3, node.length));
+        const rect = range.getBoundingClientRect();
+        return {x: rect.x + rect.width / 2, y: rect.y + rect.height / 2};
+      });
+      if (mode === 'touch') {
+        const input = await context.newCDPSession(page);
+        await input.send('Input.dispatchTouchEvent', {type:'touchStart', touchPoints:[start]});
+        for (let step = 1; step <= 6; step++) {
+          await input.send('Input.dispatchTouchEvent', {type:'touchMove', touchPoints:[{x:start.x + step * 12, y:start.y}]});
+          await page.waitForTimeout(20);
+        }
+        await input.send('Input.dispatchTouchEvent', {type:'touchEnd', touchPoints:[]});
+        await input.detach();
+      } else {
+        await page.mouse.move(start.x, start.y);await page.mouse.down();
+        await page.mouse.move(start.x + 145, start.y + 30, {steps:12});await page.mouse.up();
+        assert.equal(await page.evaluate(() => document.activeElement.id), 'hero-installation');
+      }
+      assert.equal(await page.evaluate(() => getSelection().toString()), '');
+      assert.equal(await hero.getAttribute('data-rotation'), 'custom');
+      await hero.focus();await page.keyboard.press('Home');
+      assert.equal(await hero.getAttribute('data-rotation'), 'centered');
+      await page.keyboard.press('ArrowRight');
+      assert.equal(await hero.getAttribute('data-rotation'), 'custom');
+      await page.locator('#recenter-installation').click();
+      assert.equal(await hero.getAttribute('data-rotation'), 'centered');
+      assert.equal(await page.locator('.hero-description').evaluate(el => getComputedStyle(el).userSelect), 'auto');
+      await page.locator('#hero-play').focus();await page.keyboard.press('Enter');
+      assert.equal(await page.locator('#hero-play').getAttribute('aria-pressed'), 'true');
+      await page.keyboard.press('Enter');
+      assert.equal(await page.locator('#hero-play').getAttribute('aria-pressed'), 'false');
       await page.evaluate(() => {
         window.__bodyMutations = 0;
         new MutationObserver(records => { window.__bodyMutations += records.length; })
@@ -117,7 +154,7 @@ async function main() {
         assert.match(await download.innerText(), /Download Windows ZIP/);
       }
       assert.deepEqual(errors, []);
-      results.push({mode, pauseCycles: 3, bodyMutations: mutationCount, pageErrors: errors.length, result: 'passed'});
+      results.push({mode, dragWithoutSelection:true, pauseCycles: 3, bodyMutations: mutationCount, pageErrors: errors.length, result: 'passed'});
       if (process.env.HALO_QA_OUTPUT) {
         await page.evaluate(() => scrollTo(0, 0));
         await page.waitForTimeout(300);
