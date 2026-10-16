@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#ffd42a">
+  <meta name="description" content="Meet Halo, a native Windows music companion. Add screen-edge light, animated lyrics and immersive scenes to Spotify desktop playback. No Spotify login or API key.">
+  <meta property="og:title" content="Halo — Let your music fill the screen.">
+  <meta property="og:description" content="A little atmosphere for your music—light, motion and words that follow the song.">
+  <meta property="og:type" content="website">
+  <title>Halo — Let your music fill the screen.</title>
+  <link rel="icon" type="image/svg+xml" href="assets/halo-mark.svg">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="motion.css">
+  <link rel="stylesheet" href="pop.css">
+  <link rel="stylesheet" href="world.css">
+  <script src="site-config.js" defer></script>
+  <script src="app.js" defer></script>
+  <script src="motion.js" defer></script>
+  <script src="world.js" defer></script>
+  <script src="music3d.js" defer></script>
+  <script>
+    window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
+  </script>
+  <script src="/_vercel/insights/script.js" defer></script>
+</head>
+<body>
+  <canvas class="world-canvas" id="world-canvas" aria-hidden="true"></canvas>
+  <div class="world-cursor" id="world-cursor" aria-hidden="true"><span>↗</span></div>
+  <div class="scroll-meter" aria-hidden="true"><i></i></div>
+  <svg class="icon-library" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+    <symbol id="icon-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></symbol>
+    <symbol id="icon-external" viewBox="0 0 24 24"><path d="M7 17 17 7M7 7h10v10"/></symbol>
+    <symbol id="icon-github" viewBox="0 0 24 24"><path fill="currentColor" stroke="none" d="M12 .9a11.1 11.1 0 0 0-3.5 21.6c.6.1.8-.3.8-.5v-2.1c-3.4.7-4.1-1.5-4.1-1.5-.6-1.4-1.4-1.7-1.4-1.7-1.1-.8.1-.8.1-.8 1.2.1 1.8 1.2 1.8 1.2 1.1 1.9 2.8 1.3 3.6 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-6A4.7 4.7 0 0 1 5.8 7c-.1-.3-.5-1.6.1-3.4 0 0 1-.3 3.4 1.3a11.9 11.9 0 0 1 6.2 0C17.8 3.3 18.8 3.6 18.8 3.6c.6 1.8.2 3.1.1 3.4a4.7 4.7 0 0 1 1.2 3.3c0 4.7-2.8 5.7-5.5 6 .4.4.8 1.1.8 2.2V22c0 .3.2.6.8.5A11.1 11.1 0 0 0 12 .9Z"/></symbol>
+    <symbol id="icon-windows" viewBox="0 0 24 24"><path fill="currentColor" stroke="none" d="m2 4 9-1.2v8.3H2zm10.2-1.4L22 1.2v9.9h-9.8zM2 12.3h9v8.3L2 19.4zm10.2 0H22v10l-9.8-1.5z"/></symbol>
+    <symbol id="icon-play" viewBox="0 0 24 24"><path fill="currentColor" stroke="none" d="m8 5 11 7-11 7z"/></symbol>
+    <symbol id="icon-pause" viewBox="0 0 24 24"><path fill="currentColor" stroke="none" d="M7 5h4v14H7zm6 0h4v14h-4z"/></symbol>
+    <symbol id="icon-skip" viewBox="0 0 24 24"><path fill="currentColor" stroke="none" d="m5 5 11 7-11 7zm12 0h2v14h-2z"/></symbol>
+    <symbol id="icon-sound" viewBox="0 0 24 24"><path d="M3 10h4l5-4v12l-5-4H3zm13-1 5 6m0-6-5 6"/></symbol>
+    <symbol id="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 1v3m0 16v3M1 12h3m16 0h3M4.2 4.2l2.1 2.1m11.4 11.4 2.1 2.1m0-15.6-2.1 2.1M6.3 17.7l-2.1 2.1"/></symbol>
+    <symbol id="icon-expand" viewBox="0 0 24 24"><path d="M4 9V4h5m6 0h5v5M4 15v5h5m6 0h5v-5"/></symbol>
+  </svg>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="announcement" aria-label="Halo at a glance"><span>MADE FOR WINDOWS <b>✦</b> SPOTIFY DESKTOP <b>✦</b> NO LOGIN NEEDED <b>✦</b> A LITTLE ATMOSPHERE FOR YOUR MUSIC <b>✦</b></span></div>
+  <header class="site-header wrap">
+    <a class="wordmark" href="#" aria-label="Halo home"><span class="halo-logo" aria-hidden="true"></span>halo<span class="logo-period">.</span></a>
+    <nav aria-label="Main navigation"><a href="#light">Light</a><a href="#lyrics">Lyrics</a><a href="#scenes">Scenes</a><a href="#details">The details</a></nav>
+    <a class="nav-repo" data-repository href="#repository"><span>Meet Halo</span><svg class="icon"><use href="#icon-external"/></svg></a>
+  </header>
+  <main id="main">
+    <section class="hero wrap" aria-labelledby="hero-heading">
+      <div class="hero-copy">
+        <p class="eyebrow"><span class="status-dot"></span>MEET YOUR MUSIC’S NEW PLUS-ONE</p>
+        <h1 id="hero-heading">Good music.<br>Great light.<br><span>All the feels.</span></h1>
+        <p class="hero-description">Meet Halo. Screen-edge glow, floating lyrics and fullscreen scenes for your Spotify desktop. Make a little room for the song.</p>
+        <div class="hero-actions"><a class="button button-primary" data-repository data-download href="#repository"><svg class="icon"><use href="#icon-windows"/></svg><span data-repository-label>Explore Halo</span><svg class="icon"><use href="#icon-external"/></svg></a><a class="text-link" href="#light">Try the light show <span aria-hidden="true">↓</span></a></div>
+        <p class="repo-pending" data-repository-pending>GitHub link coming soon.</p>
+        <p class="hero-footnote"><svg class="icon"><use href="#icon-windows"/></svg>Native Windows app <span class="small-divider"></span> Spotify desktop</p>
+      </div>
+      <div class="hero-installation" id="hero-installation" tabindex="0" aria-label="Interactive 3D light installation. Drag or use arrow keys to rotate. Press Home to recenter.">
+        <canvas class="light-sculpture" id="hero-light-canvas" aria-hidden="true"></canvas>
+        <div class="sculpture-fallback" aria-hidden="true"><i></i><i></i><i></i></div>
+        <div class="ambient-field" aria-hidden="true"></div>
+        <div class="orbital-line" aria-hidden="true"></div>
+        <div class="installation-scene" id="installation-scene">
+          <div class="screen-cast" aria-hidden="true"></div>
+          <div class="floating-screen">
+            <div class="screen-rim" aria-hidden="true"></div>
+            <div class="screen-inside">
+              <div class="illustration-toolbar"><span class="mini-brand"><span class="mini-halo"></span>halo</span><span>A space for the song</span><span class="window-dots" aria-hidden="true">− &nbsp; □ &nbsp; ×</span></div>
+              <div class="desktop-atmosphere" aria-hidden="true"></div>
+              <span class="screen-coordinate" aria-hidden="true">51° 30′ N &nbsp; / &nbsp; AFTER HOURS</span>
+              <div class="hero-album"><img src="assets/afterglow-pop.svg" alt="Original Afterglow album illustration with a yellow record, cobalt rings and a pink wave" width="600" height="600"><div class="album-caption">AFTERGLOW <span>01 / ORIGINAL DEMO</span></div></div>
+              <div class="hero-lyrics" aria-label="Original demo lyrics"><span class="lyric-previous" id="hero-previous">Leave the day behind</span><span class="lyric-current" id="hero-current">The room turns<br>to <em>gold.</em></span><span class="lyric-next" id="hero-next">Stay a little longer</span></div>
+              <div class="demo-player"><div class="demo-track"><span class="equalizer" aria-hidden="true"><i></i><i></i><i></i><i></i></span><div><strong>Afterglow</strong><span>A Halo visual demo</span></div></div><button class="round-button hero-play" id="hero-play" aria-label="Pause visual demo" aria-pressed="false"><svg class="icon"><use href="#icon-pause"/></svg></button><span class="demo-time" id="demo-time">0:12</span><div class="demo-progress" aria-hidden="true"><span id="demo-progress"></span></div><span class="demo-duration">1:00</span></div>
+            </div>
+          </div>
+          <span class="floating-label label-light"><span></span>Made for Windows ✦</span>
+          <span class="floating-label label-words"><span></span>No login. Just play.</span>
+        </div>
+        <div class="hero-scene-caption"><div class="installation-instructions"><span><span class="caption-dot"></span>CONCEPT ILLUSTRATION</span><span class="drag-instruction">Drag to turn · arrow keys work too</span></div><div class="installation-controls"><button class="recenter-button" id="recenter-installation" aria-label="Recenter the 3D light installation">Recenter <span aria-hidden="true">↺</span></button><button class="motion-toggle" id="motion-toggle" aria-pressed="false"><svg class="icon"><use href="#icon-pause"/></svg><span>Pause motion</span></button></div></div>
+      </div>
+    </section>
+
+    <div class="intro-band wrap"><span class="eyebrow">A LITTLE MORE THAN<br>BACKGROUND MUSIC.</span><p>Your favourite songs.<br><span>A whole new kind of company.</span></p><span class="intro-asterisk" aria-hidden="true">✳</span></div>
+
+    <section class="light-section section wrap" id="light" aria-labelledby="light-heading">
+      <div class="section-heading"><p class="section-index"><span>01</span> PICK YOUR GLOW</p><h2 id="light-heading">A little light.<br><em>A lot of feeling.</em></h2><p>Album colour, spilling into your space. Five effects, softly blended corners, and just the right amount of movement. Go on, pick one.</p></div>
+      <div class="light-experience">
+        <div class="effect-stage" id="effect-stage" data-effect="aura" data-mode="flow">
+          <div class="effect-halo" aria-hidden="true"></div><div class="effect-core"><span class="stage-corner">LIVE ILLUSTRATION</span><div class="effect-center"><svg class="effect-symbol" aria-hidden="true"><use href="#icon-sun"/></svg><strong id="effect-name">Aura</strong><p id="effect-description">A quiet wash of album-colour light.</p></div><span class="stage-footer">THE SCREEN ENDS. THE ATMOSPHERE DOESN’T.</span></div>
+        </div>
+        <div class="effect-picker" role="group" aria-label="Preview a halo effect"><button class="effect-choice active" data-effect="aura" aria-pressed="true"><span class="effect-mini mini-aura"></span>Aura</button><button class="effect-choice" data-effect="orbit" aria-pressed="false"><span class="effect-mini mini-orbit"></span>Orbit</button><button class="effect-choice" data-effect="wave" aria-pressed="false"><span class="effect-mini mini-wave"></span>Wave</button><button class="effect-choice" data-effect="pulse" aria-pressed="false"><span class="effect-mini mini-pulse"></span>Pulse</button><button class="effect-choice" data-effect="prism" aria-pressed="false"><span class="effect-mini mini-prism"></span>Prism</button></div>
+        <div class="light-controls"><div class="palette-controls"><span class="control-label">PALETTE</span><button id="palette-toggle" class="palette-button" aria-pressed="false"><span class="palette-swatches"><i></i><i></i></span><span id="palette-label">Album colours</span><span aria-hidden="true">⇄</span></button><div class="custom-colours" id="custom-colours" hidden><label>Colour 1<input type="color" id="colour-primary" value="#2450e8"></label><label>Colour 2<input type="color" id="colour-secondary" value="#f47b9b"></label></div></div><label class="intensity-control"><span class="control-label">INTENSITY <output id="intensity-output" for="intensity">70%</output></span><input id="intensity" type="range" min="20" max="100" value="70"></label><div class="flow-controls"><span class="control-label">MOTION</span><div class="mode-picker" role="group" aria-label="Lighting animation mode"><button class="active" data-mode="flow" aria-pressed="true">Flow</button><button data-mode="sync" aria-pressed="false">Music sync</button><button data-mode="idle" aria-pressed="false">Idle</button><button data-mode="still" aria-pressed="false">Still</button></div></div></div>
+        <p class="demo-disclaimer" id="light-demo-note"><span class="tiny-dot"></span>Interactive illustration. In Halo, Music sync follows system output loudness, not exact beats.</p>
+      </div>
+      <div class="fine-tuning"><div><span class="fine-label">MAKE IT YOURS</span><h3>From a whisper <br>to a wash of colour.</h3></div><p>Choose colours from the album artwork or build your own two-colour palette. Tune each colour’s brightness and share, rim thickness, glow spread, opacity, intensity and motion speed. Album changes melt smoothly into the next palette. Reduced motion keeps things calm.</p></div>
+    </section>
+
+    <section class="lyrics-section section" id="lyrics" aria-labelledby="lyrics-heading"><div class="wrap lyrics-layout">
+      <div class="lyric-experience"><div class="lyric-stage" id="lyric-stage" data-style="ship"><div class="lyric-stage-top"><span class="tiny-dot"></span>ORIGINAL TIMED TEXT<span>FLOATING LYRICS</span></div><div class="lyric-colour-strip" aria-hidden="true"></div><div class="lyric-symbol" aria-hidden="true"><svg viewBox="0 0 100 100"><path d="M50 5v90M5 50h90M18 18l64 64M18 82l64-64"/></svg></div><div class="lyric-demo-lines"><span class="demo-line before" id="lyric-line-before">Leave the day behind</span><div class="demo-line current" id="lyric-line-current"><span>The</span> <span>room</span> <span>turns</span> <span>to</span> <span class="active-word">gold.</span></div><span class="demo-line after" id="lyric-line-after">Stay a little longer</span></div><div class="lyric-stage-bottom"><span>LINE SYNCED. WORDS IN MOTION.</span><button class="lyric-demo-play" id="lyric-play" aria-label="Pause lyric illustration" aria-pressed="false"><svg class="icon"><use href="#icon-pause"/></svg></button></div></div><div class="lyric-picker" role="group" aria-label="Preview a lyric style"><button class="active" data-style="ship" aria-pressed="true">Ship</button><button data-style="fisheye" aria-pressed="false">Fisheye</button><button data-style="fisheye-visual" aria-pressed="false">Fisheye Visual</button><button data-style="visual" aria-pressed="false">Visual</button></div><p class="lyric-style-note" id="lyric-style-note">A flowing wall of lyrics with a moving word spotlight.</p></div>
+      <div class="lyrics-copy"><p class="section-index"><span>02</span> WORDS IN MOTION</p><h2 id="lyrics-heading">Don’t just hear it.<br><em>Feel every line.</em></h2><p>Scrolling lines. Words that swell into focus. Colour strips and original vector symbols that give the song another dimension.</p><p>Keep lyrics floating over your desktop, or give them the whole screen. Four styles, each with its own rhythm.</p><div class="lyric-details"><div><span>01 /</span><p>Line-synced lyrics from LRCLIB, with manual timing adjustment and local <code>.lrc</code> imports.</p></div><div><span>02 /</span><p>Your overlay stays animated while Halo is minimized. Save its monitor and position; clicks pass right through.</p></div></div><p class="honest-note">Word timing is estimated between line timestamps. Precise word-level timing isn’t supported yet.</p></div>
+    </div></section>
+
+    <section class="scenes-section section wrap" id="scenes" aria-labelledby="scenes-heading"><div class="scenes-heading"><div><p class="section-index"><span>03</span> IMMERSIVE SCENES</p><h2 id="scenes-heading">Less desktop.<br><em>More somewhere else.</em></h2></div><div class="scenes-intro"><p>Give a song a room of its own.<br>Four fullscreen scenes, from a quiet listening space to nothing but the words.</p><span>ONE SONG. FOUR WAYS TO DISAPPEAR INTO IT.</span></div></div>
+      <div class="scene-picker" role="group" aria-label="Preview an immersive scene"><button class="active" data-scene="listening" aria-pressed="true"><span>01</span>Listening Room</button><button data-scene="lyrics" aria-pressed="false"><span>02</span>Lyrics Only</button><button data-scene="cinema" aria-pressed="false"><span>03</span>Cinema</button><button data-scene="orbit" aria-pressed="false"><span>04</span>Orbit</button></div>
+      <div class="scene-preview" id="scene-preview" data-scene="listening" tabindex="0" aria-label="Interactive scene illustration. Move the pointer or use the keyboard to show controls."><canvas class="scene-sculpture" id="scene-light-canvas" aria-hidden="true"></canvas><div class="scene-gradient" aria-hidden="true"></div><div class="scene-orbits" aria-hidden="true"><i></i><i></i><i></i></div><div class="scene-top scene-interface"><span><span class="mini-halo"></span>halo / immersive</span><span id="scene-title">Listening Room</span><button class="scene-expand" id="scene-expand" aria-label="Expand scene illustration"><svg class="icon"><use href="#icon-expand"/></svg></button></div><div class="scene-content"><img class="scene-art" src="assets/afterglow-pop.svg" alt="Original Afterglow album illustration" width="600" height="600"><div class="scene-words"><span class="scene-previous">Leave the day behind</span><p>The room<br>turns to <em>gold.</em></p><span class="scene-next">Stay a little longer</span></div></div><div class="cinema-song"><img src="assets/afterglow-pop.svg" alt="" width="600" height="600"><div><strong>Afterglow</strong><span>Original Halo demo</span></div></div><div class="scene-player scene-interface"><div class="scene-song"><strong>Afterglow</strong><span>Original visual demo</span></div><div class="scene-playback"><button id="scene-previous" aria-label="Previous original demo line"><svg class="icon previous-icon"><use href="#icon-skip"/></svg></button><button id="scene-play" aria-label="Pause scene illustration" aria-pressed="false"><svg class="icon"><use href="#icon-pause"/></svg></button><button id="scene-next" aria-label="Next original demo line"><svg class="icon"><use href="#icon-skip"/></svg></button></div><span class="scene-no-audio"><svg class="icon"><use href="#icon-sound"/></svg>Visual demo · no audio</span></div></div>
+      <div class="scene-caption"><p id="scene-description">Artwork, lyrics and soft light. Everything in its place.</p><span>Concept illustration · original demo text</span></div><div class="scene-notes"><p><span>Out of the way.</span> In Halo’s immersive view, controls and the cursor disappear after 1.5 seconds of inactivity. Interact, and they return.</p><p><span>Right where you left it.</span> Minimal song details, playback controls, saved preferences and a system-tray home when you’re done.</p></div>
+    </section>
+
+    <section class="mood-card wrap" aria-labelledby="mood-heading"><div class="mood-copy"><p class="eyebrow">FOR THE SONG YOU PLAY ON REPEAT</p><h2 id="mood-heading">Stay for<br>one more song.</h2><p>The late-night favourite. The chorus you know by heart. Halo gives the music you love a little more space to be felt.</p><a class="text-link" href="#scenes">Find your listening room <span aria-hidden="true">↗</span></a></div><figure class="music-polaroid"><img src="assets/music-still-life.png" alt="Original 3D still life of cobalt headphones around a yellow vinyl record with a pink centre" width="768" height="768" loading="lazy"><figcaption>Good company for your favourite songs.</figcaption><span class="polaroid-sticker">One more? ✦</span></figure></section>
+
+    <section class="integration-section section" id="integration" aria-labelledby="integration-heading"><div class="wrap integration-layout"><div class="connection-art" aria-hidden="true"><div class="spotify-orb"><svg viewBox="0 0 80 80"><circle cx="40" cy="40" r="38" fill="currentColor"/><path d="M20 30c15-5 31-3 43 4M23 41c12-4 26-2 36 4M25 51c10-3 20-1 30 4"/></svg><span>SPOTIFY DESKTOP</span></div><div class="connection-wire"><i></i><i></i><i></i></div><div class="halo-orb"><span class="large-halo"></span><span>HALO</span></div><span class="connection-caption">CONNECTED THROUGH WINDOWS MEDIA SESSIONS</span></div><div class="integration-copy"><p class="section-index"><span>04</span> NATURALLY CONNECTED</p><h2 id="integration-heading">Press play.<br><em>We’ll bring the glow.</em></h2><p>Open Spotify desktop on Windows. Halo reads the current song, album artwork and playback position through Windows media sessions.</p><p>Play, pause, skip or seek right from Halo.<br>No Spotify login. No API key. Just your music.</p><div class="integration-note"><span class="tiny-dot"></span>Currently supports Spotify desktop only.<br>Lyrics are fetched separately from LRCLIB.</div></div></div></section>
+
+    <section class="details-section section wrap" id="details" aria-labelledby="details-heading"><div class="details-intro"><p class="section-index"><span>05</span> THE DETAILS</p><h2 id="details-heading">A small companion.<br><em>A considered one.</em></h2><p>Built with Python and PySide6.<br>A native Windows app, packaged as a portable executable.</p><div class="details-chips"><span>Native Windows</span><span>Python + PySide6</span><span>Portable package</span></div><a class="text-link" data-repository href="#repository">Project & installation details <svg class="icon"><use href="#icon-external"/></svg></a></div><div class="faq"><h3>Good to know</h3><details><summary>Which music players work with Halo?<span aria-hidden="true">+</span></summary><p>Automatic integration currently supports the Spotify desktop app on Windows. Spotify Web and other music players aren’t currently supported. Halo doesn’t require a Spotify login or API key.</p></details><details><summary>How are the lyrics synchronized?<span aria-hidden="true">+</span></summary><p>Halo gets line-synced lyrics from LRCLIB, with manual timing adjustment and local <code>.lrc</code> imports. It estimates word timing between line timestamps; exact word timestamps aren’t currently supported. Spotify’s public API does not provide Halo’s lyrics.</p></details><details><summary>Does Music sync detect the beat?<span aria-hidden="true">+</span></summary><p>Music sync responds to system output loudness, including sound from other apps on the output device. It doesn’t detect exact beats or precise tempo.</p></details><details><summary>What happens to imported lyrics?<span aria-hidden="true">+</span></summary><p>Local <code>.lrc</code> imports apply to the current song and reset when the song changes. Keeping imports associated with songs across playback sessions and app restarts is on the roadmap.</p></details><details><summary>Can I try the visuals without Spotify?<span aria-hidden="true">+</span></summary><p>Halo includes a visual demo with original timed text. It previews the lighting and lyric styles without playing audio. The interactive visuals on this page are concept illustrations, not screenshots of the Windows app.</p></details><details><summary>Can I keep the movement gentle?<span aria-hidden="true">+</span></summary><p>Halo supports reduced motion, as well as slow Idle and stationary Still lighting modes. This page also respects your device’s reduced-motion preference and includes a motion pause control above.</p></details></div></section>
+
+    <section class="roadmap wrap" aria-labelledby="roadmap-heading"><div><span class="planned-label">ON THE ROADMAP</span><h3 id="roadmap-heading">A little further out.</h3><p>Planned features. Not available today.</p></div><ul><li><span>01</span><p>Player selection for Spotify, Apple Music for Windows or automatic detection. <small>Apple Music support still needs verification.</small></p></li><li><span>02</span><p>Standalone ambient or audio-reactive light, without an active supported player.</p></li><li><span>03</span><p>Lyric imports that stay with the song across playback sessions and app restarts.</p></li><li><span>04</span><p>Precise word timing from formats with word timestamps, such as enhanced LRC.</p></li></ul></section>
+
+    <section class="closing-section wrap" id="repository" aria-labelledby="closing-heading"><div class="closing-glow" aria-hidden="true"></div><p class="eyebrow">MAKE A LITTLE SPACE FOR THE SONG.</p><h2 id="closing-heading">Your music.<br><em>A whole new atmosphere.</em></h2><a class="button button-primary" data-repository data-download href="#repository"><svg class="icon"><use href="#icon-windows"/></svg><span data-repository-label>GitHub coming soon</span><svg class="icon"><use href="#icon-external"/></svg></a><p class="repository-note" id="repository-note" data-repository-pending>The GitHub repository is coming soon.<br>Project and installation details will be linked here.</p><p class="repository-note" data-repository-ready hidden>Download the ZIP → Extract All → Open Halo/Halo.exe. No installation needed.</p></section>
+  </main>
+  <footer class="site-footer"><div class="footer-inner wrap"><nav aria-label="Footer navigation"><a href="#light">The light</a><a href="#lyrics">The lyrics</a><a href="#scenes">The scenes</a><a href="#details">The details</a><a href="#main" class="back-top">Back to the top ↑</a></nav><a class="footer-wordmark" href="#" aria-label="Halo home">HALO<span>.</span></a><div class="footer-bottom"><p>A little atmosphere for your music.</p><span>Independent software. Not affiliated with Spotify.</span><span>Made for Windows. Made for the music.</span></div></div></footer>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

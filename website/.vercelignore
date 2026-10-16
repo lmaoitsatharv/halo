@@ -1,0 +1,9 @@
+.env*
+**/.env*
+.git
+.git/**
+.vercel
+.vercel/**
+.openai
+.openai/**
+.gitignore
