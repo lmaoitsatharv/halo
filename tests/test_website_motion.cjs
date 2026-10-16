@@ -7,6 +7,29 @@ const fs = require('node:fs');
 const path = require('node:path');
 const http = require('node:http');
 
+async function dragAcrossText(page, selector) {
+  const element = page.locator(selector);
+  // These illustrations keep moving, so scroll without waiting for a static box.
+  await element.evaluate(el => el.scrollIntoView({block:'center', behavior:'instant'}));
+  await page.waitForTimeout(150);
+  await page.evaluate(() => getSelection().removeAllRanges());
+  const start = await element.evaluate(el => {
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      const node = walker.currentNode;
+      if (!node.textContent.trim()) continue;
+      const range = document.createRange();
+      range.setStart(node, 0);range.setEnd(node, Math.min(3, node.length));
+      const rect = range.getBoundingClientRect();
+      if (rect.width && rect.height) return {x:rect.x + rect.width / 2, y:rect.y + rect.height / 2};
+    }
+    throw new Error('No visible text for drag test');
+  });
+  await page.mouse.move(start.x, start.y);await page.mouse.down();
+  await page.mouse.move(start.x + 100, start.y + 12, {steps:12});await page.mouse.up();
+  return page.evaluate(() => getSelection().toString());
+}
+
 async function main() {
   let server;
   let base = process.argv[2];
@@ -141,20 +164,35 @@ async function main() {
       await page.locator('#effect-stage').scrollIntoViewIfNeeded();
       await page.waitForFunction(() => document.querySelector('.effect-halo').style.animationPlayState === '');
       assert.equal(await page.locator('.effect-halo').evaluate(el => el.style.animationPlayState), '');
+      assert.equal(await dragAcrossText(page, '#effect-name'), '', 'Light preview text should not select');
+      assert.equal(await dragAcrossText(page, '#lyric-line-current'), '', 'Lyric preview text should not select');
       await page.locator('[data-style="fisheye"]').click();
       assert.equal(await page.locator('#lyric-stage').getAttribute('data-style'), 'fisheye');
+      assert.equal(await dragAcrossText(page, '.scene-words>p'), '', 'Immersive preview text should not select');
       await page.locator('[data-scene="cinema"]').click();
       await page.locator('#scene-expand').click();
       assert.equal(await page.locator('#scene-preview').getAttribute('aria-modal'), 'true');
       await page.keyboard.press('Escape');
       assert.equal(await page.locator('#scene-preview').getAttribute('aria-modal'), null);
+      assert.equal(await dragAcrossText(page, '.music-polaroid figcaption'), '', 'Music illustration caption should not select');
+      const model = page.locator('.music-model-stage');
+      if (await model.evaluate(el => el.classList.contains('is-ready'))) {
+        const rect = await model.boundingBox();
+        await page.mouse.move(rect.x + rect.width / 2, rect.y + rect.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(rect.x + rect.width / 2 + 70, rect.y + rect.height / 2, {steps:10});
+        await page.mouse.up();
+        assert.equal(await model.getAttribute('data-rotation'), 'custom');
+      }
+      assert.notEqual(await dragAcrossText(page, '.hero-description'), '', 'Ordinary page text should remain selectable');
+      await page.evaluate(() => getSelection().removeAllRanges());
       assert.equal(await page.locator('.nav-repo').getAttribute('href'), 'https://github.com/lmaoitsatharv/halo');
       for (const download of await page.locator('[data-download]').all()) {
         assert.equal(await download.getAttribute('href'), 'https://github.com/lmaoitsatharv/halo/releases/latest/download/Halo-Windows-x64.zip');
         assert.match(await download.innerText(), /Download Windows ZIP/);
       }
       assert.deepEqual(errors, []);
-      results.push({mode, dragWithoutSelection:true, pauseCycles: 3, bodyMutations: mutationCount, pageErrors: errors.length, result: 'passed'});
+      results.push({mode, dragWithoutSelection:true, protectedPreviews:5, ordinaryTextSelectable:true, pauseCycles: 3, bodyMutations: mutationCount, pageErrors: errors.length, result: 'passed'});
       if (process.env.HALO_QA_OUTPUT) {
         await page.evaluate(() => scrollTo(0, 0));
         await page.waitForTimeout(300);

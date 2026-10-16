@@ -3,6 +3,7 @@
   const $ = selector => document.querySelector(selector);
   const $$ = selector => [...document.querySelectorAll(selector)];
   const body = document.body;
+  $$('.effect-stage img,.lyric-stage img,.scene-preview img,.music-polaroid img').forEach(image => { image.draggable = false; });
   const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
   const effectStage = $('#effect-stage');
   const effectHalo = effectStage.querySelector('.effect-halo');
