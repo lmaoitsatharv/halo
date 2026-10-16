@@ -3,7 +3,7 @@ from PySide6.QtCore import Qt, QRectF, QSignalBlocker, QTimer
 from PySide6.QtGui import QColor, QPainter, QPen, QFont
 from PySide6.QtWidgets import (QWidget, QLabel, QPushButton, QVBoxLayout, QHBoxLayout,
                               QComboBox, QSlider, QStackedWidget, QButtonGroup,
-                              QColorDialog, QSizePolicy)
+                              QColorDialog, QSizePolicy, QCheckBox)
 
 
 HALO_ANIMATIONS = (
@@ -110,10 +110,10 @@ class LightControls(QWidget):
         self.animation_select.setToolTip("Choose how the halo moves.")
         self.animation_select.currentIndexChanged.connect(lambda index: controller.set("halo_animation", self.animation_select.itemData(index)) if index >= 0 else None)
         light.addWidget(self.animation_select)
-        self._slider(light, "Rim width", "rim_width", 1, 12, " px", "Set the thickness of the bright edge line.", 3)
+        self._slider(light, "Glow intensity", "intensity", 0, 100, "%", "Set the overall strength of the halo.", 62)
         self._slider(light, "Glow spread", "glow_width", 12, 160, " px", "Set how far the soft glow reaches inward from the screen edge.", 40)
         self._slider(light, "Glow opacity", "glow_opacity", 0, 100, "%", "Set how transparent the soft glow appears.", 65)
-        self._slider(light, "Glow intensity", "intensity", 0, 100, "%", "Set the overall strength of the halo.", 62)
+        self._slider(light, "Rim width", "rim_width", 1, 12, " px", "Set the thickness of the bright edge line.", 3)
         self._slider(light, "Motion speed", "motion_speed", 0, 100, "%", "Set how quickly the halo moves. Still keeps your saved speed for later.", 45)
         light.addStretch(1)
 
@@ -143,6 +143,10 @@ class LightControls(QWidget):
         self.mix_balance = self._label("", "haloTuneBalance")
         self.mix_balance.setAlignment(Qt.AlignmentFlag.AlignCenter)
         colours.addWidget(self.mix_balance)
+        self.artwork_online = QCheckBox("Find missing covers online")
+        self.artwork_online.setToolTip("When Spotify supplies no cover, send the song title, artist and album to MusicBrainz and fetch matching artwork from Cover Art Archive. No login or audio is sent.")
+        self.artwork_online.toggled.connect(lambda enabled: controller.set("artwork_online", enabled))
+        colours.addWidget(self.artwork_online)
         colours.addStretch(1)
 
         controller.settingChanged.connect(self.sync)
@@ -233,6 +237,8 @@ class LightControls(QWidget):
 
     def sync(self, *_):
         c = self.controller
+        with QSignalBlocker(self.artwork_online):
+            self.artwork_online.setChecked(getattr(c, "artwork_online", False))
         with QSignalBlocker(self.palette_select):
             self.palette_select.setCurrentText(c.palette)
         with QSignalBlocker(self.animation_select):

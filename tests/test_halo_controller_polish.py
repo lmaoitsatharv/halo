@@ -44,6 +44,62 @@ class HaloControllerPolishTests(unittest.TestCase):
         self.assertEqual(c.halo_secondary.name(), "#005dff")
         self.assertGreater(c.primary.valueF(), .89)
 
+    def test_late_cover_refreshes_artwork_and_palette_without_resetting_lyrics(self):
+        from dataclasses import replace
+        from halo.models import Track, Lyrics, LyricLine
+        from halo.widgets import Artwork
+        from test_session_artwork import cover
+        c = self.controller()
+        c.requestLyrics.disconnect(c.lyrics_worker.fetch)
+        lookups = []
+        c.requestLyrics.connect(lambda *args: lookups.append(args))
+        track = Track("Song", "Artist", "Album", 200, 30, True, True)
+        c.accept_track(track)
+        lyrics = Lyrics([LyricLine(0., "Original demo words")])
+        c.lyrics = lyrics
+        generation, signature = c.generation, c.lookup_signature
+        widget = Artwork(c)
+        self.addCleanup(widget.close)
+        self.assertTrue(widget.pixmap.isNull())
+        with patch.object(c, "update_palette", wraps=c.update_palette) as palette:
+            c.accept_track(replace(track, artwork=cover("#ee1177")))
+            palette.assert_called_once()
+        self.assertFalse(widget.pixmap.isNull())
+        self.assertIs(c.lyrics, lyrics)
+        self.assertEqual(c.generation, generation)
+        self.assertEqual(c.lookup_signature, signature)
+        self.assertEqual(len(lookups), 1)
+
+    def test_online_cover_is_opt_in_and_late_results_cannot_replace_native_or_next_song(self):
+        from dataclasses import replace
+        from halo.models import Track
+        from test_session_artwork import cover
+        c = self.controller()
+        c.requestLyrics.disconnect(c.lyrics_worker.fetch)
+        c.requestArtwork.disconnect(c.artwork_worker.fetch)
+        requests = []
+        c.requestArtwork.connect(lambda track: requests.append(track))
+        first = Track("First", "Artist", "Album", 200, connected=True)
+        c.accept_track(first)
+        self.assertEqual(requests, [])
+        c.set("artwork_online", True)
+        self.assertEqual([t.key for t in requests], [first.key])
+        fallback, native = cover("red"), cover("blue")
+        c.accept_artwork(first.key, fallback)
+        c.accept_track(replace(first, position=10))
+        self.assertEqual(c.track.artwork, fallback)
+        c.accept_track(replace(first, artwork=native))
+        c.accept_artwork(first.key, fallback)
+        self.assertEqual(c.track.artwork, native)
+        second = replace(first, title="Second", artwork=b"")
+        c.accept_track(second)
+        c.accept_artwork(first.key, fallback)
+        self.assertEqual(c.track.key, second.key)
+        self.assertEqual(c.track.artwork, b"")
+        c.set("artwork_online", False)
+        c.accept_artwork(second.key, fallback)
+        self.assertEqual(c.track.artwork, b"")
+
     def test_independent_controls_persist_and_old_width_setting_migrates(self):
         c = self.controller({"width": 89})
         self.assertEqual(c.glow_width, 89)
@@ -89,6 +145,46 @@ class HaloControllerPolishTests(unittest.TestCase):
         self.now += .016
         c.tick()
         self.assertLess(c.motion_phase - paused, .002)
+
+    def test_music_envelope_rounds_accents_and_leaves_a_smooth_tail(self):
+        from halo.models import Track
+        c = self.controller({"halo_animation": "music"})
+        # Supply deterministic meter levels without opening the audio device.
+        c.audio.close()
+        c.audio.thread.join(1)
+        c.track = Track(playing=True, connected=True, observed_at=self.now)
+        c.audio.level = 1.
+        self.now += .016
+        c.tick()
+        # A hit must be visible immediately without snapping near full light
+        # in a single display frame, then reach a strong rounded crest.
+        self.assertGreater(c.pulse, .15)
+        self.assertLess(c.pulse, .5)
+        self.now += .059
+        c.tick()
+        self.assertGreater(c.pulse, .65)
+        self.assertLess(c.pulse, .9)
+        c.audio.level = 0.
+        self.now += .1
+        c.tick()
+        self.assertGreater(c.pulse, .35)
+        self.assertLess(c.pulse, .65)
+        for _ in range(2):
+            self.now += .1
+            c.tick()
+        self.assertGreater(c.pulse, .1)
+        self.assertLess(c.pulse, .3)
+        for _ in range(6):
+            self.now += .1
+            c.tick()
+        self.assertLess(c.pulse, .03)
+        c.set("reduced_motion", True)
+        frozen = c.pulse
+        c.audio.level = 1.
+        self.now += .1
+        c.tick()
+        self.assertEqual(c.pulse, frozen)
+        self.assertFalse(c.audio.enabled)
 
     def test_palette_change_is_continuous_and_finishes_while_still(self):
         c = self.controller({"palette": "Custom", "custom_primary": "#000000"})

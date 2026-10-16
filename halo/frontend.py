@@ -1,16 +1,13 @@
 """Halo's native control room: live previews and a focused listening surface."""
 import math
 import time
-from PySide6.QtCore import Qt, QRectF, QPointF, QSignalBlocker, QRect, QSize, QTimer
+from PySide6.QtCore import Qt, QRectF, QPointF, QSignalBlocker, QRect, QSize
 from PySide6.QtGui import QColor, QPainter, QPen, QPainterPath, QLinearGradient, QFont, QFontMetrics, QPixmap
 from PySide6.QtWidgets import (QWidget, QFrame, QLabel, QPushButton, QAbstractButton,
-    QVBoxLayout, QHBoxLayout, QGridLayout, QButtonGroup, QStackedWidget, QScrollArea,
-    QCheckBox, QComboBox, QSlider, QSizePolicy)
+    QVBoxLayout, QHBoxLayout, QComboBox, QSlider, QSizePolicy)
 from .widgets import Artwork, LyricCanvas, font, tint
-from .glow import HALO_MODES, paint_halo_preview
+from .glow import paint_halo_preview
 from .lyric_rendering import LYRIC_STYLES
-from .immersive import IMMERSIVE_SCENES
-from .color_controls import LightControls
 
 
 STYLE = """
@@ -376,8 +373,8 @@ def selector(controller, field, specs, accessible):
 
 
 def build_main(window, c):
-    window.resize(1140, 835)
-    window.setMinimumSize(960, 660)
+    window.resize(1140, 740)
+    window.setMinimumSize(860, 600)
     root = QVBoxLayout(window)
     root.setContentsMargins(28, 20, 28, 18)
     root.setSpacing(18)
@@ -391,6 +388,15 @@ def build_main(window, c):
     header.addStretch()
     window.badge = text_label("○  Waiting for Spotify", "badge")
     header.addWidget(window.badge)
+    from .settings_ui import SettingsStudio, studio_icon
+    window.settings_button = action("Settings", window.open_settings, "ghost")
+    window.settings_button.setIcon(studio_icon())
+    window.settings_button.setIconSize(QSize(20, 20))
+    window.settings_button.setMinimumHeight(38)
+    window.settings_button.setAccessibleName("Open settings")
+    window.settings_button.setToolTip("Settings · Ctrl+,")
+    header.addSpacing(10)
+    header.addWidget(window.settings_button)
     root.addLayout(header)
 
     hero = QFrame()
@@ -465,128 +471,6 @@ def build_main(window, c):
     left.addLayout(actions)
     columns.addLayout(left, 1)
 
-    controls = QFrame()
-    controls.setObjectName("settingsCard")
-    controls.setFixedWidth(333)
-    settings = QVBoxLayout(controls)
-    settings.setContentsMargins(17, 18, 17, 13)
-    settings.setSpacing(13)
-    settings.addWidget(text_label("Make it yours", "panelTitle"))
-    tabrow = QHBoxLayout()
-    tabrow.setSpacing(3)
-    window.settings_pages = QStackedWidget()
-    tabs = QButtonGroup(controls)
-    window.settings_tabs = tabs
-    for index, title in enumerate(("Light", "Lyrics", "Scenes")):
-        tab = QPushButton(title)
-        tab.setObjectName("sectionTab")
-        tab.setCheckable(True)
-        tab.setChecked(index == 0)
-        tabs.addButton(tab, index)
-        tabrow.addWidget(tab, 1)
-    tabs.idClicked.connect(window.settings_pages.setCurrentIndex)
-    window.settings_pages.currentChanged.connect(lambda index: tabs.button(index).setChecked(True) if tabs.button(index) else None)
-    settings.addLayout(tabrow)
-    window.mode_tiles = []
-    window.setting_controls = {}
-    window.setting_sliders = {}
-
-    def page():
-        scroll = QScrollArea()
-        scroll.setObjectName("settingsScroll")
-        scroll.viewport().setObjectName("settingsViewport")
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        content = QWidget()
-        content.setObjectName("settingsPage")
-        layout = QVBoxLayout(content)
-        layout.setContentsMargins(1, 2, 8, 8)
-        layout.setSpacing(12)
-        scroll.setWidget(content)
-        window.settings_pages.addWidget(scroll)
-        return layout
-
-    def modes(layout, field, specs):
-        grid = QGridLayout()
-        grid.setSpacing(8)
-        for index, spec in enumerate(specs):
-            tile = ModeTile(c, field, spec)
-            window.mode_tiles.append(tile)
-            grid.addWidget(tile, index // 2, index % 2)
-        layout.addLayout(grid)
-        description = text_label("")
-        description.setWordWrap(True)
-        description.setMinimumHeight(29)
-        def describe():
-            description.setText(next((item[2] for item in specs if item[0] == getattr(c, field)), ""))
-        c.settingChanged.connect(describe)
-        describe()
-        layout.addWidget(description)
-
-    def add_slider(layout, title, name, low, high, suffix):
-        window.slider(layout, title, name, low, high, suffix)
-        slider = layout.itemAt(layout.count() - 1).widget()
-        value_label = layout.itemAt(layout.count() - 2).layout().itemAt(2).widget()
-        window.setting_sliders[name] = (slider, value_label, suffix)
-
-    light = page()
-    window.glow = window.checkbox("Screen-edge glow", "glow", light, "Luminous, click-through lighting on every monitor.")
-    window.reactive = window.checkbox("React to audio", "reactive", light, "Responds to the sound playing through your speakers. Audio stays on this PC.")
-    light.addWidget(text_label("HALO MOTION", "eyebrow"))
-    modes(light, "halo_mode", HALO_MODES)
-    window.fine_tune_toggle = QPushButton("Fine tune   +")
-    window.fine_tune_toggle.setObjectName("ghost")
-    window.fine_tune_toggle.setCheckable(True)
-    window.fine_tune_toggle.setAccessibleName("Expand light fine tuning")
-    light.addWidget(window.fine_tune_toggle)
-    window.light_controls = LightControls(c)
-    window.fine_tune_panel = window.light_controls
-    window.palette_select = window.light_controls.palette_select
-    for name, slider in window.light_controls.sliders.items():
-        window.setting_sliders[name] = (slider, window.light_controls.value_labels[name], window.light_controls.suffixes[name])
-    light.addWidget(window.fine_tune_panel)
-    window.fine_tune_panel.hide()
-    def show_fine_tune_start():
-        # Keep the fine-tuning tabs at the top on compact windows. Asking Qt
-        # to fit the whole panel would centre it and scroll its tabs away.
-        scroll = window.settings_pages.widget(0)
-        scroll.verticalScrollBar().setValue(window.fine_tune_toggle.y())
-    def expand_fine_tune(expanded):
-        window.fine_tune_panel.setVisible(expanded)
-        window.fine_tune_toggle.setText("Fine tune   −" if expanded else "Fine tune   +")
-        window.fine_tune_toggle.setAccessibleName("Collapse light fine tuning" if expanded else "Expand light fine tuning")
-        if expanded:
-            QTimer.singleShot(0, show_fine_tune_start)
-    window.fine_tune_toggle.toggled.connect(expand_fine_tune)
-    light.addStretch()
-
-    lyrics = page()
-    lyrics.addWidget(text_label("LYRIC CHOREOGRAPHY", "eyebrow"))
-    modes(lyrics, "lyric_style", LYRIC_STYLES)
-    floating = QHBoxLayout()
-    window.floating = window.checkbox("Floating lyrics", "floating", floating, "Animated lyrics above your desktop when Halo is minimized.")
-    floating.addStretch()
-    floating.addWidget(action("Position…", window.open_position_settings, "ghost"))
-    lyrics.addLayout(floating)
-    add_slider(lyrics, "Lyrics timing", "offset", -3000, 3000, " ms")
-    motion = window.checkbox("Reduce motion", "reduced_motion", lyrics, "Keep clear, steady lyrics and a calm halo without motion effects.")
-    window.reduced_motion = motion
-    timing_hint = text_label("Word animation follows estimated timing between synced lyric lines.\n\nPositive timing brings lyrics earlier; negative timing delays them.")
-    timing_hint.setWordWrap(True)
-    lyrics.addWidget(timing_hint)
-    lyrics.addStretch()
-
-    scenes = page()
-    scenes.addWidget(text_label("IMMERSIVE SCENES", "eyebrow"))
-    modes(scenes, "immersive_mode", IMMERSIVE_SCENES)
-    scenes.addWidget(action("Open selected scene   ↗", window.fullscreen, "primary"))
-    hint = text_label("Switch scenes and lyric styles inside immersive view.")
-    hint.setWordWrap(True)
-    scenes.addWidget(hint)
-    scenes.addStretch()
-    settings.addWidget(window.settings_pages, 1)
-    columns.addWidget(controls)
     root.addLayout(columns, 1)
     footer = QHBoxLayout()
     window.demo_button = action("Try the visual demo", lambda: c.set_demo(not c.demo), "ghost")
@@ -597,14 +481,5 @@ def build_main(window, c):
     footer.addWidget(window.footer)
     root.addLayout(footer)
 
-    def sync_controls():
-        for field, control in window.setting_controls.items():
-            with QSignalBlocker(control):
-                control.setChecked(getattr(c, field))
-        with QSignalBlocker(window.palette_select):
-            window.palette_select.setCurrentText(c.palette)
-        for field, (slider, value_label, suffix) in window.setting_sliders.items():
-            with QSignalBlocker(slider):
-                slider.setValue(getattr(c, field))
-            value_label.setText(str(getattr(c, field)) + suffix)
-    c.settingChanged.connect(sync_controls)
+    window.settings_dialog = SettingsStudio(window, c)
+    window.settings_pages = window.settings_dialog.pages

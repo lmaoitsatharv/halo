@@ -208,8 +208,9 @@ def audio_energy(samples) -> float:
     import numpy as np
     if samples.size == 0:
         return 0.0
-    # RMS across every output channel, not a single channel (WASAPI limitation).
-    return min(1.0, float(np.sqrt(np.mean(np.square(samples)))) * 7)
+    # Preserve raw dynamics. Fixed gain clipped ordinary mastered music at 1,
+    # erasing every accent before the renderer could react to it.
+    return min(1.0, float(np.sqrt(np.mean(np.square(samples)))))
 
 
 DEMO_LRC = """[00:00.00]Let the room fall quiet

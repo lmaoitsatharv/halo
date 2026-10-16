@@ -47,7 +47,7 @@ class ClockTests(unittest.TestCase):
 class MeterTests(unittest.TestCase):
     def test_silence_stereo_and_clipping(self):
         self.assertEqual(audio_energy(np.zeros((100, 2))), 0)
-        self.assertAlmostEqual(audio_energy(np.full((100, 2), .1)), .7)
+        self.assertAlmostEqual(audio_energy(np.full((100, 2), .1)), .1)
         self.assertEqual(audio_energy(np.ones((100, 2))), 1)
         self.assertEqual(audio_energy(np.zeros((0, 2))), 0)
 

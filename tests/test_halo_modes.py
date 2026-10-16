@@ -82,12 +82,12 @@ class HaloModeTests(unittest.TestCase):
     def test_intensity_audio_and_no_corner_hotspot(self):
         for mode, _, _ in HALO_MODES:
             with self.subTest(mode=mode):
-                off, low, quiet, loud = (render(mode, intensity=0), render(mode, intensity=25),
+                off, low, quiet, loud = (render(mode, intensity=0), render(mode, intensity=25, animation="music"),
                                          render(mode, animation="music"), render(mode, pulse=1., animation="music"))
                 self.assertEqual(off.pixelColor(320, 8).alpha(), 0)
-                self.assertLess(low.pixelColor(320, 8).alpha(), quiet.pixelColor(320, 8).alpha())
+                self.assertLess(low.pixelColor(320, 1).alpha(), quiet.pixelColor(320, 1).alpha())
                 self.assertGreater(loud.pixelColor(320, 8).alpha(), quiet.pixelColor(320, 8).alpha())
-                self.assertGreater(quiet.pixelColor(10, 10).alpha(), 0)
+                self.assertGreater(quiet.pixelColor(320, 1).alpha(), 0)
                 # Spatial highlights can vary, but the corner never stacks two glows.
                 self.assertLessEqual(quiet.pixelColor(10, 10).alpha(), 205)
 
@@ -95,6 +95,38 @@ class HaloModeTests(unittest.TestCase):
         narrow, broad = render("pulse", seconds=0.), render("pulse", seconds=4.36)
         self.assertGreater(broad.pixelColor(320, 28).alpha(), narrow.pixelColor(320, 28).alpha() * 2)
         self.assertEqual(broad.pixelColor(320, 210).alpha(), 0)
+
+    def test_music_sync_has_a_visible_brightness_range_in_every_mode(self):
+        for mode, _, _ in HALO_MODES:
+            with self.subTest(mode=mode):
+                quiet = render(mode, pulse=0., animation="music")
+                loud = render(mode, pulse=1., animation="music")
+                self.assertGreater(loud.pixelColor(320, 1).alpha(),
+                                   quiet.pixelColor(320, 1).alpha() * 3)
+                # Ordinary mid-range output levels must also visibly differ.
+                soft = render(mode, pulse=.15, animation="music")
+                strong = render(mode, pulse=.65, animation="music")
+                self.assertGreater(strong.pixelColor(320, 1).alpha(),
+                                   soft.pixelColor(320, 1).alpha() * 1.6)
+
+    def test_pulse_audio_bloom_is_not_masked_by_the_breathing_peak(self):
+        # At this phase the free-running breath is already fully expanded.
+        seconds = 90 / 13.7
+        soft = render("pulse", seconds=seconds, pulse=.15, animation="music")
+        strong = render("pulse", seconds=seconds, pulse=.65, animation="music")
+        self.assertGreater(strong.pixelColor(320, 20).alpha(),
+                           soft.pixelColor(320, 20).alpha() * 3)
+        self.assertEqual(strong.pixelColor(320, 210).alpha(), 0)
+        self.assertEqual(strong.pixelColor(320, 54).alpha(), 0)
+
+    def test_music_energy_does_not_override_reduce_motion_or_other_animations(self):
+        for mode, _, _ in HALO_MODES:
+            for animation in ("flow", "idle", "still"):
+                with self.subTest(mode=mode, animation=animation):
+                    self.assertEqual(render(mode, pulse=0., animation=animation),
+                                     render(mode, pulse=1., animation=animation))
+            self.assertEqual(render(mode, pulse=0., animation="music", reduced=True),
+                             render(mode, pulse=1., animation="music", reduced=True))
 
     def test_thumbnail_uses_the_same_modes_and_restores_painter_state(self):
         image = QImage(300, 160, QImage.Format.Format_ARGB32_Premultiplied)

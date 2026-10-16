@@ -1,5 +1,8 @@
 """Real offline Controller checks for settings, playback motion and native overlays."""
+import ctypes
+from ctypes import wintypes
 from pathlib import Path
+import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -7,6 +10,7 @@ from unittest.mock import patch
 
 from PySide6.QtCore import QSettings, Qt
 from PySide6.QtGui import QImage, QPainter
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 from halo.app import Controller
@@ -170,6 +174,40 @@ class MotionSettingsTests(unittest.TestCase):
             for widget in widgets:
                 widget.close()
                 widget.deleteLater()
+            self.app.processEvents()
+
+    @unittest.skipUnless(sys.platform == "win32", "Requires native Windows handles")
+    def test_immersive_allows_taskbar_reveal_while_retaining_fullscreen_and_shortcuts(self):
+        if self.app.platformName() != "windows":
+            self.skipTest("Requires Qt's native Windows platform")
+        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        get_property = user32.GetPropW
+        get_property.argtypes = (wintypes.HWND, wintypes.LPCWSTR)
+        get_property.restype = wintypes.HANDLE
+        controller = self.controller()
+        controller.set_demo(True)
+        immersive = Immersive(controller)
+        immersive.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen, True)
+        exited = []
+        immersive.exited.connect(lambda: exited.append(True))
+        try:
+            self.assertEqual(get_property(int(immersive.winId()), "NonRudeHWND"), 1)
+            immersive.showFullScreen()
+            self.app.setActiveWindow(immersive)
+            self.app.processEvents()
+            self.assertTrue(immersive.isFullScreen())
+            self.assertEqual(get_property(int(immersive.winId()), "NonRudeHWND"), 1)
+            playing = controller.track.playing
+            QTest.keyClick(immersive, Qt.Key.Key_Space)
+            self.assertEqual(controller.track.playing, not playing)
+            QTest.keyClick(immersive, Qt.Key.Key_Escape)
+            self.assertFalse(immersive.isVisible())
+            self.assertEqual(exited, [True])
+            immersive.destroy()
+            self.assertEqual(get_property(int(immersive.winId()), "NonRudeHWND"), 1)
+        finally:
+            immersive.hide()
+            immersive.deleteLater()
             self.app.processEvents()
 
 

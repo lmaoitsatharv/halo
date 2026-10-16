@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (QWidget, QLabel, QPushButton, QFrame, QSlider,
 
 from .widgets import Artwork, LyricCanvas, tint
 from .glow import paint_edge_glow
+from .taskbar import allow_taskbar_reveal
 
 
 IMMERSIVE_SCENES = (
@@ -388,6 +389,11 @@ class Immersive(QWidget):
         super().resizeEvent(event)
         self.scene_key = None
         self._arrange()
+
+    def event(self, event):
+        if event.type() == QEvent.Type.WinIdChange:
+            allow_taskbar_reveal(self.effectiveWinId())
+        return super().event(event)
 
     def showEvent(self, event):
         super().showEvent(event)

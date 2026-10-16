@@ -82,6 +82,13 @@ class ColorControlsTests(unittest.TestCase):
         self.assertEqual(self.controls.primary_well.hex_color, "#03070d")
         self.assertEqual(self.c.writes, [])
 
+    def test_online_cover_switch_is_explicit_and_tracks_saved_state(self):
+        self.assertFalse(self.controls.artwork_online.isChecked())
+        self.controls.artwork_online.setChecked(True)
+        self.assertIn(("artwork_online", True), self.c.writes)
+        self.c.set("artwork_online", False)
+        self.assertFalse(self.controls.artwork_online.isChecked())
+
     def test_custom_wells_keep_saved_dark_colours_while_raw_halo_transitions(self):
         self.c.set("palette", "Custom")
         self.c.halo_primary = QColor("#bda7ff")

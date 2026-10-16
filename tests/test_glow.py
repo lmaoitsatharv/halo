@@ -53,7 +53,7 @@ class GlowTests(unittest.TestCase):
         self.assertEqual(alphas[-1], 0)
 
     def test_intensity_and_pulse_controls_remain_effective(self):
-        off, low = render(intensity=0), render(intensity=25)
+        off, low = render(intensity=0), render(intensity=25, animation="music")
         quiet, loud = render(animation="music"), render(animation="music", pulse=1)
         self.assertEqual(off.pixelColor(400, 8).alpha(), 0)
         self.assertLess(low.pixelColor(400, 8).alpha(), quiet.pixelColor(400, 8).alpha())

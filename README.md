@@ -1,41 +1,70 @@
 # Halo
 
-[Website](https://halo-music-companion.vercel.app) · [Windows preview downloads](https://github.com/lmaoitsatharv/halo/releases)
-
 A Windows companion for the **Spotify desktop app**, inspired by ambient music lighting and desktop lyrics. Independent software; not affiliated with Spotify, Lumn or Verci.
+
+## Download for Windows
+
+### [Download Halo for Windows (.zip)](https://github.com/lmaoitsatharv/halo/releases/latest/download/Halo-Windows-x64.zip)
+
+Windows 10 (1809+) or Windows 11 · 64-bit · Portable · No Python or GitHub account needed
+
+1. Click **Download Halo for Windows** above and save **Halo-Windows-x64.zip**.
+2. Right-click the downloaded ZIP → **Extract All…** → **Extract**.
+3. Open the extracted **Halo** folder and double-click **Halo.exe** (Windows may show it as **Halo**, type **Application**).
+4. Play a song in the **Spotify desktop app**. Open the **Settings** gear at the top-right to customize Halo.
+
+Keep **Halo.exe**, **_internal** and **licenses** together in the extracted folder. Run the app from that folder, after extraction. No installation is needed. To quit completely, right-click the Halo icon in the system tray → **Quit**.
+
+**Updating?** Quit Halo from its tray icon, extract the new ZIP into a fresh folder, then open the new **Halo.exe**. Your saved preferences are kept separately in Windows.
+
+[Website](https://halo-music-companion.vercel.app) · [All releases and checksums](https://github.com/lmaoitsatharv/halo/releases) · [Troubleshooting](#troubleshooting)
+
+![Halo desktop app showing its original visual demo](docs/images/halo-desktop.png)
+
+## What's new
+
+- Settings opens on **General**, with separate **Halo**, **Lyrics** and **Immersive** sections and a live preview.
+- Smoother audio pulses with a stronger, softer glow, plus cleaner Ship lyrics.
+- Better missing-cover recovery, with an optional online cover lookup.
+- Centered startup and remembered maximized state after immersive view.
+- Better access to the auto-hidden Windows taskbar while the halo is active.
+
+![Halo Settings with General selected and a live monitor preview](docs/images/halo-settings.png)
 
 ## Use the app
 
-1. Open `dist/Halo/Halo.exe` (or the portable ZIP after extracting the entire folder).
+1. Open **Halo.exe** from the extracted **Halo** folder. If you built from source, it is in `dist/Halo/Halo.exe`.
 2. Start a song in the Spotify desktop app. Halo detects it automatically; no Spotify login, API key or Premium account is required by Halo.
-3. Open the **Light** tab and turn on **Screen-edge glow** for ambient lighting on all monitors. Pick a live halo preview to change its look. **Fine tune → Light** separates rim width, glow spread, glow opacity, overall intensity and motion speed. **Fine tune → Colours** contains the palette, two colour pickers, independent brightness and primary/secondary share. **Album colours** uses two colours from the track's artwork and smoothly fades between tracks.
-4. Open the **Lyrics** tab and turn on **Floating lyrics**, then minimize Halo or close its main window to the tray. Lyrics keep advancing above your desktop with clicks passing through them. Restoring the main window hides the floating text while you adjust settings.
-   Use **Position…** beside the toggle to choose a monitor, drag the preview, adjust horizontal/vertical position, or use the nine presets. **Preview on desktop** lets you see the actual placement while the settings are open. Position is saved automatically; **Reset position** restores bottom-center placement on the primary display.
-5. **Enter immersive view** opens the selected scene. The **Scenes** tab offers Listening room, Lyrics only, Cinema and Orbit; scene and lyric-style selectors are also available inside immersive view. All scenes fade the header and player and hide the cursor after 1.5 seconds without cursor movement. Move the mouse to reveal them. Leaving immersive view or switching to another app restores the cursor. **Lyrics only** hides artwork and credits. Press **Space** to play/pause and **Esc** to return. The progress bar also supports seeking.
+3. Click the **Settings** gear at the top-right (or press **Ctrl+,**). Settings opens on **General**, with **Halo**, **Lyrics** and **Immersive** in the left menu and a live monitor preview on the right. Changes save automatically. **Halo** contains the screen-edge and audio switches, style picker, light sliders and colour controls. **Album colours** uses two colours from the track's artwork and smoothly fades between tracks. **General** includes Reduce motion and the optional **Find missing covers online** switch, which is off by default.
+4. In **Settings → Lyrics**, turn on **Floating lyrics**, then minimize Halo or close its main window to the tray. Lyrics keep advancing above your desktop with clicks passing through them. Restoring the main window hides the floating text while you adjust settings.
+   Use **Adjust…** in the Position row to choose a monitor, drag the preview, adjust horizontal/vertical position, or use the nine presets. **Preview on desktop** lets you see the actual placement while the settings are open. Position is saved automatically; **Reset position** restores bottom-center placement on the primary display.
+5. **Enter immersive view** opens the selected scene. **Settings → Immersive** offers Listening room, Lyrics only, Cinema and Orbit; scene and lyric-style selectors are also available inside immersive view. All scenes fade the header and player and hide the cursor after 1.5 seconds without cursor movement. Move the mouse to reveal them. Leaving immersive view or switching to another app restores the cursor. **Lyrics only** hides artwork and credits. Press **Space** to play/pause and **Esc** to return. The progress bar also supports seeking.
 6. Right-click Halo's icon in the system tray to open it, toggle the glow or quit completely.
 
 **Try the visual demo** previews lighting and original timed text without Spotify. **Return to Spotify** ends the demo. The demo does not play audio.
+
+The main window opens centered in your monitor's usable area. Maximizing Halo is remembered, including when returning from immersive view, restoring from the tray and starting the app again. Settings previews use the same native glow and lyric renderers as the app; when synced lyrics are missing, clearly labelled original sample words appear without starting demo mode or changing playback. Settings section changes, the selection marker and switches animate gently; Reduce motion settles these transitions immediately. Preview rendering stops when settings closes.
 
 ## Motion and lyric styles
 
 - **Aura:** calm, balanced album-colour light.
 - **Orbit:** a rotating two-colour rim with a travelling comet highlight.
 - **Wave:** moving colour ribbons around the screen.
-- **Pulse:** breathing light whose inward glow responds to output energy.
+- **Pulse:** breathing light in Flow; in Music sync, bass and percussion accents drive a strong inward bloom and brightness changes.
 - **Prism:** a revolving spectrum based on the album palette.
 
 The lyric-style selector controls the main preview, floating lyrics and all immersive scenes:
 
-- **Ship:** a flowing wall of lyrics with a moving word spotlight.
+- **Ship:** clean lyrics with smooth line-by-line scrolling and steady text, without word highlighting or a spotlight box.
 - **Fisheye:** a kinetic word stack whose active word swells into focus.
 - **Fisheye Visual:** the word stack with tilted colour strips and original contextual symbols.
 - **Visual:** one large word and symbol at a time, with soft transitions.
 
-Word choreography uses **estimated word timing between LRCLIB's line timestamps**; it is not precise word-level synchronization. Each new line reanchors the estimates. Click a visible lyric to seek to that line. **Reduce motion** keeps steady typography and a calm halo, and playback pause freezes the animated flow.
+Ship follows LRCLIB's line timestamps. The other styles use **estimated word timing between LRCLIB's line timestamps**; it is not precise word-level synchronization. Each new line reanchors the estimates. Click a visible lyric to seek to that line. **Reduce motion** keeps steady typography and a calm halo, and playback pause freezes the animated flow.
 
 The halo preserves dark, saturated and neutral colours. Black creates an unlit section instead of a grey or opaque black border. Rim thickness is independent of the soft glow's spread and opacity. Changing either colour switches to **Custom**; preset changes preserve your saved custom colours and brightness values.
 
-**Flow** moves at a steady speed, **Music sync** responds to output energy, **Idle** moves slowly and **Still** keeps the light stationary. The audio toggle and Music sync selection stay in sync. Output energy uses time-based attack and release smoothing; it is not precise beat detection. Changing speed preserves the current motion phase, and album-colour fades take about 0.9 seconds. Dark halo colours do not make lyric text unreadable because the interface uses a separate readable accent.
+**Flow** moves at a steady speed, **Music sync** swells on output-audio accents, **Idle** moves slowly and **Still** keeps the light stationary. The audio toggle and Music sync selection stay in sync. Music sync adapts to the playback volume and detects sudden bass and percussion changes, including accents in compressed music whose overall loudness stays almost constant. Pulse keeps a soft bed of light between accents and blooms inward on each hit. A rounded attack and longer fade smooth each swell; it does not estimate tempo or predict a precise beat grid. Changing speed preserves the current motion phase, and album-colour fades take about 0.9 seconds. Dark halo colours do not make lyric text unreadable because the interface uses a separate readable accent.
 
 Lighting research used [Lumn's official overview](https://www.trylumn.xyz/). Lyric styling was guided by the Verci demo video supplied with this project. The four style labels are also documented by an [independent Windows interpretation](https://github.com/darshanseenivasakumar/theaestheticslyrics); Verci's official site was unreachable during this update. Halo uses its own native renderer, motion, symbols and layouts.
 
@@ -48,12 +77,14 @@ Lighting research used [Lumn's official overview](https://www.trylumn.xyz/). Lyr
 - Looks in the lyrics catalog before using the exact-record endpoint, so an error on that endpoint cannot hide an existing timed catalog match.
 - Offers a timing adjustment from −3000 to +3000 ms. Negative makes lyrics appear later; positive makes them appear earlier.
 - Accepts UTF-8 `.lrc` files for the current song, including files with repeated timestamps and `[offset:...]` metadata. Imported lyrics reset on a song change.
-- Optional **React to audio** measures output loudness via WASAPI loopback. Otherwise, the glow moves gently. It follows output energy rather than estimating tempo or individual beats.
+- Optional **React to audio** analyses local output levels and bass/percussion changes via WASAPI loopback. Otherwise, the glow moves gently. It detects accents rather than estimating tempo or predicting beat timing.
 - Saves preferences and minimizes to the tray when its main window is closed.
 
 ## Privacy and limitations
 
 Spotify metadata and artwork are read locally through [Windows media controls](https://learn.microsoft.com/en-us/uwp/api/windows.media.control.globalsystemmediatransportcontrolssessionmanager). Lyrics requests send the current song title, artist, album and duration to [LRCLIB](https://lrclib.net/docs); no Spotify credentials are requested. Lyrics are cached in memory, not saved to disk.
+
+Spotify sometimes omits its cover from Windows' media feed. Halo retries late or failed native artwork and refreshes both the cover and album colours when it arrives. If you enable **Find missing covers online**, Halo sends song-title/artist search terms to [MusicBrainz](https://musicbrainz.org/doc/MusicBrainz_API) and uses its title, artist, album and duration data to select a matching release. It requests that release's front cover from [Cover Art Archive](https://musicbrainz.org/doc/Cover_Art_Archive/API), which serves images through Internet Archive. Native Spotify artwork takes priority. Lookups run in the background and use a bounded memory cache; unmatched/offline results retain the placeholder. Editions can have different covers. No login details or audio are sent for cover lookup.
 
 Audio-reactive mode measures **all sound on the current default output device**, including other apps. It does not use the microphone, save recordings or send audio anywhere. If the output device changes, it reconnects. Silence and incompatible devices gracefully fall back to gentle motion.
 
@@ -66,6 +97,15 @@ The lyrics badge distinguishes a lookup in progress from an untimed result, miss
 This app uses an ordinary fullscreen view. It does not draw over the secure Windows lock screen or replace Windows locking. Overlays can also be hidden by games running in exclusive fullscreen.
 
 The portable build is unsigned. Source is included here so the app can be reviewed and rebuilt. Target: Windows 10 version 1809 or later, Windows 11, x64. Only the current development PC has been tested so far.
+
+## Troubleshooting
+
+- **Downloaded “Source code (zip)” or used Code → Download ZIP?** That is the developer source. Use the **Download Halo for Windows** link at the top of this page to get the ready-to-run app.
+- **Missing files or the app does not start?** Extract the entire ZIP first. Keep the `_internal` folder beside **Halo.exe**; copying only the executable will not work.
+- **Windows shows a publisher warning?** This preview is unsigned. Check that your download came from this repository's Releases page. A SHA-256 checksum is included with each release.
+- **No song appears?** Open the Spotify desktop app on Windows and start playback. Spotify Web and other music players are not currently supported.
+- **No lyrics?** Some tracks have no timed lyrics. Try **Retry** or import a local `.lrc` file in **Settings → Lyrics**.
+- **Closed the window but Halo is still running?** It stays in the system tray. Right-click its icon → **Quit** to stop it completely.
 
 ## Run from source
 

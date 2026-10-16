@@ -66,6 +66,8 @@ if not args.reuse_analysis:
 subprocess.run(command, cwd=snapshot_dir, env=build_env, check=True)
 target = dist_dir / "Halo"
 shutil.copy2(root / "README.md", target / "README.md")
+if (root / "docs").is_dir():
+    shutil.copytree(root / "docs", target / "docs", dirs_exist_ok=True)
 shutil.copy2(job_dir / "source-manifest.json", target / "source-manifest.json")
 for dist in importlib.metadata.distributions():
     for file in dist.files or []:
