@@ -289,6 +289,7 @@
   addEventListener('resize',fitInstallation,{passive:true});fitInstallation();
   const recenter=()=>{dragX=dragY=pointerX=pointerY=0;manualPose=true;renderers.forEach(renderer=>renderer.dirty=true);hero.dataset.rotation='centered';};
   document.querySelector('#recenter-installation').addEventListener('click',recenter);
+  hero.querySelectorAll('img').forEach(image=>{image.draggable=false;});
   hero.addEventListener('pointerdown',event=>{
     if (event.target.closest('button,a,input') || reduced.matches || event.button!==0) return;
     dragging=true;dragDistance=0;lastPointerX=event.clientX;lastPointerY=event.clientY;

@@ -1,6 +1,7 @@
 /* Halo's light installation: real geometry, layered interfaces, one motion system. */
 .hero{min-height:760px;padding-top:72px;padding-bottom:80px}
 .hero-installation{height:590px;perspective:1300px;cursor:grab;touch-action:pan-y;--turn-x:0;--turn-y:0;--float:0;--scroll-depth:0;--layer-lift:0}
+.hero-installation,.hero-installation *{-webkit-user-select:none;user-select:none}
 .hero-installation.is-dragging{cursor:grabbing}.hero-installation:focus-visible{outline-offset:10px;border-radius:10px}
 .light-sculpture{position:absolute;inset:-85px -65px -15px -85px;width:calc(100% + 150px);height:calc(100% + 100px);z-index:1;pointer-events:none;opacity:0;transition:opacity 1.2s;filter:drop-shadow(0 0 13px #ffb47c20)}
 .sculpture-ready .light-sculpture{opacity:1}.ambient-field{z-index:0;opacity:1;filter:blur(30px);background:radial-gradient(ellipse at 32% 37%,#c7643535,transparent 55%),radial-gradient(ellipse at 70% 73%,#a4b77124,transparent 55%)}
