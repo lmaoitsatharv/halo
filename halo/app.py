@@ -6,14 +6,16 @@ import os
 from pathlib import Path
 import sys
 import time
-from PySide6.QtCore import QObject, Signal, QTimer, Qt, QSettings, QLockFile, QThread
-from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
+from dataclasses import replace
+from PySide6.QtCore import QObject, Signal, QTimer, Qt, QSettings, QLockFile, QThread, QEvent
+from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap, QCursor, QShortcut, QKeySequence
 from PySide6.QtWidgets import (QApplication, QHBoxLayout, QLabel, QCheckBox, QSlider,
     QFileDialog, QSystemTrayIcon, QMenu, QMessageBox)
 from .models import Track, Lyrics, parse_lrc, load_lrc, DEMO_LRC
 from .spotify import SpotifyWorker
 from .lyrics import LyricsWorker
 from .audio import AudioMeter
+from .artwork import ArtworkWorker
 from .widgets import EdgeOverlay, FloatingLyrics, AmbientBackdrop, artwork_palette
 from .positioning import PositionDialog
 
@@ -51,6 +53,7 @@ class Controller(QObject):
     trackChanged = Signal()
     lyricsChanged = Signal()
     requestLyrics = Signal(object, int)
+    requestArtwork = Signal(object)
     settingChanged = Signal()
     paletteChanged = Signal()
 
@@ -73,6 +76,10 @@ class Controller(QObject):
         self.halo_secondary = QColor(self.secondary)
         self.palette_transition = PaletteTransition(self.halo_primary, self.halo_secondary, time.monotonic())
         self.palette_initialized = False
+        self.artwork_online = settings.value("artwork_online", False, type=bool)
+        self.artwork_fallback = None
+        self.artwork_pending = None
+        self.artwork_retry_at = 0.
         self.glow = settings.value("glow", True, type=bool)
         self.floating = settings.value("floating", False, type=bool)
         self.floating_x = max(0, min(100, settings.value("floating_x", 50, type=int)))
@@ -110,6 +117,13 @@ class Controller(QObject):
         self.lyrics_worker.ready.connect(self.accept_lyrics)
         self.lyrics_thread.finished.connect(self.lyrics_worker.deleteLater)
         self.lyrics_thread.start()
+        self.artwork_thread = QThread()
+        self.artwork_worker = ArtworkWorker()
+        self.artwork_worker.moveToThread(self.artwork_thread)
+        self.requestArtwork.connect(self.artwork_worker.fetch)
+        self.artwork_worker.ready.connect(self.accept_artwork)
+        self.artwork_thread.finished.connect(self.artwork_worker.deleteLater)
+        self.artwork_thread.start()
         self.spotify = SpotifyWorker()
         self.spotify.changed.connect(self.accept_track)
         self.spotify.status.connect(self.accept_status)
@@ -131,11 +145,19 @@ class Controller(QObject):
         self.live_track = track
         if self.demo:
             return
+        self.artwork_worker.latest_key = track.key if self.artwork_online and track.connected else None
+        if self.artwork_fallback and self.artwork_fallback[0] != track.key:
+            self.artwork_fallback = None
+        if not track.artwork and track.connected and self.artwork_fallback:
+            track = replace(track, artwork=self.artwork_fallback[1])
         previous = self.track
         changed = previous.key != track.key or previous.connected != track.connected
+        artwork_changed = previous.artwork != track.artwork
         self.track = track
         self.error = ""
         if changed:
+            self.artwork_pending = None
+            self.artwork_retry_at = 0.
             self.update_palette()
             self.generation += 1
             self.lookup_signature = None
@@ -143,6 +165,9 @@ class Controller(QObject):
                                  "Play a song in Spotify, or try the demo below.")
             self.trackChanged.emit()
             self.lyricsChanged.emit()
+        elif artwork_changed:
+            self.update_palette()
+            self.trackChanged.emit()
         elif previous.playing != track.playing:
             self.trackChanged.emit()
         # Wait for a useful duration before matching. Never query on every poll.
@@ -152,6 +177,28 @@ class Controller(QObject):
             self.generation += 1
             self.lyrics_worker.latest_generation = self.generation
             self.requestLyrics.emit(track, self.generation)
+        self.find_artwork()
+
+    def find_artwork(self):
+        track = self.track
+        if (self.demo or not self.artwork_online or not track.connected or track.artwork
+                or not 1 <= track.duration <= 3600 or not track.album or not track.artist
+                or self.artwork_pending == track.key or time.monotonic() < self.artwork_retry_at):
+            return
+        self.artwork_worker.latest_key = track.key
+        self.artwork_pending = track.key
+        self.requestArtwork.emit(track)
+
+    def accept_artwork(self, key, data):
+        if self.artwork_pending == key:
+            self.artwork_pending = None
+        if self.demo or not self.artwork_online or not self.track.connected or self.track.key != key:
+            return
+        if not data:
+            self.artwork_retry_at = time.monotonic() + 60.
+        elif not self.track.artwork:
+            self.artwork_fallback = (key, data)
+            self.accept_track(replace(self.track, artwork=data))
 
     def accept_lyrics(self, generation, lyrics):
         if generation == self.generation and not self.demo:
@@ -194,6 +241,12 @@ class Controller(QObject):
         elif name == "reactive":
             self.halo_animation = "music" if value else "flow"
             self.settings.setValue("halo_animation", self.halo_animation)
+        elif name == "artwork_online":
+            self.artwork_worker.latest_key = self.track.key if value else None
+            self.artwork_pending = None
+            self.artwork_retry_at = 0.
+            if value:
+                self.find_artwork()
         if name in {"palette", "custom_primary", "custom_secondary"}:
             self.update_palette()
         self.settingChanged.emit()
@@ -202,6 +255,8 @@ class Controller(QObject):
         self.demo = enabled
         self.generation += 1
         if enabled:
+            self.artwork_worker.latest_key = None
+            self.artwork_pending = None
             self.demo_position = 8.0
             self.demo_anchor = time.monotonic()
             self.demo_playing = True
@@ -264,13 +319,20 @@ class Controller(QObject):
         if self.demo and self.demo_playing:
             target = .25 + .65 * max(0, math.sin(now * 3.6)) ** 6
         if not self.reduced_motion:
-            self.pulse = envelope(self.pulse, target, elapsed)
+            if self.halo_animation == "music":
+                # Round each accent into a swell, with a lingering light trail.
+                self.pulse = envelope(self.pulse, target, elapsed, attack=.045, release=.22)
+            else:
+                self.pulse = envelope(self.pulse, target, elapsed)
 
     def close(self):
         self.timer.stop()
         self.audio.close()
         self.spotify.stop()
         self.spotify.wait(5500)
+        self.artwork_worker.closing = True
+        self.artwork_thread.quit()
+        self.artwork_thread.wait(22000)
         self.lyrics_worker.closing = True
         self.lyrics_thread.quit()
         self.lyrics_thread.wait(18000)
@@ -283,9 +345,13 @@ class MainWindow(AmbientBackdrop):
         self.c = controller
         self.exiting = False
         self.position_dialog = None
+        self._initial_placed = False
+        self._return_maximized = controller.settings.value("window_maximized", False, type=bool)
         self.setWindowTitle("Halo · Spotify companion")
         self.setWindowIcon(make_icon())
         build_main(self, controller)
+        self.settings_shortcut = QShortcut(QKeySequence("Ctrl+,"), self)
+        self.settings_shortcut.activated.connect(self.open_settings)
 
         self.immersive = Immersive(controller)
         self.immersive.setWindowIcon(self.windowIcon())
@@ -299,6 +365,7 @@ class MainWindow(AmbientBackdrop):
         self.tray.setToolTip("Halo · Spotify companion")
         menu = QMenu()
         menu.addAction("Open Halo", self.reopen)
+        menu.addAction("Settings", self.open_settings)
         menu.addAction("Immersive view", self.fullscreen)
         menu.addSeparator()
         self.tray_glow = menu.addAction("Screen-edge glow")
@@ -363,6 +430,13 @@ class MainWindow(AmbientBackdrop):
         self.position_dialog.show()
         self.position_dialog.raise_()
         self.position_dialog.activateWindow()
+
+    def open_settings(self):
+        if self.settings_dialog.isVisible():
+            self.settings_dialog.raise_()
+            self.settings_dialog.activateWindow()
+        else:
+            self.settings_dialog.open_studio()
 
     def refresh(self):
         self.title.setText(self.c.track.title)
@@ -435,6 +509,8 @@ class MainWindow(AmbientBackdrop):
             self.immersive.tick()
 
     def fullscreen(self):
+        self._remember_window_state()
+        self.settings_dialog.hide()
         if self.position_dialog:
             self.position_dialog.close()
         self.immersive.refresh()
@@ -456,12 +532,37 @@ class MainWindow(AmbientBackdrop):
             QMessageBox.warning(self, "Couldn't import lyrics", str(error))
 
     def reopen(self):
-        self.showNormal()
+        self.showMaximized() if self._return_maximized else self.showNormal()
         self.raise_()
         self.activateWindow()
 
+    def _remember_window_state(self):
+        if not self.isMinimized():
+            self._return_maximized = self.isMaximized()
+        self.c.settings.setValue("window_maximized", self._return_maximized)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if not self._initial_placed:
+            self._initial_placed = True
+            screen = QApplication.screenAt(QCursor.pos()) or self.screen() or QApplication.primaryScreen()
+            area = screen.availableGeometry()
+            self.resize(min(self.width(), area.width() - 64), min(self.height(), area.height() - 80))
+            bounds = self.frameGeometry()
+            bounds.moveCenter(area.center())
+            self.move(bounds.topLeft())
+            if self._return_maximized:
+                QTimer.singleShot(0, self.showMaximized)
+
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        if event.type() == QEvent.Type.WindowStateChange and self._initial_placed:
+            self._remember_window_state()
+
     def quit(self):
+        self._remember_window_state()
         self.exiting = True
+        self.settings_dialog.hide()
         self.immersive.hide()
         self.overlay.hide()
         for edge in self.edges:
@@ -469,8 +570,10 @@ class MainWindow(AmbientBackdrop):
         QApplication.quit()
 
     def closeEvent(self, event):
+        self._remember_window_state()
         if not self.exiting and self.tray.isSystemTrayAvailable():
             event.ignore()
+            self.settings_dialog.hide()
             self.hide()
         else:
             self.quit()
@@ -481,9 +584,12 @@ def main():
     parser = argparse.ArgumentParser(description="Halo · Windows Spotify companion")
     parser.add_argument("--demo", action="store_true")
     parser.add_argument("--offline", action="store_true", help="Disable the Windows media bridge")
+    parser.add_argument("--settings", action="store_true", help="Open Halo settings on launch")
     parser.add_argument("--snapshot", help="Save a UI preview and quit (for development)")
-    parser.add_argument("--snapshot-view", choices=("main", "immersive", "position"), default="main",
+    parser.add_argument("--snapshot-view", choices=("main", "immersive", "position", "settings"), default="main",
                         help="Choose the view for a development snapshot")
+    parser.add_argument("--settings-section", choices=("general", "halo", "lyrics", "scenes"), default="general",
+                        help="Choose a settings section for a development snapshot")
     parser.add_argument("--report", help="Write a live validation report and quit after 12 seconds")
     parser.add_argument("--halo-mode", choices=[item[0] for item in HALO_MODES], help="Choose a halo mode")
     parser.add_argument("--lyric-style", choices=[item[0] for item in LYRIC_STYLES], help="Choose a lyric animation")
@@ -512,6 +618,8 @@ def main():
     window = MainWindow(c)
     app.aboutToQuit.connect(c.close)
     window.show()
+    if args.settings:
+        QTimer.singleShot(0, window.open_settings)
     if args.demo:
         c.set_demo(True)
     if args.snapshot and not args.report:
@@ -519,9 +627,14 @@ def main():
             window.fullscreen()
         elif args.snapshot_view == "position":
             window.open_position_settings()
+        elif args.snapshot_view == "settings":
+            window.open_settings()
+            index = [section[0] for section in window.settings_dialog.SECTIONS].index(args.settings_section)
+            window.settings_dialog.select(index)
         def snapshot():
             target = window.immersive if args.snapshot_view == "immersive" else (
-                     window.position_dialog if args.snapshot_view == "position" else window)
+                     window.position_dialog if args.snapshot_view == "position" else
+                     window.settings_dialog if args.snapshot_view == "settings" else window)
             target.grab().save(args.snapshot)
             window.quit()
         QTimer.singleShot(2300 if args.snapshot_view == "immersive" else 1600, snapshot)

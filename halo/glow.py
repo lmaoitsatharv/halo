@@ -12,7 +12,7 @@ HALO_MODES = (
     ("aura", "Aura", "A calm, continuous wash of your album colours."),
     ("orbit", "Orbit", "A luminous comet flows around a two-colour rim."),
     ("wave", "Wave", "Silky ribbons of colour travel around the screen."),
-    ("pulse", "Pulse", "A slow breathing bloom responds to the music."),
+    ("pulse", "Pulse", "Breathing light with strong music-driven blooms."),
     ("prism", "Prism", "A flowing spectrum inspired by your album palette."),
 )
 
@@ -108,7 +108,7 @@ def _colour_function(c, mode, phase):
 
 
 @lru_cache(maxsize=6)
-def _light_tiles(w, h, band, rim_width, glow_opacity, dpr):
+def _light_tiles(w, h, band, rim_width, glow_opacity, dpr, tight_spread=.58):
     """Cache independent rim/spill geometry in four non-overlapping strips.
 
     NumPy runs only when geometry or a control changes. No full-screen field
@@ -128,7 +128,7 @@ def _light_tiles(w, h, band, rim_width, glow_opacity, dpr):
         depth = np.maximum(0, -sdf)
         core = np.clip(rim_width - depth + .5, 0, 1)
         masks = []
-        for spread in (1., .58):
+        for spread in (1., tight_spread):
             def falloff(distance):
                 t = np.minimum(1, distance / max(1, band * spread))
                 return np.exp(-3.4 * t * t) * np.power(1 - t, 1.1)
@@ -261,7 +261,11 @@ def paint_edge_glow(p, w, h, c):
         mode = "aura"
     animation = getattr(c, "halo_animation", "flow")
     phase = _phase(c)
-    beat = _unit(c.pulse) if animation == "music" and not getattr(c, "reduced_motion", False) else 0.
+    audio_error = getattr(c, "audio_error", getattr(getattr(c, "audio", None), "error", ""))
+    music = animation == "music" and not getattr(c, "reduced_motion", False) and not audio_error
+    level = _unit(c.pulse) if music else 0.
+    # The meter already normalizes accents; keep the quiet-to-hit contrast.
+    beat = level
     sample = _colour_function(c, mode, phase)
     top, right, bottom, left, corners = _perimeter_brushes(w, h, sample)
     dpr = max(1., p.device().devicePixelRatioF())
@@ -269,9 +273,16 @@ def paint_edge_glow(p, w, h, c):
     rim_width = max(1., min(12., float(getattr(c, "rim_width", 3)))) * dpr
     band = max(1, min(round(max(c.glow_width * dpr, rim_width + 1)), min(pixel_w, pixel_h) // 2))
     opacity = _unit(getattr(c, "glow_opacity", 65) / 100)
-    strength = intensity * (.78 + .22 * beat if animation == "music" else 1.)
+    strength = intensity * (.30 + .70 * beat if music else .78 if animation == "music" else 1.)
     breath = .5 - .5 * math.cos(phase * math.pi * 4)
     width_mix = .32 + .68 * max(breath, beat) if mode == "pulse" else 1.
+    tight_spread = .58
+    if mode == "pulse" and music:
+        # Keep a soft luminous bed between accents. Audio still owns the
+        # bloom, without collapsing each release into a flashing thin rim.
+        width_mix = .18 + .82 * beat
+        tight_spread = .32
+        strength = intensity * (.25 + .75 * beat)
     if animation == "still":
         width_mix = .7 if mode == "pulse" else 1.
     logical_band = band / dpr
@@ -284,7 +295,7 @@ def paint_edge_glow(p, w, h, c):
     corner_weights = _corner_weights(band, dpr)
     p.save()
     p.setOpacity(p.opacity() * strength)
-    for x, y, broad, tight in _light_tiles(pixel_w, pixel_h, band, rim_width, opacity, dpr):
+    for x, y, broad, tight in _light_tiles(pixel_w, pixel_h, band, rim_width, opacity, dpr, tight_spread):
         layer = QImage(broad.size(), QImage.Format.Format_ARGB32_Premultiplied)
         layer.setDevicePixelRatio(dpr)
         layer.fill(Qt.GlobalColor.transparent)
@@ -341,6 +352,7 @@ def paint_halo_preview(p, rect, c, mode=None, motion_time=None, *, motion_phase=
         motion_speed=getattr(c, "motion_speed", 45),
         motion_time=getattr(c, "motion_time", 0.) if motion_time is None else motion_time,
         reduced_motion=getattr(c, "reduced_motion", False),
+        audio_error=getattr(getattr(c, "audio", None), "error", ""),
         primary_brightness=getattr(c, "primary_brightness", 100),
         secondary_brightness=getattr(c, "secondary_brightness", 100),
         color_mix=getattr(c, "color_mix", 60),

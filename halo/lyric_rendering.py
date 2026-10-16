@@ -17,7 +17,7 @@ from .models import lyric_word_matches, validate_lyric_lines
 
 
 LYRIC_STYLES = (
-    ("ship", "Ship", "A drifting wall of lyrics with a moving word spotlight."),
+    ("ship", "Ship", "Clean, steady lyrics with smooth line-by-line scrolling."),
     ("fisheye", "Fisheye", "Words flow through a lens; the current word swells into focus."),
     ("fisheye_visual", "Fisheye Visual", "The flowing word lens with expressive illustrated symbols."),
     ("visual", "Visual", "One bold word at a time, paired with a floating symbol."),

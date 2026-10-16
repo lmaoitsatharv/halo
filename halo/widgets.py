@@ -1,13 +1,14 @@
 import colorsys
 import math
 import time
-from PySide6.QtCore import Qt, QRectF, QRect, QPointF
+from PySide6.QtCore import Qt, QEvent, QRectF, QRect, QPointF
 from PySide6.QtGui import (QColor, QFont, QPainter, QPen, QLinearGradient,
                           QRadialGradient, QPainterPath, QPixmap)
 from PySide6.QtWidgets import QWidget
 from .models import floating_geometry
 from .glow import paint_edge_glow
 from .palette import artwork_colours
+from .taskbar import allow_taskbar_reveal
 from .lyric_rendering import (LYRIC_STYLES, WordTimeline, TypeCache, clamp, smooth,
                               spring, alpha, SYMBOLS, symbol_kind)
 
@@ -120,8 +121,11 @@ class LyricCanvas(QWidget):
         jumped = (self._last_position is not None and
                   (position < self._last_position - .15 or
                    position - self._last_position > max(.85, elapsed * 2 + .35)))
+        # Word-heavy cues must not snap Ship's whole-line scroll into place.
+        word_jump = (getattr(c, "lyric_style", "fisheye_visual") != "ship"
+                     and abs(word_index - self._word_visual) > 8)
         reset = (self.last_generation != c.generation or jumped or self._last_motion is None
-                 or abs(index - self.visual_index) > 3 or abs(word_index - self._word_visual) > 8)
+                 or abs(index - self.visual_index) > 3 or word_jump)
         reduced = bool(getattr(c, "reduced_motion", False))
         if reset or reduced:
             self.visual_index = float(index)
@@ -238,7 +242,7 @@ class LyricCanvas(QWidget):
         elif not lines[index].text.strip():
             self._instrumental(p, motion)
         elif style == "ship":
-            self._ship(p, index, word_index, fraction, motion)
+            self._ship(p, index)
         elif style == "visual":
             self._visual(p, index, word_index, fraction, motion, transition)
         else:
@@ -264,7 +268,7 @@ class LyricCanvas(QWidget):
         giant = self.scene_mode in {"lyrics", "cinema", "orbit"}
         return min(110 if giant else 76, max(25, min(w / (9 if giant else 11), h / 7)))
 
-    def _ship(self, p, index, word_index, fraction, motion):
+    def _ship(self, p, index):
         c = self.controller
         w, h = self.width(), self.height()
         margin = max(14, min(40, w * .05))
@@ -273,7 +277,6 @@ class LyricCanvas(QWidget):
         spacing = max(45, min(h * .30, size * 2.8))
         max_height = spacing * .8
         alignment = "center" if self.scene_mode in {"lyrics", "cinema", "orbit"} else self.alignment
-        reduced = getattr(c, "reduced_motion", False)
         for i in range(max(0, index - 3), min(len(c.lyrics.lines), index + 4)):
             text = c.lyrics.lines[i].text or "♪"
             delta = i - self.visual_index
@@ -285,35 +288,11 @@ class LyricCanvas(QWidget):
             if opacity < .01:
                 continue
             x = w / 2 if alignment == "center" else margin + shape.bounds.width() * scale / 2
-            # The wall leans very gently in perspective; the current line settles flat.
-            angle = 0 if reduced else clamp(delta * 1.1, -3, 3)
-            self._text(p, shape, x, y, WHITE if i == index else QColor("#acb7b5"), opacity, scale, angle)
+            # Whole lines share the readable palette accent; no word sweep.
+            self._text(p, shape, x, y, c.primary, opacity, scale)
             hit = QRectF(x - shape.bounds.width() * scale / 2, y - shape.bounds.height() * scale / 2,
                          shape.bounds.width() * scale, shape.bounds.height() * scale).adjusted(-12, -8, 12, 8)
             self._hit_rows.append((hit, i))
-            if i != index or word_index < 0:
-                continue
-            word = self.timeline.words[word_index]
-            p.save()
-            p.translate(x, y)
-            p.rotate(angle)
-            p.scale(scale, scale)
-            p.translate(-shape.bounds.center().x(), -shape.bounds.center().y())
-            clip = QPainterPath()
-            for start, end, box in shape.word_boxes:
-                if end <= word.start:
-                    clip.addRect(box.adjusted(-1, -1, 1, 1))
-                elif start <= word.start < end:
-                    spotlight = box.adjusted(-6, 1, 6, -1)
-                    p.setPen(Qt.PenStyle.NoPen)
-                    p.setBrush(alpha(c.primary, opacity * .13))
-                    p.drawRoundedRect(spotlight, 5, 5)
-                    clip.addRect(QRectF(box.x(), box.y() - 1, box.width() * fraction, box.height() + 2))
-            p.setClipPath(clip)
-            p.setPen(Qt.PenStyle.NoPen)
-            p.setBrush(alpha(c.primary, opacity))
-            p.drawPath(shape.path)
-            p.restore()
 
     def _fisheye(self, p, index, word_index, fraction, motion, illustrated):
         c = self.controller
@@ -397,6 +376,11 @@ class EdgeOverlay(QWidget):
         self.setGeometry(screen.geometry())
         screen.geometryChanged.connect(self.setGeometry)
 
+    def event(self, event):
+        if event.type() == QEvent.Type.WinIdChange:
+            allow_taskbar_reveal(self.effectiveWinId())
+        return super().event(event)
+
     def paintEvent(self, event):
         p = QPainter(self)
         paint_edge_glow(p, self.width(), self.height(), self.controller)
@@ -413,6 +397,11 @@ class FloatingLyrics(LyricCanvas):
         self.setWindowTitle("Halo floating lyrics")
         self.target_screen = None
         self.previewing = False
+
+    def event(self, event):
+        if event.type() == QEvent.Type.WinIdChange:
+            allow_taskbar_reveal(self.effectiveWinId())
+        return super().event(event)
 
     def place(self, screen):
         if screen is not self.target_screen:

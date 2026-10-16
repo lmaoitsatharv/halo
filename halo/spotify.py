@@ -5,8 +5,49 @@ import time
 from datetime import datetime, timezone
 from PySide6.QtCore import QThread, Signal
 from .models import Track, TimelineClock
+from .artwork import valid_artwork
 
 log = logging.getLogger(__name__)
+
+
+async def read_thumbnail(thumbnail):
+    from winrt.windows.storage.streams import Buffer, InputStreamOptions
+    stream = await asyncio.wait_for(thumbnail.open_read_async(), timeout=3)
+    try:
+        if not 0 < stream.size <= 5_000_000:
+            return b""
+        buf = await asyncio.wait_for(
+            stream.read_async(Buffer(stream.size), stream.size, InputStreamOptions.NONE), timeout=3)
+        return bytes(memoryview(buf))
+    finally:
+        stream.close()
+
+
+class SessionArtwork:
+    """Retry late/failed Windows artwork without reusing a previous song's cover."""
+    def __init__(self, reader=read_thumbnail):
+        self.reader = reader
+        self.key = None
+        self.data = b""
+        self.retry_at = 0.
+
+    async def update(self, key, thumbnail, now):
+        if key != self.key:
+            self.key, self.data, self.retry_at = key, b"", 0.
+        if thumbnail is None or now < self.retry_at:
+            return self.data
+        try:
+            data = await self.reader(thumbnail)
+            # Decode only the small cover, on the media thread. Empty/invalid
+            # reads remain retryable rather than sticking for the whole song.
+            if valid_artwork(data):
+                self.data = data
+                self.retry_at = now + 30.
+                return self.data
+        except Exception:
+            log.debug("Artwork unavailable; will retry", exc_info=True)
+        self.retry_at = now + 2.
+        return self.data
 
 
 class SpotifyWorker(QThread):
@@ -46,10 +87,9 @@ class SpotifyWorker(QThread):
             GlobalSystemMediaTransportControlsSessionManager as Manager,
             GlobalSystemMediaTransportControlsSessionPlaybackStatus as Status,
         )
-        from winrt.windows.storage.streams import Buffer, InputStreamOptions
         manager = await asyncio.wait_for(Manager.request_async(), timeout=8)
         current_key = None
-        artwork = b""
+        covers = SessionArtwork()
         clock = TimelineClock()
         while not self.isInterruptionRequested():
             try:
@@ -71,6 +111,7 @@ class SpotifyWorker(QThread):
                         await asyncio.wait_for(session.try_change_playback_position_async(int(value * 10_000_000)), timeout=3)
                 if not session:
                     current_key = None
+                    covers = SessionArtwork()
                     clock = TimelineClock()
                     self.changed.emit(Track(observed_at=time.monotonic()))
                 else:
@@ -81,19 +122,8 @@ class SpotifyWorker(QThread):
                     key = (props.title, props.artist, props.album_title)
                     if key != current_key:
                         current_key = key
-                        artwork = b""
                         clock = TimelineClock()
-                        if props.thumbnail:
-                            try:
-                                stream = await asyncio.wait_for(props.thumbnail.open_read_async(), timeout=3)
-                                try:
-                                    size = min(stream.size, 5_000_000)
-                                    buf = await asyncio.wait_for(stream.read_async(Buffer(size), size, InputStreamOptions.NONE), timeout=3)
-                                    artwork = bytes(memoryview(buf))
-                                finally:
-                                    stream.close()
-                            except Exception:
-                                log.debug("Artwork unavailable", exc_info=True)
+                    artwork = await covers.update(key, props.thumbnail, time.monotonic())
                     now = time.monotonic()
                     duration = max(0.0, (timeline.end_time - timeline.start_time).total_seconds())
                     raw_position = max(0.0, (timeline.position - timeline.start_time).total_seconds())

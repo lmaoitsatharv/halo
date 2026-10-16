@@ -88,6 +88,83 @@ class LyricModeTests(unittest.TestCase):
         self.assertEqual(first, second)
         canvas.close()
 
+    def test_ship_text_stays_identical_between_words_in_the_same_cue(self):
+        for surface in ("preview", "floating", "immersive"):
+            with self.subTest(surface=surface):
+                c = self.controller()
+                c.lyric_style = "ship"
+                canvas = LyricCanvas(c, surface)
+                canvas.resize(800, 500)
+                first = canvas.grab().toImage()
+                c.position = 3.9  # Different estimated word in the same cue.
+                c.motion_time += 2.1
+                self.assertEqual(first, canvas.grab().toImage())
+                canvas.close()
+
+    def test_ship_uses_one_palette_accent_across_each_whole_line(self):
+        for surface in ("preview", "floating", "immersive"):
+            with self.subTest(surface=surface):
+                c = self.controller()
+                c.lyric_style = "ship"
+                canvas = LyricCanvas(c, surface)
+                canvas.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+                canvas.resize(800, 500)
+                first = canvas.grab().toImage()
+                c.secondary = QColor("#ff0000")
+                self.assertEqual(first, canvas.grab().toImage())
+                c.primary = QColor("#00ff00")
+                coloured = canvas.grab().toImage()
+                self.assertNotEqual(first, coloured)
+                # All coloured text is the selected green, including each
+                # full-opacity interior pixel. Floating shadows remain black.
+                pixels = [coloured.pixelColor(x, y)
+                          for y in range(coloured.height())
+                          for x in range(coloured.width())
+                          if coloured.pixelColor(x, y).green() > 0]
+                self.assertTrue(pixels)
+                self.assertTrue(any(pixel.alpha() == 255 for pixel in pixels))
+                self.assertTrue(all(pixel.red() == 0 and pixel.blue() == 0 for pixel in pixels))
+                c.position = 3.9
+                c.motion_time += 2.1
+                self.assertEqual(coloured, canvas.grab().toImage())
+                canvas.close()
+
+    def test_ship_word_heavy_cues_scroll_without_snapping(self):
+        c = self.controller()
+        c.lyric_style = "ship"
+        canvas = LyricCanvas(c)
+        canvas._advance(0, 0, 0, 10)
+        canvas._advance(1, 30, .033, 10.033)
+        self.assertGreater(canvas.visual_index, 0.)
+        self.assertLess(canvas.visual_index, .1)
+        c.track.playing = False
+        before = canvas.visual_index
+        canvas._advance(1, 30, .033, 10.033)
+        self.assertEqual(canvas.visual_index, before)
+        c.track.playing = True
+        canvas._advance(3, 40, 12.8, 10.066)  # A real seek still snaps to its cue.
+        self.assertEqual(canvas.visual_index, 3.)
+        canvas._advance(0, 0, .1, 10.099)
+        self.assertEqual(canvas.visual_index, 0.)
+        c.reduced_motion = True
+        canvas._advance(1, 30, .133, 10.132)
+        self.assertEqual(canvas.visual_index, 1.)
+        canvas.close()
+
+    def test_ship_cue_boundary_has_no_sudden_colour_or_tilt_change(self):
+        c = self.controller()
+        c.lyric_style = "ship"
+        c.position = 3.999
+        canvas = LyricCanvas(c, "immersive")
+        canvas.resize(800, 500)
+        first = canvas.grab().toImage()
+        c.position = 4.0001
+        second = canvas.grab().toImage()
+        # Before the animation clock advances, changing cues cannot recolour or
+        # rotate any text. Subsequent frames animate the whole-line focus.
+        self.assertEqual(first, second)
+        canvas.close()
+
     def test_type_cache_fits_long_unicode_and_unbroken_lines(self):
         cache = TypeCache(limit=8)
         for text in ("An original sentence " * 30, "Horizon" * 65,
