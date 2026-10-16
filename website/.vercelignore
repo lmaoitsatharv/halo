@@ -1,0 +1,7 @@
+.env*
+**/.env*
+.git
+.git/**
+.vercel
+.vercel/**
+.gitignore
