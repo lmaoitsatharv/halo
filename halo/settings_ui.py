@@ -2,20 +2,24 @@
 import math
 import time
 from dataclasses import replace
+from pathlib import Path
 from PySide6.QtCore import (Qt, QRectF, QPointF, QPoint, QSize, Property, QTimer,
                             QPropertyAnimation, QEasingCurve, QSignalBlocker)
 from PySide6.QtGui import (QColor, QPainter, QPen, QPainterPath, QPixmap, QIcon,
                           QLinearGradient, QRadialGradient, QFont, QFontMetrics)
 from PySide6.QtWidgets import (QDialog, QWidget, QFrame, QLabel,
     QPushButton, QCheckBox, QVBoxLayout, QHBoxLayout, QGridLayout, QStackedWidget,
-    QScrollArea)
+    QScrollArea, QFileDialog, QSlider, QSizePolicy)
 from .models import Lyrics, parse_lrc, DEMO_LRC, floating_geometry
 from .widgets import LyricCanvas, tint
 from .glow import HALO_MODES, paint_edge_glow
 from .lyric_rendering import LYRIC_STYLES
 from .immersive import IMMERSIVE_SCENES
 from .color_controls import LightControls
-from .frontend import ModeTile, action, text_label, selector
+from .frontend import ModeTile, ElidedLabel, action, text_label, selector
+from .backgrounds import BackgroundRenderer, BACKGROUND_PRESETS
+from .mode_catalog import available_specs
+from .scene_extras import extra_scene_layout, paint_extra_scene
 
 
 STUDIO_STYLE = """
@@ -38,6 +42,15 @@ QFrame#studioNavSelection { background: #323036; border: 1px solid #403a49; bord
 QPushButton#studioClose { background: #242427; border: 1px solid #39393e; padding: 0;
                         border-radius: 10px; font-size: 19px; color: #b7b3bf; }
 QPushButton#studioClose:hover { color: #ffffff; background: #39333f; }
+QPushButton#backgroundChoice { background: #25242a; border: 1px solid #403b47;
+                               border-radius: 9px; padding: 9px 5px; font-size: 11px; }
+QPushButton#backgroundChoice:checked { background: #3b3249; border-color: #bba7dc;
+                                      color: #f5eaff; }
+QPushButton#backgroundPreset { background: #29262e; border: 1px solid #49404f;
+                               border-radius: 9px; padding: 8px 4px; font-size: 11px; }
+QPushButton#backgroundPreset:hover { background: #42374e; border-color: #bba7dc; }
+QPushButton#backgroundDisclosure { text-align: left; background: transparent;
+                                   border: 0; padding: 10px 0; color: #bba7dc; font-size: 11px; }
 QPushButton { background: #2b2930; border-color: #45404d; }
 QPushButton:hover { background: #3b3544; border-color: #796a8d; }
 QPushButton#primary { background: #ded2fa; color: #20192d; }
@@ -264,15 +277,36 @@ class PreviewScreen(QWidget):
         self.floating_words.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen)
         self.floating_words.hide()
         self.art = QPixmap()
+        self.background = BackgroundRenderer(self)
+        self.background.changed.connect(self.update)
         self.setAccessibleName("Live preview of Halo on your desktop")
         controller.trackChanged.connect(self.refresh_art)
+        if hasattr(controller, "backgroundChanged"):
+            controller.backgroundChanged.connect(self.refresh_background)
         self.refresh_art()
 
     def refresh_art(self):
         self.art = QPixmap()
         if self.c.track.artwork:
             self.art.loadFromData(self.c.track.artwork)
+        self.refresh_background()
         self.update()
+
+    def refresh_background(self):
+        active = self.section == "scenes" and self.isVisible() and self.window().isVisible()
+        if active:
+            self.background.sync(self.c, active=True, preview=True)
+        else:
+            self.background.close()
+        self.update()
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.refresh_background()
+
+    def hideEvent(self, event):
+        self.background.close()
+        super().hideEvent(event)
 
     @staticmethod
     def text(p, rect, text, size, colour, weight=QFont.Weight.Normal, align=Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter):
@@ -306,11 +340,11 @@ class PreviewScreen(QWidget):
                          (pixmap.height() - rect.height()) / 2, rect.width(), rect.height()))
         p.restore()
 
-    def lyrics(self, p, rect, scene="lyrics", floating=False):
+    def lyrics(self, p, rect, scene="lyrics", floating=False, alignment="center"):
         canvas = self.floating_words if floating else self.words
         canvas.scene_mode = scene
         canvas.resize(round(rect.width()), round(rect.height()))
-        canvas.set_alignment("center")
+        canvas.set_alignment(alignment)
         p.save()
         p.translate(rect.topLeft())
         canvas.render(p, QPoint(), renderFlags=QWidget.RenderFlag.DrawChildren)
@@ -325,11 +359,13 @@ class PreviewScreen(QWidget):
         p.setClipPath(path)
         p.scale(self.width() / 1000., self.height() / 625.)
         p.fillRect(QRectF(0, 0, 1000, 625), QColor("#0b0c11"))
-        for x, y, colour in ((220, 430, self.c.secondary), (860, 110, self.c.primary)):
-            gradient = QRadialGradient(x, y, 680)
-            gradient.setColorAt(0, tint(colour, 19))
-            gradient.setColorAt(1, tint(colour, 0))
-            p.fillRect(QRectF(0, 0, 1000, 625), gradient)
+        painted = self.section == "scenes" and self.background.paint(p, QRectF(0, 0, 1000, 625), self.proxy.motion_time)
+        if not painted:
+            for x, y, colour in ((220, 430, self.c.secondary), (860, 110, self.c.primary)):
+                gradient = QRadialGradient(x, y, 680)
+                gradient.setColorAt(0, tint(colour, 19))
+                gradient.setColorAt(1, tint(colour, 0))
+                p.fillRect(QRectF(0, 0, 1000, 625), gradient)
         scene = self.c.immersive_mode if self.section == "scenes" else "lyrics"
         if self.section in {"general", "halo"}:
             p.setPen(QPen(QColor(255, 255, 255, 10), 1))
@@ -354,6 +390,16 @@ class PreviewScreen(QWidget):
                 self.lyrics(p, QRectF(*floating_geometry((0, 0, 1000, 625), self.c.floating_x, self.c.floating_y)), floating=True)
             else:
                 self.lyrics(p, QRectF(40, 40, 920, 545))
+        elif extra_scene_layout(scene, 1000, 625) is not None:
+            layout = extra_scene_layout(scene, 1000, 625)
+            paint_extra_scene(p, 1000, 625, self.proxy, scene, self.proxy.motion_time)
+            self.cover(p, QRectF(layout["cover"]))
+            self.lyrics(p, QRectF(layout["canvas"]), scene, alignment=layout["alignment"])
+            credits = (("song", self.c.track.title if self.c.track.connected else "Your favourite record", 14 if scene == "scene_runway" else 22),
+                       ("artist", self.c.track.artist if self.c.track.connected else "In your own atmosphere", 11 if scene == "scene_runway" else 16),
+                       ("album", self.c.track.album or "Sound in colour", 10 if scene == "scene_runway" else 12))
+            for key, value, pixels in credits:
+                self.text(p, QRectF(layout[key]), value, pixels, QColor("#d9dee5"))
         elif scene == "studio":
             self.cover(p, QRectF(80, 148, 270, 270))
             self.text(p, QRectF(80, 442, 280, 36), self.c.track.title if self.c.track.connected else "Your favourite record", 25, QColor("#f7f1ff"), QFont.Weight.DemiBold)
@@ -432,6 +478,7 @@ class StudioPreview(QFrame):
         else:
             self.note.setText("Live audio response" if self.c.track.connected and self.c.track.playing and self.c.reactive else "Sample motion · your saved settings")
         self.swatches.setText(f"{self.c.halo_primary.name().upper()}    /    {self.c.halo_secondary.name().upper()}")
+        self.scene.refresh_background()
         self.scene.update()
 
     def tick(self):
@@ -457,6 +504,7 @@ class StudioPreview(QFrame):
 
     def hideEvent(self, event):
         self.timer.stop()
+        self.scene.background.close()
         self.transition.animation.stop()
         self.transition.finish()
         super().hideEvent(event)
@@ -512,8 +560,12 @@ class SettingsStudio(QDialog):
         self.setStyleSheet(STUDIO_STYLE)
         self.section = "general"
         self.switches = {}
+        self.background_controls = {}
+        self.background_sliders = {}
+        self.background_sources = {}
         self.nav_buttons = []
         self.mode_tiles = []
+        self.mode_grids = {}
         owner.mode_tiles = self.mode_tiles
         owner.setting_controls = {}
         owner.setting_sliders = {}
@@ -585,10 +637,17 @@ class SettingsStudio(QDialog):
         footer.addWidget(text_label("Esc to close   ·   Ctrl+, to open", "studioEyebrow"))
         root.addLayout(footer)
         self.build_pages()
+        self.preview.scene.background.changed.connect(self.sync_background)
         for button in self.findChildren(QPushButton):
             button.setAutoDefault(False)
         self.pages.currentChanged.connect(self.sync_nav)
         controller.settingChanged.connect(self.sync)
+        if hasattr(controller, "modeLibraryChanged"):
+            controller.modeLibraryChanged.connect(self.refresh_modes)
+        controller.trackChanged.connect(self.sync_lyrics)
+        controller.lyricsChanged.connect(self.sync_lyrics)
+        if hasattr(controller, "backgroundChanged"):
+            controller.backgroundChanged.connect(self.sync_background)
         self.select(0, animate=False)
         self.sync()
 
@@ -646,11 +705,233 @@ class SettingsStudio(QDialog):
     def modes(self, layout, field, specs):
         grid = QGridLayout()
         grid.setSpacing(8)
-        for index, spec in enumerate(specs):
+        self.mode_grids[field] = (grid, specs)
+        for index, spec in enumerate(available_specs(self.c, field, specs)):
             tile = ModeTile(self.c, field, spec)
             self.mode_tiles.append(tile)
             grid.addWidget(tile, index // 2, index % 2)
         layout.addLayout(grid)
+
+    def refresh_modes(self):
+        for field, (grid, specs) in self.mode_grids.items():
+            self.mode_tiles[:] = [tile for tile in self.mode_tiles if tile.setting != field]
+            while grid.count():
+                item = grid.takeAt(0)
+                if item.widget() is not None:
+                    item.widget().hide()
+                    item.widget().deleteLater()
+            for index, spec in enumerate(available_specs(self.c, field, specs)):
+                tile = ModeTile(self.c, field, spec)
+                self.mode_tiles.append(tile)
+                grid.addWidget(tile, index // 2, index % 2)
+        self.preview.sync()
+
+    def background_selector(self, layout, field, title, specs, hint=""):
+        control = selector(self.c, field, specs, title)
+        control.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        control.setMinimumWidth(0)
+        self.row(layout, title, hint)
+        layout.addWidget(control)
+        self.background_controls[field] = control
+        return control
+
+    def background_slider(self, layout, field, title, low, high, suffix="%"):
+        line = QHBoxLayout()
+        title_label = text_label(title, "studioHint")
+        line.addWidget(title_label)
+        line.addStretch()
+        value = text_label(f"{getattr(self.c, field)}{suffix}", "studioValue")
+        line.addWidget(value)
+        layout.addSpacing(13)
+        layout.addLayout(line)
+        slider = QSlider(Qt.Orientation.Horizontal)
+        slider.setAccessibleName(title)
+        slider.setRange(low, high)
+        slider.setValue(getattr(self.c, field))
+        slider.setMinimumHeight(27)
+        slider.valueChanged.connect(lambda amount: self.c.set(field, amount))
+        layout.addWidget(slider)
+        self.background_sliders[field] = slider
+        self.background_controls[field] = slider
+        self.owner.setting_sliders[field] = (slider, value, suffix)
+        return slider
+
+    def build_background_controls(self, scenes):
+        source = self.group(scenes, "Background")
+        self.background_anchor = source.parentWidget()
+        source.addSpacing(10)
+        hint = text_label("Give your listening room its own atmosphere.", "studioHint")
+        hint.setWordWrap(True)
+        source.addWidget(hint)
+        source.addSpacing(12)
+        choices = QGridLayout()
+        choices.setSpacing(7)
+        for index, (key, label) in enumerate((("ambient", "Ambient light"), ("artwork", "Album artwork"),
+                                             ("image", "Your image"), ("video", "Your video"))):
+            button = action(label, lambda checked=False, selected=key: self.c.set("background_source", selected), "backgroundChoice")
+            button.setCheckable(True)
+            button.setAccessibleName(f"Use {label.lower()} background")
+            choices.addWidget(button, index // 2, index % 2)
+            self.background_sources[key] = button
+        source.addLayout(choices)
+        source.addSpacing(9)
+        self.background_file = action("Choose image…", self.choose_background_file, "ghost")
+        self.background_file.setAccessibleName("Choose a background image or video")
+        source.addWidget(self.background_file)
+        self.background_file_label = ElidedLabel("", "studioHint")
+        self.background_file_label.setAccessibleName("Selected background file")
+        source.addWidget(self.background_file_label)
+        self.background_art_group = QWidget()
+        art_controls = QVBoxLayout(self.background_art_group)
+        art_controls.setContentsMargins(0, 0, 0, 0)
+        art_controls.setSpacing(0)
+        self.background_art_source = self.background_selector(art_controls, "background_art_source", "Artwork source", (
+            ("spotify", "Spotify cover", "Use the artwork supplied by Spotify."),
+            ("online", "Find a cover online", "Match song details with MusicBrainz and Cover Art Archive.")))
+        source.addWidget(self.background_art_group)
+        self.background_privacy = text_label("Online matching sends song, artist and album details to MusicBrainz and Cover Art Archive. Spotify artwork is used when a match is unavailable.", "studioHint")
+        self.background_privacy.setWordWrap(True)
+        source.addSpacing(8)
+        source.addWidget(self.background_privacy)
+        self.background_status = text_label("", "studioHint")
+        self.background_status.setWordWrap(True)
+        self.background_status.setAccessibleName("Background status")
+        source.addSpacing(10)
+        source.addWidget(self.background_status)
+        reset = action("Reset background", self.c.reset_background, "ghost")
+        reset.setAccessibleName("Reset background to ambient light")
+        source.addSpacing(10)
+        source.addWidget(reset)
+        source.addSpacing(7)
+
+        look = self.group(scenes, "Look")
+        look.addSpacing(8)
+        self.background_look_hint = text_label("Choose artwork, an image or a video to explore these looks.", "studioHint")
+        self.background_look_hint.setWordWrap(True)
+        look.addWidget(self.background_look_hint)
+        look.addSpacing(7)
+        presets = QGridLayout()
+        presets.setSpacing(7)
+        self.background_presets = {}
+        for index, (key, title, _) in enumerate(BACKGROUND_PRESETS):
+            button = action(title, lambda checked=False, chosen=key: self.c.apply_background_preset(chosen), "backgroundPreset")
+            button.setAccessibleName(f"Apply {title.lower()} background look")
+            presets.addWidget(button, index // 2, index % 2, 1, 2 if index == 4 else 1)
+            self.background_presets[key] = button
+        look.addLayout(presets)
+        self.background_slider(look, "background_dim", "Darken", 0, 90)
+        self.background_slider(look, "background_blur", "Soft focus", 0, 60, " px")
+        self.background_slider(look, "background_saturation", "Colour richness", 0, 160)
+        self.background_disclosure = action("Composition & finishing   +", self.toggle_background_composition, "backgroundDisclosure")
+        self.background_disclosure.setCheckable(True)
+        self.background_disclosure.setAccessibleName("Show composition and finishing controls")
+        look.addWidget(self.background_disclosure)
+        self.background_composition = QWidget()
+        composition = QVBoxLayout(self.background_composition)
+        composition.setContentsMargins(0, 0, 0, 6)
+        composition.setSpacing(0)
+        self.background_selector(composition, "background_fit", "Framing", (
+            ("cover", "Fill the screen", "Crop the image to fill your listening room."),
+            ("contain", "Show the full image", "Keep all of your image visible.")))
+        self.background_slider(composition, "background_zoom", "Zoom", 100, 150)
+        self.background_slider(composition, "background_focus_x", "Horizontal focus", 0, 100)
+        self.background_slider(composition, "background_focus_y", "Vertical focus", 0, 100)
+        self.background_slider(composition, "background_vignette", "Edge shading", 0, 100)
+        self.background_slider(composition, "background_tint", "Album colour wash", 0, 60)
+        look.addWidget(self.background_composition)
+        self.background_composition.hide()
+
+        motion = self.group(scenes, "Motion")
+        self.background_selector(motion, "background_motion", "Movement", (
+            ("still", "Still", "Keep the composition settled."),
+            ("drift", "Slow drift", "A gentle, floating camera movement."),
+            ("breathe", "Breathe", "A soft, gradual expansion and release.")))
+        self.background_slider(motion, "background_speed", "Movement speed", 0, 100)
+        self.background_video_group = QWidget()
+        video_controls = QVBoxLayout(self.background_video_group)
+        video_controls.setContentsMargins(0, 0, 0, 0)
+        video_controls.setSpacing(0)
+        self.background_playback = self.background_selector(video_controls, "background_playback", "Video playback", (
+            ("music", "Follow music playback", "Pause the video when your music pauses."),
+            ("always", "Loop while immersive is open", "Keep the video moving while the room is visible.")))
+        motion.addWidget(self.background_video_group)
+        self.background_motion_note = text_label("", "studioHint")
+        self.background_motion_note.setWordWrap(True)
+        motion.addSpacing(10)
+        motion.addWidget(self.background_motion_note)
+        motion.addSpacing(7)
+
+    def toggle_background_composition(self, checked):
+        self.background_composition.setVisible(checked)
+        self.background_disclosure.setText("Composition & finishing   −" if checked else "Composition & finishing   +")
+        self.background_disclosure.setAccessibleName("Hide composition and finishing controls" if checked else "Show composition and finishing controls")
+
+    def choose_background_file(self):
+        source = self.c.background_source
+        video = source == "video"
+        title = "Choose your background video" if video else "Choose your background image"
+        filters = ("Videos (*.mp4 *.m4v *.mov *.webm *.mkv *.avi);;All files (*)" if video else
+                   "Images (*.png *.jpg *.jpeg *.webp *.bmp *.gif *.avif);;All files (*)")
+        path, _ = QFileDialog.getOpenFileName(self, title, "", filters)
+        if path:
+            try:
+                self.c.set_background_file(path, "video" if video else "image")
+            except (OSError, ValueError):
+                self.sync_background()
+
+    def sync_background(self):
+        if not hasattr(self, "background_status"):
+            return
+        c = self.c
+        source = c.background_source
+        media = source in {"artwork", "image", "video"}
+        camera = media and c.background_fit == "cover"
+        local = source in {"image", "video"}
+        for key, button in self.background_sources.items():
+            with QSignalBlocker(button):
+                button.setChecked(key == source)
+        self.background_file.setVisible(local)
+        self.background_file.setText("Choose video…" if source == "video" else "Choose image…")
+        self.background_file_label.setVisible(local and bool(c.background_path))
+        filename = Path(c.background_path).name if c.background_path else ""
+        self.background_file_label.setText(filename)
+        self.background_file_label.setToolTip(filename)
+        self.background_art_source.setEnabled(source == "artwork")
+        self.background_art_group.setVisible(source == "artwork")
+        self.background_privacy.setVisible(source == "artwork")
+        self.background_playback.setEnabled(source == "video" and not c.reduced_motion)
+        self.background_video_group.setVisible(source == "video")
+        self.background_look_hint.setVisible(not media)
+        for field in ("background_dim", "background_blur", "background_saturation", "background_fit", "background_zoom", "background_focus_x", "background_focus_y", "background_vignette", "background_tint"):
+            self.background_controls[field].setEnabled(media)
+        for field in ("background_zoom", "background_focus_x", "background_focus_y"):
+            self.background_controls[field].setEnabled(camera)
+        for button in self.background_presets.values():
+            button.setEnabled(media)
+        self.background_controls["background_motion"].setEnabled(camera and not c.reduced_motion)
+        self.background_controls["background_speed"].setEnabled(camera and not c.reduced_motion and c.background_motion != "still")
+        status = getattr(c, "background_error", "")
+        if not status:
+            if source == "ambient":
+                status = "Soft album-colour light. No background file needed."
+            elif source == "artwork":
+                status = ("Online cover matching · Spotify artwork is the fallback." if c.background_art_source == "online" else
+                          "Changes with the cover supplied by Spotify.")
+                renderer = self.preview.scene.background
+                if not renderer.has_media and renderer.status not in {"", "Halo ambience"}:
+                    status = renderer.status
+            elif not filename:
+                status = "Choose a video to set the scene." if source == "video" else "Choose an image to set the scene."
+            else:
+                status = self.preview.scene.background.status or "Your background is saved."
+                if status == filename:
+                    status = "Video background · saved automatically." if source == "video" else "Image background · saved automatically."
+        self.background_status.setText(status)
+        self.background_motion_note.setText("Ambient light follows your Halo settings. Choose an image, video or artwork to shape a background." if not media else
+                                           "Reduce motion is on. Camera movement is still and video holds a quiet frame." if c.reduced_motion else
+                                           "Full-image framing keeps the camera still and the whole image visible. Videos can still loop silently." if not camera else
+                                           "Videos loop silently. Playback stops when you leave the room or close the preview." if source == "video" else
+                                           "Subtle camera movement keeps the room alive without distracting from the words.")
 
     def build_pages(self):
         general = self.page()
@@ -682,35 +963,81 @@ class SettingsStudio(QDialog):
         halo.addWidget(self.light_controls)
         halo.addWidget(text_label("Explore looks", "studioSectionTitle"))
         self.modes(halo, "halo_mode", HALO_MODES)
+        halo.addWidget(action("Browse more light modes   ↗", lambda: self.owner.open_modes("halo"), "ghost"))
         halo.addStretch()
 
         lyrics = self.page()
         lyrics.addWidget(text_label("Lyric style", "studioSectionTitle"))
         self.modes(lyrics, "lyric_style", LYRIC_STYLES)
+        lyrics.addWidget(action("Browse more lyric styles   ↗", lambda: self.owner.open_modes("lyrics"), "ghost"))
         desktop = self.group(lyrics, "On your desktop")
         self.owner.floating = self.switch(desktop, "floating", "Floating lyrics", "Keep words above your desktop while Halo is minimized.")
         self.row(desktop, "Position", "Choose a monitor and place your words.", action("Adjust…", self.owner.open_position_settings, "ghost"))
         timing = self.group(lyrics, "Timing & lyrics")
-        self.owner.slider(timing, "Lyrics timing", "offset", -3000, 3000, " ms")
+        self.lyric_song_label = text_label("", "studioRowTitle")
+        self.lyric_song_label.setTextFormat(Qt.TextFormat.PlainText)
+        self.lyric_song_label.setWordWrap(True)
+        timing.addWidget(self.lyric_song_label)
+        self.owner.slider(timing, "This song's correction", "song_offset", -10000, 10000, " ms")
         slider = timing.itemAt(timing.count() - 1).widget()
         value = timing.itemAt(timing.count() - 2).layout().itemAt(2).widget()
-        self.owner.setting_sliders["offset"] = (slider, value, " ms")
-        hint = text_label("Positive brings lyrics earlier; negative delays them. Word timing is estimated between synced lines.", "studioHint")
+        self.owner.setting_sliders["song_offset"] = (slider, value, " ms")
+        self.song_timing_slider = slider
+        self.song_timing_buttons = []
+        adjustments = QHBoxLayout()
+        for title, delta in (("Earlier · 0.1s", 100), ("Later · 0.1s", -100), ("Reset", 0)):
+            button = action(title, lambda checked=False, amount=delta: self.c.adjust_lyrics(amount) if amount else self.c.set_song_offset(0), "ghost")
+            button.setAccessibleName(f"{title} for this song")
+            adjustments.addWidget(button)
+            self.song_timing_buttons.append(button)
+        timing.addLayout(adjustments)
+        hint = text_label("Earlier advances the words; Later delays them. Saved for this recording, including after restarting Halo. A fixed correction cannot repair uneven timestamps.", "studioHint")
         hint.setWordWrap(True)
         timing.addWidget(hint)
         timing.addSpacing(12)
-        timing.addWidget(action("Import timed lyrics (.lrc)", self.owner.import_lrc, "ghost"))
+        self.lyric_timing_status = text_label("", "studioHint")
+        self.lyric_timing_status.setWordWrap(True)
+        timing.addWidget(self.lyric_timing_status)
+        self.import_lyrics_button = action("Import timed lyrics…", self.owner.import_lrc, "ghost")
+        timing.addWidget(self.import_lyrics_button)
+        self.choose_lyrics_button = action("Wrong lyrics? Choose a match…", self.owner.choose_lyrics, "ghost")
+        timing.addWidget(self.choose_lyrics_button)
+        self.automatic_lyrics_button = action("Use automatic lyrics again", self.c.use_automatic_lyrics, "ghost")
+        timing.addWidget(self.automatic_lyrics_button)
         timing.addSpacing(10)
         lyrics.addStretch()
 
         scenes = self.page()
         scenes.addWidget(text_label("Choose your room", "studioSectionTitle"))
         self.modes(scenes, "immersive_mode", IMMERSIVE_SCENES)
+        scenes.addWidget(action("Browse more immersive rooms   ↗", lambda: self.owner.open_modes("scenes"), "ghost"))
         scenes.addWidget(action("Enter immersive view   ↗", self.enter_immersive, "primary"))
         hint = text_label("Space to play or pause. Esc to return. Your window size is kept when you come back.", "studioHint")
         hint.setWordWrap(True)
         scenes.addWidget(hint)
+        self.build_background_controls(scenes)
         scenes.addStretch()
+        self.sync_lyrics()
+
+    def sync_lyrics(self):
+        if not hasattr(self, "lyric_song_label"):
+            return
+        c = self.c
+        enabled = c.can_correct_lyrics()
+        self.lyric_song_label.setText(c.track.title if enabled else "Play a Spotify song to save corrections")
+        self.song_timing_slider.setEnabled(enabled)
+        for button in [*self.song_timing_buttons, self.import_lyrics_button, self.choose_lyrics_button]:
+            button.setEnabled(enabled)
+        self.automatic_lyrics_button.setEnabled(enabled and bool(c.saved_lyric_kind))
+        populated = [line for line in c.lyrics.lines if line.text.strip()]
+        true_words = sum(bool(getattr(line, "words", ())) for line in populated)
+        timing = ("Word timestamps supplied by the lyric source." if true_words and true_words == len(populated)
+                  else "Some lines have word timestamps; other words are estimated." if true_words
+                  else "Line timestamps only; word animation is estimated." if populated
+                  else "No timed lyrics loaded.")
+        source = "Saved import. " if c.saved_lyric_kind == "imported" else "Your saved lyric choice. " if c.saved_lyric_kind else ""
+        calibration = f" All-song calibration: {c.global_offset:+d} ms." if c.global_offset else ""
+        self.lyric_timing_status.setText(c.lyric_save_error or source + timing + calibration)
 
     def enter_immersive(self):
         self.close()
@@ -746,6 +1073,8 @@ class SettingsStudio(QDialog):
         self.selection.lower()
 
     def sync(self):
+        self.sync_lyrics()
+        self.sync_background()
         for name, switch in self.switches.items():
             switch.sync(getattr(self.c, name))
         for name, (slider, value, suffix) in self.owner.setting_sliders.items():
@@ -758,24 +1087,34 @@ class SettingsStudio(QDialog):
             self.curtain.animation.stop()
             self.curtain.finish()
 
-    def open_studio(self):
+    def open_studio(self, section="general"):
         area = self.owner.screen().availableGeometry()
         self.resize(min(1260, area.width() - 48), min(790, area.height() - 70))
-        self.select(0, animate=False)
+        index = next((index for index, item in enumerate(self.SECTIONS) if item[0] == section), 0)
+        self.select(index, animate=False)
         self.show()
         bounds = self.frameGeometry()
         bounds.moveCenter(area.center())
         self.move(bounds.topLeft())
         self.raise_()
         self.activateWindow()
-        self.nav_buttons[0].setFocus(Qt.FocusReason.OtherFocusReason)
+        self.nav_buttons[index].setFocus(Qt.FocusReason.OtherFocusReason)
         self.sync_nav()
+
+    def open_backgrounds(self):
+        self.open_studio("scenes")
+        def reveal():
+            if self.isVisible() and self.section == "scenes":
+                page = self.pages.currentWidget()
+                page.verticalScrollBar().setValue(max(0, self.background_anchor.y() - 38))
+                self.background_sources[self.c.background_source].setFocus(Qt.FocusReason.OtherFocusReason)
+        QTimer.singleShot(0, self, reveal)
 
     def resizeEvent(self, event):
         self.curtain.animation.stop()
         self.curtain.finish()
         super().resizeEvent(event)
-        QTimer.singleShot(0, self.sync_nav)
+        QTimer.singleShot(0, self, self.sync_nav)
 
     def hideEvent(self, event):
         self.nav_animation.stop()

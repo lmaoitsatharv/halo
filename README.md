@@ -28,6 +28,9 @@ Keep **Halo.exe**, **_internal** and **licenses** together in the extracted fold
 - Better missing-cover recovery, with an optional online cover lookup.
 - Centered startup and remembered maximized state after immersive view.
 - Better access to the auto-hidden Windows taskbar while the halo is active.
+- Stronger recording checks, saved lyric corrections for each song, and supplied word timestamps where available.
+- **Ship:** smooth whole-line lyrics with smaller surrounding lines, unframed illustrations and subtle motion.
+- Custom immersive backgrounds: local images, muted looping videos, or current-song artwork, with live look and composition controls.
 
 ![Halo Settings with General selected and a live monitor preview](docs/images/halo-settings.png)
 
@@ -55,44 +58,69 @@ The main window opens centered in your monitor's usable area. Maximizing Halo is
 
 The lyric-style selector controls the main preview, floating lyrics and all immersive scenes:
 
-- **Ship:** clean lyrics with smooth line-by-line scrolling and steady text, without word highlighting or a spotlight box.
-- **Fisheye:** a kinetic word stack whose active word swells into focus.
-- **Fisheye Visual:** the word stack with tilted colour strips and original contextual symbols.
+- **Ship:** smooth whole-line scrolling, smaller surrounding lines and fine, unframed illustrations. No word highlighting or spotlight box.
+- **Fisheye:** a kinetic word stack with quieter surrounding words, tilted colour strips and original contextual symbols.
 - **Visual:** one large word and symbol at a time, with soft transitions.
 
-Ship follows LRCLIB's line timestamps. The other styles use **estimated word timing between LRCLIB's line timestamps**; it is not precise word-level synchronization. Each new line reanchors the estimates. Click a visible lyric to seek to that line. **Reduce motion** keeps steady typography and a calm halo, and playback pause freezes the animated flow.
+Open **Modes** in the top bar to browse live previews of more lyric styles, immersive rooms and halo lights. **Add to my modes** saves a look to its usual selector immediately; **Use mode** adds and applies it. Search, category filters and **My modes** help keep your collection organised. The familiar modes stay included, and optional additions can be removed again.
+
+Nine additional designs are available in the bundled gallery:
+
+| Lyrics | Immersive rooms | Halo light |
+| --- | --- | --- |
+| **Monument** — an editorial verse poster | **Gallery** — framed artwork with a travelling key-light | **Aurora** — flowing light curtains |
+| **Marquee** — a horizontal word ribbon | **Runway** — a perspective light corridor | **Echo** — opposing waves and expanding ripples |
+| **Afterimage** — layered typographic echoes | **Refraction** — glass facets and spectral ribbons | **Meteor** — three separated comets and their trails |
+
+Previews follow the current song's lyrics, playback position, saved correction and artwork. Clearly labelled sample words appear when timed lyrics are unavailable. Browsing keeps your music playing; additions and choices are saved locally. Preview motion can be paused and honours Reduce motion. See the [Modes guide](docs/modes.md).
+
+Ship follows the source's line timestamps. The word-based styles use supplied word timestamps from LRCLIB Lyricsfile data or Enhanced LRC imports when available. Otherwise, they estimate word timing between line timestamps and reanchor at each line. The lyrics badge distinguishes **Word synced**, **Mixed timing**, and **Line synced · words estimated**. Supplied timestamps can still be inaccurate; Halo does not listen to the singing to verify them. Click a visible lyric to seek to that line. **Reduce motion** keeps steady typography and a calm halo, and playback pause freezes the animated flow. During a source-marked singing break, the scrolling styles focus the empty space between lyrics without waiting dots.
+
+In **Settings → Lyrics → Timing & lyrics**, **Earlier** advances lyrics by 0.1 seconds and **Later** delays them. The slider supports a correction of up to 10 seconds either way. **Reset** clears this recording's correction. Corrections are remembered across song changes and restarts; an existing all-song calibration remains the baseline. A fixed correction cannot repair uneven timestamps.
+
+For different or incorrect words, use **Wrong lyrics? Choose a match…** to compare matched releases, their album, duration and a short preview. Your chosen source is remembered. You can also **Import timed lyrics…** from UTF-8 `.lrc`, Enhanced LRC (`.lrc` or `.elrc`), or Lyricsfile 1.0 (`.lyricsfile.yaml`, `.yaml`, `.yml`). Saved choices and imports take priority over automatic lookup. **Use automatic lyrics again** clears the saved source while keeping its timing correction.
+
+## Immersive backgrounds
+
+Open **Settings → Immersive**, or choose **Background…** inside immersive view. Select the original **Ambient** scene, current-song **Album artwork**, a local **Image**, or a local **Video**. These choices apply inside Halo's immersive view; they do not change the Windows desktop wallpaper.
+
+The right-hand preview uses the actual media and rendering controls. Start with **Cinematic**, **Soft focus**, **Vivid**, **Monochrome** or **Dreamy**, then adjust blur, dimming, saturation, vignette and album-colour tint. Framing controls include fill/fit, zoom and horizontal/vertical focus. Still, drift and breathe motion have an adjustable speed. The chosen scene and lyric style remain independent of the background.
+
+Videos loop silently. Playback can follow music or continue while the immersive view is open. Hidden views stop decoding, and Reduce motion freezes moving backgrounds. Supported video formats depend on the available decoder; an unreadable or missing file falls back to the ambient scene and shows a useful status in settings. Media files stay in their original location, so keep them available after selecting them.
+
+Album backgrounds use Spotify artwork by default. Selecting **Online** searches MusicBrainz and Cover Art Archive for the current recording, while keeping Spotify's foreground cover. Spotify artwork is used while a matching online image is unavailable. The existing **Find missing covers online** setting for the player remains separate.
 
 The halo preserves dark, saturated and neutral colours. Black creates an unlit section instead of a grey or opaque black border. Rim thickness is independent of the soft glow's spread and opacity. Changing either colour switches to **Custom**; preset changes preserve your saved custom colours and brightness values.
 
 **Flow** moves at a steady speed, **Music sync** swells on output-audio accents, **Idle** moves slowly and **Still** keeps the light stationary. The audio toggle and Music sync selection stay in sync. Music sync adapts to the playback volume and detects sudden bass and percussion changes, including accents in compressed music whose overall loudness stays almost constant. Pulse keeps a soft bed of light between accents and blooms inward on each hit. A rounded attack and longer fade smooth each swell; it does not estimate tempo or predict a precise beat grid. Changing speed preserves the current motion phase, and album-colour fades take about 0.9 seconds. Dark halo colours do not make lyric text unreadable because the interface uses a separate readable accent.
 
-Lighting research used [Lumn's official overview](https://www.trylumn.xyz/). Lyric styling was guided by the Verci demo video supplied with this project. The four style labels are also documented by an [independent Windows interpretation](https://github.com/darshanseenivasakumar/theaestheticslyrics); Verci's official site was unreachable during this update. Halo uses its own native renderer, motion, symbols and layouts.
+Lighting research used [Lumn's official overview](https://www.trylumn.xyz/). Lyric styling was guided by the Verci demo video supplied with this project. The original style labels are also documented by an [independent Windows interpretation](https://github.com/darshanseenivasakumar/theaestheticslyrics); Verci's official site was unreachable during that update. Halo uses its own native renderer, motion, symbols and layouts. Its current lyric selector offers Ship, Fisheye and Visual.
 
 ## What this version does
 
 - Reads title, artist, album artwork, playing/paused status, duration and timing from Spotify's Windows media session.
 - Provides previous, next, play/pause and timeline seeking controls.
-- Shows animated **line-synced lyrics** from LRCLIB. This version does not claim precise word-level timing.
-- Searches other releases and common title spellings when the exact album entry has only untimed lyrics. Artist and duration checks still reject unrelated recordings and covers.
+- Shows animated line-synced lyrics and uses supplied word timestamps where available, with an estimated fallback.
+- Searches other releases and common title spellings. Every lookup route checks title, artist, duration and explicit performance/version labels; matching albums and closer durations rank first. This conservative matching can leave some songs without lyrics.
 - Looks in the lyrics catalog before using the exact-record endpoint, so an error on that endpoint cannot hide an existing timed catalog match.
-- Offers a timing adjustment from −3000 to +3000 ms. Negative makes lyrics appear later; positive makes them appear earlier.
-- Accepts UTF-8 `.lrc` files for the current song, including files with repeated timestamps and `[offset:...]` metadata. Imported lyrics reset on a song change.
+- Saves a timing correction from −10000 to +10000 ms for each recording. Negative makes lyrics appear later; positive makes them appear earlier.
+- Remembers imported timed lyrics and deliberately selected sources by title, artist, album and rounded duration. Repeated LRC timestamps and `[offset:...]` metadata remain supported.
 - Optional **React to audio** analyses local output levels and bass/percussion changes via WASAPI loopback. Otherwise, the glow moves gently. It detects accents rather than estimating tempo or predicting beat timing.
 - Saves preferences and minimizes to the tray when its main window is closed.
 
 ## Privacy and limitations
 
-Spotify metadata and artwork are read locally through [Windows media controls](https://learn.microsoft.com/en-us/uwp/api/windows.media.control.globalsystemmediatransportcontrolssessionmanager). Lyrics requests send the current song title, artist, album and duration to [LRCLIB](https://lrclib.net/docs); no Spotify credentials are requested. Lyrics are cached in memory, not saved to disk.
+Spotify metadata and artwork are read locally through [Windows media controls](https://learn.microsoft.com/en-us/uwp/api/windows.media.control.globalsystemmediatransportcontrolssessionmanager). Lyrics requests send the current song title, artist, album and duration to [LRCLIB](https://lrclib.net/docs); no Spotify credentials are requested. Automatic results are cached in memory. Explicitly chosen or imported lyrics and song corrections are saved locally in `lyric-library/` beside Halo's settings, so they survive restarting. Saved records are bounded to 2 MiB each and 512 recordings.
 
 Spotify sometimes omits its cover from Windows' media feed. Halo retries late or failed native artwork and refreshes both the cover and album colours when it arrives. If you enable **Find missing covers online**, Halo sends song-title/artist search terms to [MusicBrainz](https://musicbrainz.org/doc/MusicBrainz_API) and uses its title, artist, album and duration data to select a matching release. It requests that release's front cover from [Cover Art Archive](https://musicbrainz.org/doc/Cover_Art_Archive/API), which serves images through Internet Archive. Native Spotify artwork takes priority. Lookups run in the background and use a bounded memory cache; unmatched/offline results retain the placeholder. Editions can have different covers. No login details or audio are sent for cover lookup.
 
 Audio-reactive mode measures **all sound on the current default output device**, including other apps. It does not use the microphone, save recordings or send audio anywhere. If the output device changes, it reconnects. Silence and incompatible devices gracefully fall back to gentle motion.
 
-Lyrics coverage and accuracy depend on LRCLIB. When a track has no timed lyrics, import a local `.lrc`. If the service is unavailable, use **Retry** after a moment. Ads, podcasts and untimed tracks may have no synced lyrics.
+Lyrics coverage and accuracy depend on LRCLIB or your import. When words are wrong, choose a different matched source or import corrected timed lyrics. A constant offset helps consistently early/late lyrics; it cannot repair uneven drift. If the service is unavailable, use **Retry** after a moment. Ads, podcasts and untimed tracks may have no synced lyrics. No audio recording or automatic audio alignment is used for these lyric features.
 
 Malformed or unusually large lyric inputs are rejected before display. Imports are limited to 512 KiB, 2,000 cues, 32 timestamps per source line, 2,000 characters and 256 words per cue, and 20,000 expanded words across the track. CJK character animation uses the same word budget. Expanded text is also bounded, and HTTP lyric responses are limited to 4 MiB. A rejected import keeps the current lyrics.
 
-The lyrics badge distinguishes a lookup in progress from an untimed result, missing lyrics and an unavailable service. A single timestamp containing the entire lyric text is treated as untimed, rather than falsely presented as line synced.
+The lyrics badge distinguishes timing quality, a lookup in progress, an untimed result, missing lyrics and an unavailable service. A single timestamp containing the entire lyric text is treated as untimed unless it has genuine internal word timestamps. Lyricsfile 1.0 is a draft: its unresolved `metadata.offset_ms` field is currently ignored. Overlapping word intervals are retained, but the current single-line focus does not show simultaneous singers separately.
 
 This app uses an ordinary fullscreen view. It does not draw over the secure Windows lock screen or replace Windows locking. Overlays can also be hidden by games running in exclusive fullscreen.
 

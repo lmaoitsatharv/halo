@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from PySide6.QtCore import Qt, QRectF, QPointF
 from PySide6.QtGui import (QColor, QImage, QLinearGradient, QConicalGradient,
                           QPainter)
+from .glow_extras import EXTRA_HALO_MODES, extra_colour_function, extra_spill, paint_extra_details
 
 
 HALO_MODES = (
@@ -14,7 +15,7 @@ HALO_MODES = (
     ("wave", "Wave", "Silky ribbons of colour travel around the screen."),
     ("pulse", "Pulse", "Breathing light with strong music-driven blooms."),
     ("prism", "Prism", "A flowing spectrum inspired by your album palette."),
-)
+) + EXTRA_HALO_MODES
 
 
 def balanced_glow_colour(colour):
@@ -65,6 +66,9 @@ def _colour_function(c, mode, phase):
     a = tuple(channel * ba * a[3] for channel in a[:3])
     b = tuple(channel * bb * b[3] for channel in b[:3])
     proportion = _unit(getattr(c, "color_mix", 60) / 100)
+    extra = extra_colour_function(mode, phase, a, b, proportion)
+    if extra is not None:
+        return extra
     transition = min(.12, proportion, 1 - proportion)
     primary = QColor(getattr(c, "halo_primary", c.primary))
     secondary = QColor(getattr(c, "halo_secondary", c.secondary))
@@ -172,7 +176,7 @@ def _perimeter_brushes(w, h, sample):
 
     def linear(x1, y1, x2, y2, start, distance):
         gradient = QLinearGradient(x1, y1, x2, y2)
-        count = max(12, min(320, math.ceil(distance / 12)))
+        count = max(12, min(320, math.ceil(distance / getattr(sample, "detail_step", 12.))))
         for i in range(count + 1):
             u = i / count
             gradient.setColorAt(u, sample((start + u * distance) / length))
@@ -285,6 +289,9 @@ def paint_edge_glow(p, w, h, c):
         strength = intensity * (.25 + .75 * beat)
     if animation == "still":
         width_mix = .7 if mode == "pulse" else 1.
+    extra = extra_spill(mode, phase, beat, music)
+    if extra is not None:
+        width_mix, tight_spread = extra
     logical_band = band / dpr
     spill_corners = (
         (QRectF(0, 0, logical_band, logical_band), top, left),
@@ -337,6 +344,8 @@ def paint_edge_glow(p, w, h, c):
         painter.end()
         p.drawImage(QPointF(x, y), layer)
     p.restore()
+    paint_extra_details(p, w, h, mode, phase, logical_band, strength, opacity,
+                        (top, right, bottom, left), width_mix)
 
 
 def paint_halo_preview(p, rect, c, mode=None, motion_time=None, *, motion_phase=None):

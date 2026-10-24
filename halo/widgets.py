@@ -1,4 +1,5 @@
 import colorsys
+from collections import OrderedDict
 import math
 import time
 from PySide6.QtCore import Qt, QEvent, QRectF, QRect, QPointF
@@ -9,8 +10,9 @@ from .models import floating_geometry
 from .glow import paint_edge_glow
 from .palette import artwork_colours
 from .taskbar import allow_taskbar_reveal
+from .extra_lyrics import LINE_BASED_STYLES, paint_lyric_mode
 from .lyric_rendering import (LYRIC_STYLES, WordTimeline, TypeCache, clamp, smooth,
-                              spring, alpha, SYMBOLS, symbol_kind)
+                              spring, alpha, SYMBOLS, symbol_kind, line_symbol_kind, canonical_lyric_style)
 
 WHITE = QColor("#f1f5ef")
 
@@ -75,7 +77,7 @@ class Artwork(QWidget):
 
 
 class LyricCanvas(QWidget):
-    """Four native lyric choreographies sharing one playback-aware animation clock."""
+    """Native lyric choreographies sharing one playback-aware animation clock."""
     def __init__(self, controller, mode="preview"):
         super().__init__()
         self.controller = controller
@@ -95,6 +97,11 @@ class LyricCanvas(QWidget):
         self._active_word = -1
         self._previous_word = -1
         self._transition_at = 0.0
+        self._line_art_clock = None
+        self._line_art_motion = 0.0
+        self._line_art_key = None
+        self._line_text_rasters = OrderedDict()
+        self._line_text_pixels = 0
         self._hit_rows = []
         self.setMinimumHeight(110)
         self.setAccessibleName("Animated lyrics")
@@ -122,7 +129,8 @@ class LyricCanvas(QWidget):
                   (position < self._last_position - .15 or
                    position - self._last_position > max(.85, elapsed * 2 + .35)))
         # Word-heavy cues must not snap Ship's whole-line scroll into place.
-        word_jump = (getattr(c, "lyric_style", "fisheye_visual") != "ship"
+        whole_line = canonical_lyric_style(getattr(c, "lyric_style", "fisheye_visual")) in ({"ship_visual"} | LINE_BASED_STYLES)
+        word_jump = (not whole_line
                      and abs(word_index - self._word_visual) > 8)
         reset = (self.last_generation != c.generation or jumped or self._last_motion is None
                  or abs(index - self.visual_index) > 3 or word_jump)
@@ -133,7 +141,12 @@ class LyricCanvas(QWidget):
             self._word_velocity = self._line_velocity = 0.0
         elif c.track.playing:
             self.visual_index, self._line_velocity = spring(self.visual_index, self._line_velocity, index, elapsed, 10)
-            self._word_visual, self._word_velocity = spring(self._word_visual, self._word_velocity, word_index, elapsed, 15)
+            frequency = 15
+            if not whole_line:
+                span = self._timed_word_span(index, word_index)
+                if span is not None and span < .26:
+                    frequency = min(240, 6 / max(.001, span))
+            self._word_visual, self._word_velocity = spring(self._word_visual, self._word_velocity, word_index, elapsed, frequency)
         if word_index != self._active_word:
             self._previous_word = self._active_word if not reset else -1
             self._active_word = word_index
@@ -141,7 +154,27 @@ class LyricCanvas(QWidget):
         self.last_generation = c.generation
         self._last_motion = motion
         self._last_position = position
+        span = self._timed_word_span(index, word_index)
+        if not (reduced or reset) and span is not None:
+            word = self.timeline.display_words[word_index]
+            # A fixed 260 ms crossfade can hide every word in a fast phrase.
+            # Source-timed words settle by the interval's midpoint, and use
+            # playback position so a late repaint catches up immediately.
+            if span <= 0 or not c.track.playing:
+                return 1.0
+            return smooth((position - word.begin) / min(.26, span / 2))
         return 1.0 if reduced or reset else smooth((motion - self._transition_at) / .26)
+
+    def _timed_word_span(self, index, word_index):
+        if self.timeline is None or index not in self.timeline.timed_lines or word_index < 0:
+            return None
+        word = self.timeline.display_words[word_index]
+        finish = word.finish
+        if word_index + 1 < len(self.timeline.display_words):
+            next_word = self.timeline.display_words[word_index + 1]
+            if next_word.line == word.line:
+                finish = min(finish, next_word.begin)
+        return finish - word.begin
 
     def _shape(self, text, width, height, pixels, alignment=None):
         return self.type_cache.get(text, width, height, pixels, alignment=alignment or self.alignment)
@@ -166,6 +199,9 @@ class LyricCanvas(QWidget):
         p.restore()
 
     def _text(self, p, shape, x, y, color, opacity=1, scale=1, angle=0):
+        if (self.mode == "floating" and canonical_lyric_style(getattr(self.controller, "lyric_style", "")) == "ship_visual"
+                and self._line_text(p, shape, x, y, color, opacity, scale)):
+            return
         p.save()
         p.translate(x, y)
         p.rotate(angle)
@@ -183,6 +219,57 @@ class LyricCanvas(QWidget):
         p.setBrush(alpha(color, opacity))
         p.drawPath(path)
         p.restore()
+
+    def _line_text(self, p, shape, x, y, color, opacity, scale):
+        """Rasterize floating outlines once, then move the whole cue cheaply.
+
+        Retain the shape with its raster, so recycled object IDs cannot collide.
+        Twelve entries and two million physical pixels bound memory at 8 MiB.
+        """
+        dpr = self.devicePixelRatioF()
+        key = (id(shape), color.rgba(), dpr)
+        cached = self._line_text_rasters.get(key)
+        if cached is None:
+            padding = 7
+            width = max(1, math.ceil((shape.bounds.width() + padding * 2) * dpr))
+            height = max(1, math.ceil((shape.bounds.height() + padding * 2) * dpr))
+            pixels = width * height
+            if pixels > 2_000_000:
+                return False
+            raster = QPixmap(width, height)
+            raster.setDevicePixelRatio(dpr)
+            raster.fill(Qt.GlobalColor.transparent)
+            ink = QPainter(raster)
+            ink.setRenderHint(QPainter.RenderHint.Antialiasing)
+            ink.translate(padding - shape.bounds.left(), padding - shape.bounds.top())
+            ink.setPen(QPen(alpha(QColor("#000000"), .8), 3.8,
+                            Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+            ink.setBrush(alpha(QColor("#000000"), .5))
+            ink.translate(0, 1.5)
+            ink.drawPath(shape.path)
+            ink.translate(0, -1.5)
+            ink.setPen(Qt.PenStyle.NoPen)
+            ink.setBrush(color)
+            ink.drawPath(shape.path)
+            ink.end()
+            cached = (shape, raster, pixels, padding)
+            self._line_text_rasters[key] = cached
+            self._line_text_pixels += pixels
+            while len(self._line_text_rasters) > 12 or self._line_text_pixels > 2_000_000:
+                _, removed = self._line_text_rasters.popitem(last=False)
+                self._line_text_pixels -= removed[2]
+        else:
+            self._line_text_rasters.move_to_end(key)
+        _, raster, _, padding = cached
+        p.save()
+        p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        p.setOpacity(opacity)
+        p.translate(x, y)
+        p.scale(scale, scale)
+        p.drawPixmap(QPointF(-shape.bounds.width() / 2 - padding,
+                            -shape.bounds.height() / 2 - padding), raster)
+        p.restore()
+        return True
 
     def _symbol(self, p, word, x, y, radius, opacity, motion, subdued=False):
         c = self.controller
@@ -228,25 +315,25 @@ class LyricCanvas(QWidget):
             self.timeline = WordTimeline(lines, c.track.duration)
             self._timeline_key = key
             self.type_cache.clear()
+            self._line_text_rasters.clear()
+            self._line_text_pixels = 0
             self._last_motion = None
-        index = c.lyrics.index_at(position)
-        word_index, fraction = self.timeline.at(index, position)
+        style = canonical_lyric_style(getattr(c, "lyric_style", "fisheye_visual"))
+        index, word_index, fraction = self.timeline.display_at(
+            c.lyrics.index_at(position), position)
         motion = self._clock()
         transition = self._advance(index, word_index, position, motion)
-        style = getattr(c, "lyric_style", "fisheye_visual")
-        if style not in {item[0] for item in LYRIC_STYLES}:
-            style = "fisheye_visual"
-        if index < 0:
-            # Original instrumental waiting cue; do not show the first lyric early.
-            self._instrumental(p, motion)
-        elif not lines[index].text.strip():
-            self._instrumental(p, motion)
-        elif style == "ship":
-            self._ship(p, index)
+        if paint_lyric_mode(self, p, style, index, word_index, fraction, motion, transition):
+            pass
+        elif style == "ship_visual":
+            self._ship_visual(p, index, motion)
         elif style == "visual":
-            self._visual(p, index, word_index, fraction, motion, transition)
+            if word_index >= 0 and self.timeline.display_words[word_index].text != "♪":
+                self._visual(p, index, word_index, fraction, motion, transition)
         else:
-            self._fisheye(p, index, word_index, fraction, motion, style == "fisheye_visual")
+            # Empty cues occupy a real scroll position; only their ink is
+            # omitted, so context stays above/below an empty centre.
+            self._fisheye(p, index, word_index, fraction, motion, True)
         p.end()
 
     def _instrumental(self, p, motion):
@@ -265,34 +352,106 @@ class LyricCanvas(QWidget):
             return min(44, max(20, w / 11))
         if self.mode == "floating":
             return min(48, max(20, w / 15))
-        giant = self.scene_mode in {"lyrics", "cinema", "orbit"}
+        giant = self.scene_mode in {"lyrics", "cinema", "orbit", "scene_runway"}
         return min(110 if giant else 76, max(25, min(w / (9 if giant else 11), h / 7)))
 
     def _ship(self, p, index):
+        # Compatibility for older callers; the plain renderer is retired.
+        self._ship_visual(p, index, self._clock())
+
+    def _line_emblem(self, p, kind, x, y, radius, focus, opacity, phase):
+        """An airy line illustration, never a backdrop behind the lyric text."""
+        c = self.controller
+        reduced = bool(getattr(c, "reduced_motion", False))
+        breathe = 0.0 if reduced else math.sin(phase * .65) * .035
+        p.save()
+        p.translate(x, y)
+        p.scale(1 + breathe * focus, 1 + breathe * focus)
+        p.save()
+        p.scale(radius, radius)
+        if self.mode != "floating":
+            # Light follows the glyph itself, with no enclosing rings or pins.
+            p.setPen(QPen(alpha(c.primary, opacity * focus * .09), 5.5 / radius,
+                          Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawPath(SYMBOLS[kind])
+        if self.mode == "floating":
+            p.setPen(QPen(alpha(QColor("#000000"), opacity * .8), 3.4 / radius,
+                          Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+            p.drawPath(SYMBOLS[kind])
+        p.setPen(QPen(alpha(c.primary, opacity), max(1.15, radius * .06) / radius,
+                      Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+        p.setBrush(alpha(c.primary, opacity * .035))
+        p.drawPath(SYMBOLS[kind])
+        p.restore()
+        p.restore()
+
+    def _ship_visual(self, p, index, motion):
+        """Whole lines move as one; illustrations follow cues, never word ticks."""
         c = self.controller
         w, h = self.width(), self.height()
-        margin = max(14, min(40, w * .05))
-        width = max(1, w - margin * 2)
-        size = self._base_size() * .78
-        spacing = max(45, min(h * .30, size * 2.8))
-        max_height = spacing * .8
+        # This local clock also freezes standalone canvases with external clocks.
+        # A hidden window resuming cannot accumulate a large decorative jump.
+        art_key = (id(c.lyrics.lines), c.generation)
+        if art_key != self._line_art_key or self._line_art_clock is None:
+            self._line_art_motion = 0.0
+            self._line_art_key = art_key
+        elif c.track.playing and not getattr(c, "reduced_motion", False):
+            self._line_art_motion += clamp(motion - self._line_art_clock, 0, .1)
+        self._line_art_clock = motion
+        phase = self._line_art_motion
+        margin = max(16, min(54, w * .055))
+        size = self._base_size() * .88
+        radius = min(25, max(6, size * .29))
+        gutter = radius * 4.5
+        width = max(1, w - margin * 2 - gutter)
+        spacing = max(42, min(h * .30, size * 2.75))
         alignment = "center" if self.scene_mode in {"lyrics", "cinema", "orbit"} else self.alignment
         for i in range(max(0, index - 3), min(len(c.lyrics.lines), index + 4)):
-            text = c.lyrics.lines[i].text or "♪"
+            text = c.lyrics.lines[i].text
+            if not text.strip():
+                continue
             delta = i - self.visual_index
             distance = abs(delta)
-            shape = self._shape(text, width * .92, max_height, size, alignment)
-            scale = 1 - min(.23, distance * .09)
+            focus = math.exp(-distance * distance * 1.65)
+            scale = .62 + focus * .38
+            shape = self._shape(text, width * .96, spacing * .76, size, alignment)
             y = h * .5 + delta * spacing
-            opacity = max(0, 1 - distance * .34) * self._edge_opacity(y, shape.bounds.height(), scale)
-            if opacity < .01:
+            opacity = (max(0, 1 - distance * .39) * (.54 + .46 * focus)
+                       * self._edge_opacity(y, shape.bounds.height(), scale))
+            if opacity < .012:
                 continue
-            x = w / 2 if alignment == "center" else margin + shape.bounds.width() * scale / 2
-            # Whole lines share the readable palette accent; no word sweep.
+            # Centre the composition, including its emblem, as a single object.
+            emblem_radius = radius * (.58 + focus * .42)
+            row_gutter = emblem_radius * 4.5
+            x = ((w + row_gutter) / 2 if alignment == "center"
+                 else margin + row_gutter + shape.bounds.width() * scale / 2)
+            left = x - shape.bounds.width() * scale / 2
+            emblem_x = left - emblem_radius * 2.6
+            emblem_y = y + (shape.first_line_center - shape.bounds.center().y()) * scale
+            self._line_emblem(p, line_symbol_kind(text), emblem_x, emblem_y, emblem_radius,
+                              focus, opacity * (.48 + focus * .42), phase)
+            # Fine, short ink flourishes sit outside the text's reading area.
+            ink_focus = smooth((focus - .4) / .6)
+            if ink_focus > .01 and shape.bounds.width() > size * 2.4:
+                ink = QPainterPath()
+                ink_y = y + shape.bounds.height() * scale / 2 + max(8, size * .19)
+                length = min(size * 1.6, shape.bounds.width() * scale * .17)
+                ink_x = x - length / 2
+                ink.moveTo(ink_x, ink_y)
+                ink.cubicTo(ink_x + length * .32, ink_y - size * .045,
+                            ink_x + length * .67, ink_y - size * .045, ink_x + length, ink_y)
+                p.setBrush(Qt.BrushStyle.NoBrush)
+                p.setPen(QPen(alpha(c.primary, opacity * ink_focus * .23), max(.8, size * .025),
+                              Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+                p.drawPath(ink)
             self._text(p, shape, x, y, c.primary, opacity, scale)
-            hit = QRectF(x - shape.bounds.width() * scale / 2, y - shape.bounds.height() * scale / 2,
-                         shape.bounds.width() * scale, shape.bounds.height() * scale).adjusted(-12, -8, 12, 8)
-            self._hit_rows.append((hit, i))
+            hit_top = min(y - shape.bounds.height() * scale / 2, emblem_y - emblem_radius * 1.5)
+            hit_bottom = max(y + shape.bounds.height() * scale / 2, emblem_y + emblem_radius * 1.5)
+            hit = QRectF(emblem_x - emblem_radius * 1.5, hit_top,
+                         x + shape.bounds.width() * scale / 2 - emblem_x + emblem_radius * 1.5,
+                         hit_bottom - hit_top).adjusted(-8, -7, 8, 7)
+            self._hit_rows.append((QRectF(hit.toAlignedRect()), i))
 
     def _fisheye(self, p, index, word_index, fraction, motion, illustrated):
         c = self.controller
@@ -301,14 +460,14 @@ class LyricCanvas(QWidget):
         spacing = max(27, min(h * .235, size * 1.30))
         center = h * .5
         word_width = max(1, w * (.63 if illustrated else .86))
-        for i in range(max(0, word_index - 4), min(len(self.timeline.words), word_index + 5)):
-            word = self.timeline.words[i]
+        for i in range(max(0, word_index - 4), min(len(self.timeline.display_words), word_index + 5)):
+            word = self.timeline.display_words[i]
             if word.text == "♪":
                 continue
             delta = i - self._word_visual
             distance = abs(delta)
             # Lens projection: large in the centre, compressed gently toward its rim.
-            scale = .38 + .62 * math.exp(-distance * distance * .62)
+            scale = .30 + .70 * math.exp(-distance * distance * .9)
             y = center + spacing * delta * (1 - min(.27, distance * .055))
             shape = self._word_shape(word.text, word_width, spacing * 1.16, size * 1.30)
             opacity = max(0, 1 - distance * .34) * self._edge_opacity(y, shape.bounds.height(), scale)
@@ -332,18 +491,19 @@ class LyricCanvas(QWidget):
     def _visual(self, p, index, word_index, fraction, motion, transition):
         c = self.controller
         w, h = self.width(), self.height()
-        word = self.timeline.words[word_index]
+        word = self.timeline.display_words[word_index]
         size = self._base_size() * 1.35
         symbol_radius = min(h * .13, size * .58)
         lift = 0 if getattr(c, "reduced_motion", False) else math.sin(motion * 1.1) * min(4, h * .012)
         self._symbol(p, word.text, w / 2, h * .24 + lift, symbol_radius, .83, motion)
         shape = self._word_shape(word.text, max(1, w - 56), h * .27, size)
-        if 0 <= self._previous_word < len(self.timeline.words) and transition < 1:
-            previous = self.timeline.words[self._previous_word]
+        if (0 <= self._previous_word < len(self.timeline.display_words) and transition < 1
+                and self.timeline.display_words[self._previous_word].text != "♪"):
+            previous = self.timeline.display_words[self._previous_word]
             old = self._word_shape(previous.text, max(1, w - 56), h * .27, size)
             self._text(p, old, w / 2, h * .5 - transition * 15, WHITE, (1 - transition) * .55, 1 - transition * .07)
         self._text(p, shape, w / 2, h * .5 + (1 - transition) * 13, c.primary, transition, .90 + transition * .10)
-        # A restrained underline follows the estimated word duration.
+        # Follow the supplied word duration, or the line-based estimate.
         length = min(w * .15, 64)
         p.setPen(QPen(alpha(c.primary, .28), 2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
         p.drawLine(QPointF(w / 2 - length / 2, h * .69), QPointF(w / 2 + length / 2, h * .69))

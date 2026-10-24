@@ -7,7 +7,8 @@ from PySide6.QtWidgets import (QWidget, QFrame, QLabel, QPushButton, QAbstractBu
     QVBoxLayout, QHBoxLayout, QComboBox, QSlider, QSizePolicy)
 from .widgets import Artwork, LyricCanvas, font, tint
 from .glow import paint_halo_preview
-from .lyric_rendering import LYRIC_STYLES
+from .lyric_rendering import LYRIC_STYLES, SYMBOLS
+from .mode_catalog import available_specs
 
 
 STYLE = """
@@ -285,7 +286,7 @@ class ModeTile(QAbstractButton):
             center = preview.center()
             p.setPen(tint(self.c.secondary, 120))
             p.setFont(font(6))
-            if self.mode_id == "ship":
+            if self.mode_id == "ship_visual":
                 p.drawText(QRectF(preview.x(), preview.top(), preview.width(), 13), Qt.AlignmentFlag.AlignCenter, "Let the room fall quiet")
                 p.setFont(font(9))
                 p.setPen(self.c.primary)
@@ -293,6 +294,13 @@ class ModeTile(QAbstractButton):
                 p.setFont(font(6))
                 p.setPen(tint(self.c.secondary, 120))
                 p.drawText(QRectF(preview.x(), preview.bottom() - 13, preview.width(), 13), Qt.AlignmentFlag.AlignCenter, "Let the colours find their way")
+                p.save()
+                p.translate(preview.left() + 9, center.y())
+                p.scale(4, 4)
+                p.setPen(QPen(self.c.primary, .3))
+                p.setBrush(Qt.BrushStyle.NoBrush)
+                p.drawPath(SYMBOLS["heart"])
+                p.restore()
             else:
                 wobble = 1.5 * math.sin(phase * 1.6) if not self.c.reduced_motion else 0
                 if self.mode_id == "fisheye_visual":
@@ -360,15 +368,21 @@ class ModeTile(QAbstractButton):
 def selector(controller, field, specs, accessible):
     combo = QComboBox()
     combo.setAccessibleName(accessible)
-    for key, title, description in specs:
-        combo.addItem(title, key)
-        combo.setItemData(combo.count() - 1, description, Qt.ItemDataRole.ToolTipRole)
-    combo.setCurrentIndex(max(0, combo.findData(getattr(controller, field))))
+    def populate():
+        with QSignalBlocker(combo):
+            combo.clear()
+            for key, title, description in available_specs(controller, field, specs):
+                combo.addItem(title, key)
+                combo.setItemData(combo.count() - 1, description, Qt.ItemDataRole.ToolTipRole)
+            combo.setCurrentIndex(max(0, combo.findData(getattr(controller, field))))
+    populate()
     combo.currentIndexChanged.connect(lambda index: controller.set(field, combo.itemData(index)) if index >= 0 else None)
     def sync():
         with QSignalBlocker(combo):
             combo.setCurrentIndex(max(0, combo.findData(getattr(controller, field))))
     controller.settingChanged.connect(sync)
+    if hasattr(controller, "modeLibraryChanged"):
+        controller.modeLibraryChanged.connect(populate)
     return combo
 
 
@@ -388,6 +402,12 @@ def build_main(window, c):
     header.addStretch()
     window.badge = text_label("○  Waiting for Spotify", "badge")
     header.addWidget(window.badge)
+    window.modes_button = action("Modes", window.open_modes, "ghost")
+    window.modes_button.setAccessibleName("Browse modes")
+    window.modes_button.setMinimumHeight(38)
+    window.modes_button.setToolTip("Browse live previews and add modes to your collection")
+    header.addSpacing(10)
+    header.addWidget(window.modes_button)
     from .settings_ui import SettingsStudio, studio_icon
     window.settings_button = action("Settings", window.open_settings, "ghost")
     window.settings_button.setIcon(studio_icon())

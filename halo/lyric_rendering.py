@@ -1,27 +1,37 @@
-"""Native lyric typography and estimated word choreography.
+"""Native lyric typography with source word timings or explicit line estimates.
 
-Mode names follow the four Verci-inspired modes documented by the independent
+The original mode names follow the Verci-inspired modes documented by the independent
 theaestheticslyrics project. The linked official site (https://verci.xyz) was
 unreachable during research, so these animations are Halo's own interpretation.
-LRC supplies line timestamps only: word timing below is explicitly estimated.
+Ordinary LRC supplies line timestamps only; estimates remain a fallback.
 """
 from bisect import bisect_right
 from collections import OrderedDict
 from dataclasses import dataclass
+from functools import lru_cache
 import math
 import re
 
 from PySide6.QtCore import QPointF, QRectF
 from PySide6.QtGui import QColor, QFont, QPainterPath, QTextLayout, QTextOption, QTransform
 from .models import lyric_word_matches, validate_lyric_lines
+from .extra_lyrics import EXTRA_LYRIC_STYLES
 
 
 LYRIC_STYLES = (
-    ("ship", "Ship", "Clean, steady lyrics with smooth line-by-line scrolling."),
-    ("fisheye", "Fisheye", "Words flow through a lens; the current word swells into focus."),
-    ("fisheye_visual", "Fisheye Visual", "The flowing word lens with expressive illustrated symbols."),
+    ("ship_visual", "Ship", "Flowing full lines with delicate illustrations and a quiet, spacious focus."),
+    ("fisheye_visual", "Fisheye", "The flowing word lens with expressive illustrated symbols."),
     ("visual", "Visual", "One bold word at a time, paired with a floating symbol."),
-)
+) + EXTRA_LYRIC_STYLES
+LYRIC_STYLE_ALIASES = {"ship": "ship_visual", "fisheye": "fisheye_visual"}
+
+
+def canonical_lyric_style(value):
+    """Preserve old saved choices while exposing only the illustrated modes."""
+    if not isinstance(value, str):
+        return "fisheye_visual"
+    value = LYRIC_STYLE_ALIASES.get(value, value)
+    return value if value in {item[0] for item in LYRIC_STYLES} else "fisheye_visual"
 
 
 def clamp(value, low=0.0, high=1.0):
@@ -54,19 +64,39 @@ class Word:
 
 
 class WordTimeline:
-    """Bounded, line-anchored word estimates; every new line resynchronizes."""
+    """Honor supplied word boundaries; otherwise reanchor estimates per line."""
     def __init__(self, lines, duration=0):
         validate_lyric_lines(lines)
         self.words = []
         self.ranges = []
+        self.timed_lines = set()
         for i, line in enumerate(lines):
             # A language without spaces still gets expressive, legible word flow.
             matches = lyric_word_matches(line.text)
-            end_time = lines[i + 1].time if i + 1 < len(lines) else max(line.time + 4, duration)
+            end_time = (line.end if line.end is not None else
+                        lines[i + 1].time if i + 1 < len(lines) else max(line.time + 4, duration))
+            start = len(self.words)
+            if line.words:
+                self.timed_lines.add(i)
+                offset = 0
+                for j, segment in enumerate(line.words):
+                    # Segment whitespace belongs to the source line, but the
+                    # glyph animation only needs visible characters.
+                    text = segment.text.strip()
+                    leading = len(segment.text) - len(segment.text.lstrip())
+                    finish = (segment.end if segment.end is not None else
+                              line.words[j + 1].start if j + 1 < len(line.words) else end_time)
+                    if text:
+                        self.words.append(Word(text, i, offset + leading, offset + leading + len(text),
+                                               segment.start, max(segment.start, finish)))
+                    offset += len(segment.text)
+                if len(self.words) == start:
+                    self.words.append(Word("♪", i, 0, 0, line.time, end_time))
+                self.ranges.append((start, len(self.words)))
+                continue
             span = max(.04, end_time - line.time)
             weights = [max(1, len(m.group()) ** .64) + (.6 if m.group()[-1:] in ",;.!?" else 0) for m in matches]
             total = sum(weights) or 1
-            start = len(self.words)
             cursor = line.time
             for match, weight in zip(matches, weights):
                 finish = cursor + span * weight / total
@@ -75,14 +105,45 @@ class WordTimeline:
             if not matches:
                 self.words.append(Word("♪", i, 0, 0, line.time, end_time))
             self.ranges.append((start, len(self.words)))
+        # Keep source-word indexes/times intact. The display gets an extra
+        # invisible slot when a line starts before its first actual word.
+        self.display_words = []
+        self._display_indexes = []
+        self._leading_gaps = {}
+        for i, (start, end) in enumerate(self.ranges):
+            if i in self.timed_lines and self.words[start].begin > lines[i].time:
+                self._leading_gaps[i] = len(self.display_words)
+                self.display_words.append(Word("♪", i, 0, 0, lines[i].time, self.words[start].begin))
+            for word in self.words[start:end]:
+                self._display_indexes.append(len(self.display_words))
+                self.display_words.append(word)
 
     def at(self, line, position):
         if line < 0 or not self.ranges:
             return -1, 0.0
         start, end = self.ranges[min(line, len(self.ranges) - 1)]
+        if line in self.timed_lines and position < self.words[start].begin:
+            return -1, 0.0
         index = max(start, min(end - 1, bisect_right([w.begin for w in self.words[start:end]], position) + start - 1))
         word = self.words[index]
-        return index, clamp((position - word.begin) / max(.04, word.finish - word.begin))
+        span = word.finish - word.begin
+        if line in self.timed_lines:
+            # Short syllables are valid source intervals. A display minimum
+            # must not stretch their progress beyond the declared end.
+            progress = (position - word.begin) / span if span > 0 else float(position >= word.begin)
+        else:
+            progress = (position - word.begin) / max(.04, span)
+        return index, clamp(progress)
+
+    def display_at(self, line, position):
+        """Focus a blank slot during breaks, retaining the surrounding lyrics."""
+        if line < 0 or not self.ranges:
+            return -1, -1, 0.0
+        line = min(line, len(self.ranges) - 1)
+        word_index, fraction = self.at(line, position)
+        if word_index < 0:
+            return line, self._leading_gaps.get(line, -1), 0.0
+        return line, self._display_indexes[word_index], fraction
 
 
 @dataclass
@@ -91,6 +152,7 @@ class TextShape:
     bounds: QRectF
     word_boxes: list
     pixels: int
+    first_line_center: float = 0.
 
 
 class TypeCache:
@@ -137,12 +199,15 @@ class TypeCache:
             layout.endLayout()
             if y <= height or pixels == minimum:
                 path = QPainterPath()
+                first_line = QPainterPath()
                 for run in layout.glyphRuns():
                     raw = run.rawFont()
                     for glyph, position in zip(run.glyphIndexes(), run.positions()):
                         glyph_path = raw.pathForGlyph(glyph)
                         glyph_path.translate(position)
                         path.addPath(glyph_path)
+                        if rows and position.y() < rows[0].height() * 1.07:
+                            first_line.addPath(glyph_path)
                 boxes = []
                 row_ends = [row.textStart() + row.textLength() for row in rows]
                 for match in re.finditer(r"\S+", text):
@@ -161,8 +226,11 @@ class TypeCache:
                 if factor < 1:
                     transform = QTransform.fromScale(factor, factor)
                     path = transform.map(path)
+                    first_line = transform.map(first_line)
                     boxes = [(a, b, transform.mapRect(box)) for a, b, box in boxes]
-                result = TextShape(path, path.boundingRect(), boxes, pixels)
+                first_center = (first_line.boundingRect().center().y() if not first_line.isEmpty()
+                                else path.boundingRect().center().y())
+                result = TextShape(path, path.boundingRect(), boxes, pixels, first_center)
                 break
         self.items[key] = result
         while len(self.items) > self.limit:
@@ -197,6 +265,23 @@ def symbol_kind(word):
     if value in {"home", "world", "earth", "grow", "life", "green", "colours", "colors"}:
         return "leaf"
     return "star"
+
+
+@lru_cache(maxsize=256)
+def line_symbol_kind(text):
+    """Choose one deliberate illustration per cue, independent of word timing.
+
+    Concrete imagery wins over common pronouns, so "you and the ocean" gets
+    waves rather than a heart. The bounded cache only sees validated lyrics.
+    """
+    candidates = []
+    for match in re.finditer(r"[^\W\d_]+(?:['’][^\W\d_]+)?", text.lower()):
+        word = match.group()
+        kind = symbol_kind(word)
+        if kind != "star":
+            priority = 0 if word in {"you", "us", "away", "day", "world", "words"} else 1
+            candidates.append((priority, kind))
+    return max(candidates, key=lambda candidate: candidate[0])[1] if candidates else "star"
 
 
 def symbol_path(kind):

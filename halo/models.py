@@ -49,15 +49,31 @@ class Track:
 
 
 @dataclass(frozen=True)
+class LyricWord:
+    text: str
+    start: float
+    end: float | None = None
+
+
+@dataclass(frozen=True)
 class LyricLine:
     time: float
     text: str
+    words: tuple[LyricWord, ...] = ()
+    end: float | None = None
 
 
 @dataclass
 class Lyrics:
     lines: list[LyricLine] = field(default_factory=list)
     message: str = "Your lyrics will appear here."
+    source_id: str = ""
+    candidates: list[dict] = field(default_factory=list)
+    selected_record: dict = field(default_factory=dict)
+
+    @property
+    def has_word_timing(self):
+        return any(line.words for line in self.lines)
 
     def index_at(self, position: float) -> int:
         return bisect_right([line.time for line in self.lines], position) - 1
@@ -75,6 +91,7 @@ def floating_geometry(screen_rect, horizontal=50, vertical=90):
 
 
 STAMP = re.compile(r"\[(\d{1,3}):([0-5]?\d)(?:[.:](\d{1,3}))?\]")
+WORD_STAMP = re.compile(r"<(\d{1,3}):([0-5]?\d)(?:[.:](\d{1,3}))?>")
 
 MAX_LRC_BYTES = 512 * 1024
 MAX_LYRIC_CUES = 2000
@@ -107,10 +124,76 @@ def validate_lyric_lines(lines):
         raise LyricsLimitError()
     words = characters = 0
     for line in lines:
-        words += max(1, len(lyric_word_matches(line.text)))
+        word_count = len(lyric_word_matches(line.text))
+        if not isinstance(line.words, (tuple, list)) or len(line.words) > MAX_LYRIC_WORDS_PER_LINE:
+            raise LyricsLimitError()
+        if line.words:
+            segment_chars = 0
+            previous = -1
+            for word in line.words:
+                if not isinstance(word.text, str):
+                    raise ValueError("Invalid timed lyric segment.")
+                segment_chars += len(word.text)
+                if segment_chars > MAX_LYRIC_LINE_CHARS:
+                    raise LyricsLimitError()
+                if (not _valid_time(word.start) or word.start < previous or
+                        (word.end is not None and (not _valid_time(word.end) or word.end < word.start))):
+                    raise ValueError("Invalid lyric word timestamps.")
+                previous = word.start
+            if "".join(word.text for word in line.words) != line.text:
+                raise ValueError("Timed segments do not match their lyric line.")
+        if not _valid_time(line.time) or (line.end is not None and
+                (not _valid_time(line.end) or line.end < line.time)):
+            raise ValueError("Invalid lyric line timestamps.")
+        words += max(1, word_count, len(line.words))
         characters += len(line.text)
         if words > MAX_LYRIC_WORDS or characters > MAX_LYRIC_EXPANDED_CHARS:
             raise LyricsLimitError()
+
+
+def _valid_time(value):
+    try:
+        return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and value >= 0
+    except (ValueError, OverflowError):
+        return False
+
+
+def _stamp_seconds(stamp):
+    fraction = float("0." + stamp.group(3)) if stamp.group(3) else 0
+    return int(stamp.group(1)) * 60 + int(stamp.group(2)) + fraction
+
+
+def _enhanced_content(content, line_time, shift):
+    """Preserve absolute Enhanced LRC boundaries and source whitespace."""
+    stamps = list(islice(WORD_STAMP.finditer(content), MAX_LYRIC_WORDS_PER_LINE + 2))
+    if not stamps:
+        return content, (), None
+    if len(stamps) > MAX_LYRIC_WORDS_PER_LINE + 1:
+        raise LyricsLimitError()
+    pieces = []
+    if stamps[0].start():
+        pieces.append((content[:stamps[0].start()], line_time, _stamp_seconds(stamps[0])))
+    for index, stamp in enumerate(stamps):
+        next_stamp = stamps[index + 1] if index + 1 < len(stamps) else None
+        segment = content[stamp.end():next_stamp.start() if next_stamp else len(content)]
+        if segment:
+            pieces.append((segment, _stamp_seconds(stamp), _stamp_seconds(next_stamp) if next_stamp else None))
+    if len(pieces) > MAX_LYRIC_WORDS_PER_LINE:
+        raise LyricsLimitError()
+    # Match ordinary LRC's outer trimming, without discarding separators
+    # between words or inventing new word boundaries.
+    text = "".join(piece[0] for piece in pieces)
+    left, right = len(text) - len(text.lstrip()), len(text.rstrip())
+    offset = 0
+    words = []
+    for segment, begin, finish in pieces:
+        begin_char, end_char = max(0, left - offset), min(len(segment), right - offset)
+        if end_char > begin_char:
+            words.append(LyricWord(segment[begin_char:end_char], begin + shift,
+                                   finish + shift if finish is not None else None))
+        offset += len(segment)
+    end = _stamp_seconds(stamps[-1]) + shift if stamps[-1].end() == len(content) else None
+    return text.strip(), tuple(words), end
 
 
 def load_lrc(filename):
@@ -122,7 +205,7 @@ def load_lrc(filename):
 
 
 def parse_lrc(text: str) -> list[LyricLine]:
-    """Read multiple timestamps, fractional seconds, empty cues and LRC offset."""
+    """Read ordinary or Enhanced LRC, repeated cues and global LRC offset."""
     if not isinstance(text, str) or len(text) > MAX_LRC_BYTES or len(text.encode("utf-8")) > MAX_LRC_BYTES:
         raise LyricsLimitError()
     offset = re.search(r"\[offset:([+-]?\d+)\]", text, re.I)
@@ -135,16 +218,23 @@ def parse_lrc(text: str) -> list[LyricLine]:
             continue
         if len(matches) > MAX_TIMESTAMPS_PER_LINE or len(lines) + len(matches) > MAX_LYRIC_CUES:
             raise LyricsLimitError()
-        content = raw[matches[-1].end():].strip()
-        words += len(matches) * max(1, len(lyric_word_matches(content)))
+        content, timed_words, end = _enhanced_content(raw[matches[-1].end():].strip(),
+                                                     _stamp_seconds(matches[0]), shift)
+        words += len(matches) * max(1, len(lyric_word_matches(content)), len(timed_words))
         characters += len(matches) * len(content)
         if words > MAX_LYRIC_WORDS or characters > MAX_LYRIC_EXPANDED_CHARS:
             raise LyricsLimitError()
         for stamp in matches:
-            fraction = float("0." + stamp.group(3)) if stamp.group(3) else 0
-            seconds = int(stamp.group(1)) * 60 + int(stamp.group(2)) + fraction + shift
-            lines.append(LyricLine(max(0, seconds), content))
-    return sorted(lines, key=lambda line: line.time)
+            seconds = _stamp_seconds(stamp) + shift
+            delta = _stamp_seconds(stamp) - _stamp_seconds(matches[0])
+            shifted_words = tuple(LyricWord(word.text, max(0, word.start + delta),
+                                           max(0, word.end + delta) if word.end is not None else None)
+                                  for word in timed_words)
+            lines.append(LyricLine(max(0, seconds), content, shifted_words,
+                                   max(0, end + delta) if end is not None else None))
+    lines.sort(key=lambda line: line.time)
+    validate_lyric_lines(lines)
+    return lines
 
 
 CONTRACTIONS = {

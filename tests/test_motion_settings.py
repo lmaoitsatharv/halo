@@ -93,7 +93,7 @@ class MotionSettingsTests(unittest.TestCase):
         # the old object's fields or assuming the writer's setting format.
         restored = self.controller()
         self.assertEqual(restored.halo_mode, "prism")
-        self.assertEqual(restored.lyric_style, "ship")
+        self.assertEqual(restored.lyric_style, "ship_visual")
         self.assertEqual(restored.immersive_mode, "cinema")
         self.assertEqual(restored.motion_speed, 73)
         self.assertTrue(restored.reduced_motion)
@@ -102,6 +102,23 @@ class MotionSettingsTests(unittest.TestCase):
     def test_out_of_range_saved_speed_is_clamped(self):
         self.assertEqual(self.controller({"motion_speed": -20}).motion_speed, 0)
         self.assertEqual(self.controller({"motion_speed": 120}).motion_speed, 100)
+
+    def test_old_lyric_choices_migrate_to_the_retained_illustrated_modes(self):
+        for old, expected in (("ship", "ship_visual"), ("fisheye", "fisheye_visual"),
+                              ("ship_visual", "ship_visual"), ("fisheye_visual", "fisheye_visual"),
+                              ("visual", "visual")):
+            with self.subTest(old=old):
+                c = self.controller({"lyric_style": old, "offset": 350, "intensity": 71})
+                self.assertEqual(c.lyric_style, expected)
+                self.assertEqual(c.settings.value("lyric_style"), expected)
+                self.assertEqual((c.global_offset, c.intensity), (350, 71))
+
+    def test_old_runtime_lyric_names_save_the_new_modes(self):
+        c = self.controller()
+        for old, expected in (("ship", "ship_visual"), ("fisheye", "fisheye_visual")):
+            c.set("lyric_style", old)
+            self.assertEqual(c.lyric_style, expected)
+            self.assertEqual(c.settings.value("lyric_style"), expected)
 
     def test_play_pause_resume_freezes_motion_without_accumulating_paused_time(self):
         controller = self.controller()

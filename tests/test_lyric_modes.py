@@ -93,6 +93,7 @@ class LyricModeTests(unittest.TestCase):
             with self.subTest(surface=surface):
                 c = self.controller()
                 c.lyric_style = "ship"
+                c.reduced_motion = True
                 canvas = LyricCanvas(c, surface)
                 canvas.resize(800, 500)
                 first = canvas.grab().toImage()
@@ -106,6 +107,7 @@ class LyricModeTests(unittest.TestCase):
             with self.subTest(surface=surface):
                 c = self.controller()
                 c.lyric_style = "ship"
+                c.reduced_motion = True
                 canvas = LyricCanvas(c, surface)
                 canvas.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
                 canvas.resize(800, 500)
@@ -190,7 +192,7 @@ class LyricModeTests(unittest.TestCase):
         self.assertEqual(positions, [c.lyrics.lines[line].time - .25])
         canvas.close()
 
-    def test_four_styles_render_distinctly_on_all_surfaces(self):
+    def test_catalogue_styles_render_distinctly_on_all_surfaces(self):
         for surface, size in (("preview", (420, 220)), ("floating", (350, 140)),
                               ("immersive", (800, 500))):
             hashes = set()
@@ -208,7 +210,7 @@ class LyricModeTests(unittest.TestCase):
                 canvas.grab()  # Backward seek and replacement lyrics generation.
                 self.assertEqual(canvas.visual_index, 0.)
                 canvas.close()
-            self.assertEqual(len(hashes), 4, surface)
+            self.assertEqual(len(hashes), len(LYRIC_STYLES), surface)
 
 
 if __name__ == "__main__":

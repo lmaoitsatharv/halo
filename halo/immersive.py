@@ -12,6 +12,10 @@ from PySide6.QtWidgets import (QWidget, QLabel, QPushButton, QFrame, QSlider,
 from .widgets import Artwork, LyricCanvas, tint
 from .glow import paint_edge_glow
 from .taskbar import allow_taskbar_reveal
+from .backgrounds import BackgroundRenderer
+from .lyric_rendering import LYRIC_STYLES, canonical_lyric_style
+from .mode_catalog import available_specs
+from .scene_extras import EXTRA_SCENES, SCENE_CAPTIONS, extra_scene_layout, paint_extra_scene
 
 
 IMMERSIVE_SCENES = (
@@ -19,7 +23,7 @@ IMMERSIVE_SCENES = (
     ("lyrics", "Lyrics only", "Just the words. Move your mouse to reveal the controls."),
     ("cinema", "Cinema", "A wide stage of light, with the words at its centre."),
     ("orbit", "Orbit", "A record suspended inside slow, luminous orbits."),
-)
+) + EXTRA_SCENES
 
 
 SCENE_STYLE = """
@@ -58,6 +62,8 @@ def _label(parent, text, name):
 
 class Immersive(QWidget):
     exited = Signal()
+    backgroundRequested = Signal()
+    modesRequested = Signal()
     IDLE_INTERVAL = 1500
 
     def __init__(self, controller):
@@ -71,6 +77,8 @@ class Immersive(QWidget):
         self.scene = "studio"
         self.scene_key = None
         self.backdrop = QPixmap()
+        self.media_background = BackgroundRenderer(self)
+        self.media_background.changed.connect(self.update)
         self.header = QWidget(self)
         header = QHBoxLayout(self.header)
         header.setContentsMargins(0, 0, 0, 0)
@@ -84,7 +92,7 @@ class Immersive(QWidget):
         self.scene_select = QComboBox(self.header)
         self.scene_select.setObjectName("roomSelect")
         self.scene_select.setAccessibleName("Immersive scene")
-        for scene, name, description in IMMERSIVE_SCENES:
+        for scene, name, description in available_specs(controller, "immersive_mode", IMMERSIVE_SCENES):
             self.scene_select.addItem(name, scene)
             self.scene_select.setItemData(self.scene_select.count() - 1, description, Qt.ItemDataRole.ToolTipRole)
         self.scene_select.setFixedWidth(144)
@@ -97,6 +105,17 @@ class Immersive(QWidget):
         self._populate_styles()
         self.style_select.currentIndexChanged.connect(self._select_style)
         header.addWidget(self.style_select)
+        self.background_button = QPushButton("Background…", self.header)
+        self.background_button.setObjectName("roomExit")
+        self.background_button.setAccessibleName("Customize immersive background")
+        self.background_button.setToolTip("Choose a wallpaper, video or album artwork")
+        self.background_button.clicked.connect(self._open_background)
+        header.addWidget(self.background_button)
+        self.modes_button = QPushButton("Modes", self.header)
+        self.modes_button.setObjectName("roomExit")
+        self.modes_button.setAccessibleName("Browse immersive modes")
+        self.modes_button.clicked.connect(self.modesRequested.emit)
+        header.addWidget(self.modes_button)
         self.exit = QPushButton("Return   Esc", self.header)
         self.exit.setObjectName("roomExit")
         self.exit.setAccessibleName("Return to Halo")
@@ -185,21 +204,30 @@ class Immersive(QWidget):
         controller.trackChanged.connect(self.changed)
         controller.lyricsChanged.connect(self.changed)
         controller.settingChanged.connect(self.changed)
+        if hasattr(controller, "modeLibraryChanged"):
+            controller.modeLibraryChanged.connect(self._refresh_mode_options)
+        if hasattr(controller, "backgroundChanged"):
+            controller.backgroundChanged.connect(self._sync_background)
         self.resize(1280, 800)
         self.changed()
 
     def _populate_styles(self):
-        # The canvas owns the supported style catalogue, when available.
-        try:
-            from .lyric_rendering import LYRIC_STYLES
-            styles = LYRIC_STYLES
-        except ImportError:
-            styles = (("ship", "Ship"), ("fisheye", "Fisheye"),
-                      ("fisheye_visual", "Fisheye Visual"), ("visual", "Visual"))
-        for entry in styles:
+        for entry in available_specs(self.controller, "lyric_style", LYRIC_STYLES):
             self.style_select.addItem(entry[1], entry[0])
             if len(entry) > 2:
                 self.style_select.setItemData(self.style_select.count() - 1, entry[2], Qt.ItemDataRole.ToolTipRole)
+
+    def _refresh_mode_options(self):
+        for combo in (self.scene_select, self.style_select):
+            combo.blockSignals(True)
+            combo.clear()
+        for key, name, description in available_specs(self.controller, "immersive_mode", IMMERSIVE_SCENES):
+            self.scene_select.addItem(name, key)
+            self.scene_select.setItemData(self.scene_select.count() - 1, description, Qt.ItemDataRole.ToolTipRole)
+        self._populate_styles()
+        for combo in (self.scene_select, self.style_select):
+            combo.blockSignals(False)
+        self.changed()
 
     def _control(self, text, accessible, action, primary=False):
         widget = QPushButton(text, self.player)
@@ -223,6 +251,15 @@ class Immersive(QWidget):
     def _select_style(self):
         self.controller.set("lyric_style", self.style_select.currentData())
 
+    def _open_background(self):
+        self._wake_chrome()
+        self.backgroundRequested.emit()
+
+    def _sync_background(self):
+        self.media_background.sync(self.controller, active=self.isVisible() and self.isActiveWindow())
+        self.background_button.setToolTip(self.media_background.status or "Choose a wallpaper, video or album artwork")
+        self.update()
+
     def changed(self, *_):
         c = self.controller
         scene = getattr(c, "immersive_mode", "studio")
@@ -233,23 +270,28 @@ class Immersive(QWidget):
         self.canvas.setProperty("immersiveScene", scene)
         if hasattr(self.canvas, "set_alignment"):
             self.canvas.set_alignment("center" if scene in ("lyrics", "cinema") else "left")
-        for combo, value in ((self.scene_select, scene), (self.style_select, getattr(c, "lyric_style", "ship"))):
+        for combo, value in ((self.scene_select, scene),
+                             (self.style_select, canonical_lyric_style(getattr(c, "lyric_style", "ship")))):
             combo.blockSignals(True)
             index = combo.findData(value)
             if index >= 0:
                 combo.setCurrentIndex(index)
             combo.blockSignals(False)
-        self.scene_caption.setText({"studio": "THE LISTENING ROOM", "lyrics": "JUST THE WORDS", "cinema": "WIDE OPEN SOUND", "orbit": "IN YOUR OWN ORBIT"}[scene])
+        self.scene_caption.setText({"studio": "THE LISTENING ROOM", "lyrics": "JUST THE WORDS", "cinema": "WIDE OPEN SOUND", "orbit": "IN YOUR OWN ORBIT", **SCENE_CAPTIONS}[scene])
         self.title.setText(c.track.title)
         self.artist.setText(c.track.artist)
         self.album.setText(c.track.album or "Sound in colour")
         for label in (self.title, self.artist, self.album):
             label.setToolTip(label.text())
-        self.lyrics_status.setText("ORIGINAL DEMO · LINE SYNCED" if getattr(c, "demo", False) else "LINE SYNCED" if c.lyrics.lines else "")
+        timed = [bool(line.words) for line in c.lyrics.lines if line.text.strip()]
+        timing_label = ("WORD SYNCED" if timed and all(timed) else "WORD + LINE SYNCED" if any(timed)
+                        else "LINE SYNCED" if c.lyrics.lines else "")
+        self.lyrics_status.setText("ORIGINAL DEMO · LINE SYNCED" if getattr(c, "demo", False) else timing_label)
         self.play.setText("Ⅱ" if c.track.playing else "▶")
         for control in (self.play, self.previous, self.next, self.progress):
             control.setEnabled(c.track.connected)
         self.cover.track_changed()
+        self._sync_background()
         if scene_changed:
             self.scene_key = None
             self._wake_chrome()
@@ -265,7 +307,7 @@ class Immersive(QWidget):
         height = max(1, self.title.height())
         width = max(1, self.title.width())
         text = self.controller.track.title
-        if self.scene == "cinema":
+        if self.scene in {"cinema", "scene_runway"}:
             face = QFont("Segoe UI")
             face.setPixelSize(14)
             face.setWeight(QFont.Weight.DemiBold)
@@ -311,13 +353,24 @@ class Immersive(QWidget):
         for widget in (self.cover, self.title, self.artist, self.album, self.now_label, self.words_label, self.lyrics_status):
             widget.setVisible(not lyrics_only)
         self.left_column.setVisible(False)
-        self.title.setWordWrap(self.scene != "cinema")
-        self.artist.setStyleSheet("font-size: 11px; color: #9da9a5;" if self.scene == "cinema" else "")
-        self.album.setStyleSheet("font-size: 10px;" if self.scene == "cinema" else "")
+        compact_credits = self.scene in {"cinema", "scene_runway"}
+        self.title.setWordWrap(not compact_credits)
+        self.artist.setStyleSheet("font-size: 11px; color: #9da9a5;" if compact_credits else "")
+        self.album.setStyleSheet("font-size: 10px;" if compact_credits else "")
         shadow = self.cover.graphicsEffect()
         shadow.setBlurRadius(18 if self.scene == "cinema" else 52)
         shadow.setOffset(0, 3 if self.scene == "cinema" else 14)
-        if self.scene == "lyrics":
+        extra_layout = extra_scene_layout(self.scene, w, h)
+        if extra_layout is not None:
+            self.cover.setFixedSize(extra_layout["cover"].size())
+            self.cover.move(extra_layout["cover"].topLeft())
+            for key, widget in (("canvas", self.canvas), ("song", self.title), ("artist", self.artist),
+                                ("album", self.album), ("status", self.lyrics_status)):
+                widget.setGeometry(extra_layout[key])
+            self.canvas.set_alignment(extra_layout["alignment"])
+            self.now_label.hide()
+            self.words_label.hide()
+        elif self.scene == "lyrics":
             width = min(1160, w - 2 * margin - 36)
             canvas_height = max(200, self.player.y() - 112)
             self.canvas.setGeometry((w - width) // 2, (h - canvas_height) // 2, width, canvas_height)
@@ -401,6 +454,7 @@ class Immersive(QWidget):
         self._wake_chrome()
 
     def hideEvent(self, event):
+        self.media_background.set_active(False)
         self._set_cursor_hidden(False)
         self.idle.stop()
         self._pointer_pressed = False
@@ -451,11 +505,13 @@ class Immersive(QWidget):
         elif kind == QEvent.Type.FocusOut:
             QTimer.singleShot(0, self._focus_changed)
         elif obj is self and kind == QEvent.Type.WindowDeactivate:
+            self.media_background.set_active(False)
             self._pointer_pressed = False
             self._pressed_keys.clear()
             self._keyboard_navigation = False
             self._wake_chrome()
         elif obj is self and kind == QEvent.Type.WindowActivate:
+            self._sync_background()
             self._wake_chrome()
         elif obj in self._popup_widgets and kind in (QEvent.Type.Show, QEvent.Type.Hide):
             # Closing a menu starts a fresh quiet interval rather than using
@@ -564,7 +620,7 @@ class Immersive(QWidget):
             "cinema": [(.5, -.22, .88, c.primary, 65), (.09, .62, .63, c.secondary, 32), (.92, .62, .63, c.secondary, 32)],
             "orbit": [(.27, .43, .51, c.primary, 50), (.9, .1, .7, c.secondary, 26)],
         }
-        for x, y, radius, color, alpha in atmospheres[self.scene]:
+        for x, y, radius, color, alpha in atmospheres.get(self.scene, atmospheres["studio"]):
             gradient = QRadialGradient(w * x, h * y, w * radius)
             gradient.setColorAt(0, tint(color, alpha))
             gradient.setColorAt(.48, tint(color, alpha * .34))
@@ -598,6 +654,8 @@ class Immersive(QWidget):
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         p.drawPixmap(0, 0, self.backdrop)
         phase = 0 if getattr(c, "reduced_motion", False) else getattr(c, "motion_time", 0.0)
+        self.media_background.paint(p, QRectF(self.rect()), phase)
+        paint_extra_scene(p, w, h, c, self.scene, phase)
         if self.scene == "orbit":
             center = self.cover.geometry().center()
             base = self.cover.width() * .75
