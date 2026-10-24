@@ -3,6 +3,14 @@ import math
 import re
 from .models import eligible_match, normalize_name
 
+MAX_METADATA_CHARS = 2000
+
+
+def _bracketed_labels(text):
+    # Excluding openers avoids repeatedly scanning the same suffix when a
+    # catalogue field contains a long run of unmatched opening brackets.
+    return re.findall(r"[\[(]([^\[\]()]+)[\])]", text)
+
 
 # These change the performance/edit, unlike a compilation or deluxe album name.
 _VERSIONS = {
@@ -16,18 +24,18 @@ _VERSIONS = {
 
 
 def version_labels(title, album=""):
-    title = title if isinstance(title, str) else ""
-    album = album if isinstance(album, str) else ""
+    title = title[:MAX_METADATA_CHARS] if isinstance(title, str) else ""
+    album = album[:MAX_METADATA_CHARS] if isinstance(album, str) else ""
     # Album-level Live At/From/In and explicit bracketed labels are reliable
     # hints; arbitrary words in album names (e.g. Live Through This) are not.
-    album_tags = " ".join(re.findall(r"[\[(]([^\])]+)[\])]", album))
+    album_tags = " ".join(_bracketed_labels(album))
     if re.search(r"\blive\s+(?:at|from|in)\b", album, re.I) or album.casefold().strip() == "live":
         album_tags += " live"
     if album.casefold().strip() in {"acoustic", "unplugged", "instrumental", "karaoke"}:
         album_tags += " " + album
     # A song called Live Forever is not itself a live-performance label.
-    title_tags = " ".join(re.findall(r"[\[(]([^\])]+)[\])]", title))
-    title_tags += " " + " ".join(re.split(r"\s+[–—-]\s+", title)[1:])
+    title_tags = " ".join(_bracketed_labels(title))
+    title_tags += " " + " ".join(re.split(r"(?<!\s)\s+[–—-]\s+", title)[1:])
     text = title_tags + " " + album_tags
     return frozenset(name for name, pattern in _VERSIONS.items() if re.search(pattern, text, re.I))
 
@@ -35,6 +43,15 @@ def version_labels(title, album=""):
 def recording_match(record, track):
     """Every lookup route must pass the same artist/title/duration/version gate."""
     try:
+        if not isinstance(record, dict):
+            return False
+        # Reject rather than truncate for identity checks, so a hidden version
+        # suffix cannot turn an oversized field into an apparently exact match.
+        metadata = [record.get(key) for key in ("trackName", "artistName", "albumName")]
+        metadata += [track.title, track.artist, track.album]
+        if any(value is not None and (not isinstance(value, str) or len(value) > MAX_METADATA_CHARS)
+               for value in metadata):
+            return False
         if not isinstance(track.duration, (int, float)) or not math.isfinite(track.duration) or track.duration < 0:
             return False
         if isinstance(record, dict) and isinstance(record.get("duration"), bool):

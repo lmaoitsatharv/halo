@@ -23,6 +23,7 @@ Keep **Halo.exe**, **_internal** and **licenses** together in the extracted fold
 
 ## What's new
 
+- **Modes library:** browse 21 live lyric, immersive and light previews, following the current song, and add your favourites to the mode selectors.
 - Settings opens on **General**, with separate **Halo**, **Lyrics** and **Immersive** sections and a live preview.
 - Smoother audio pulses with a stronger, softer glow, plus cleaner Ship lyrics.
 - Better missing-cover recovery, with an optional online cover lookup.
@@ -110,7 +111,7 @@ Lighting research used [Lumn's official overview](https://www.trylumn.xyz/). Lyr
 
 ## Privacy and limitations
 
-Spotify metadata and artwork are read locally through [Windows media controls](https://learn.microsoft.com/en-us/uwp/api/windows.media.control.globalsystemmediatransportcontrolssessionmanager). Lyrics requests send the current song title, artist, album and duration to [LRCLIB](https://lrclib.net/docs); no Spotify credentials are requested. Automatic results are cached in memory. Explicitly chosen or imported lyrics and song corrections are saved locally in `lyric-library/` beside Halo's settings, so they survive restarting. Saved records are bounded to 2 MiB each and 512 recordings.
+Spotify metadata and artwork are read locally through [Windows media controls](https://learn.microsoft.com/en-us/uwp/api/windows.media.control.globalsystemmediatransportcontrolssessionmanager). Lyrics requests send the current song title, artist, album and duration to [LRCLIB](https://lrclib.net/docs); no Spotify credentials are requested. Automatic results are cached in memory. Explicitly chosen or imported lyrics and song corrections are saved locally in `saved-lyrics/` beside Halo's settings, so they survive restarting. Saved records are bounded to 2 MiB each and 512 recordings.
 
 Spotify sometimes omits its cover from Windows' media feed. Halo retries late or failed native artwork and refreshes both the cover and album colours when it arrives. If you enable **Find missing covers online**, Halo sends song-title/artist search terms to [MusicBrainz](https://musicbrainz.org/doc/MusicBrainz_API) and uses its title, artist, album and duration data to select a matching release. It requests that release's front cover from [Cover Art Archive](https://musicbrainz.org/doc/Cover_Art_Archive/API), which serves images through Internet Archive. Native Spotify artwork takes priority. Lookups run in the background and use a bounded memory cache; unmatched/offline results retain the placeholder. Editions can have different covers. No login details or audio are sent for cover lookup.
 
@@ -118,7 +119,7 @@ Audio-reactive mode measures **all sound on the current default output device**,
 
 Lyrics coverage and accuracy depend on LRCLIB or your import. When words are wrong, choose a different matched source or import corrected timed lyrics. A constant offset helps consistently early/late lyrics; it cannot repair uneven drift. If the service is unavailable, use **Retry** after a moment. Ads, podcasts and untimed tracks may have no synced lyrics. No audio recording or automatic audio alignment is used for these lyric features.
 
-Malformed or unusually large lyric inputs are rejected before display. Imports are limited to 512 KiB, 2,000 cues, 32 timestamps per source line, 2,000 characters and 256 words per cue, and 20,000 expanded words across the track. CJK character animation uses the same word budget. Expanded text is also bounded, and HTTP lyric responses are limited to 4 MiB. A rejected import keeps the current lyrics.
+Malformed or unusually large lyric inputs are rejected before display. Imports are limited to 512 KiB, 2,000 cues, 32 timestamps per source line, 2,000 characters and 256 words per cue, and 20,000 expanded words across the track. CJK character animation uses the same word budget. Expanded text is also bounded, and HTTP lyric responses are limited to 4 MiB. Catalogue title, artist and album fields are limited to 2,000 characters before recording matching. A rejected import keeps the current lyrics.
 
 The lyrics badge distinguishes timing quality, a lookup in progress, an untimed result, missing lyrics and an unavailable service. A single timestamp containing the entire lyric text is treated as untimed unless it has genuine internal word timestamps. Lyricsfile 1.0 is a draft: its unresolved `metadata.offset_ms` field is currently ignored. Overlapping word intervals are retained, but the current single-line focus does not show simultaneous singers separately.
 

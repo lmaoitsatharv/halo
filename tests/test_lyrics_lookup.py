@@ -1,9 +1,9 @@
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 from urllib.error import HTTPError
 from halo.lyrics import LyricsWorker
 from halo.models import Track, eligible_match, title_search_variants
-from halo.lyric_matching import recording_match, version_labels
+from halo.lyric_matching import MAX_METADATA_CHARS, recording_match, version_labels
 
 
 class LookupTests(unittest.TestCase):
@@ -123,6 +123,32 @@ class LookupTests(unittest.TestCase):
         self.assertIn("live", version_labels("Original", "Live at Example Hall"))
         self.assertIn("acoustic", version_labels("Original", "Original (Acoustic)"))
         self.assertFalse(recording_match({**self.timed, "albumName": "Original (Acoustic)"}, self.track))
+
+    def test_oversized_catalogue_metadata_is_rejected_before_identity_or_regex_work(self):
+        for field in ("trackName", "artistName", "albumName"):
+            with self.subTest(field=field), patch("halo.lyric_matching.eligible_match") as identity:
+                with patch("halo.lyric_matching.version_labels") as labels:
+                    self.assertFalse(recording_match({**self.timed, field: "[" * (MAX_METADATA_CHARS + 1)}, self.track))
+                    identity.assert_not_called()
+                    labels.assert_not_called()
+
+    def test_rejected_large_metadata_does_not_hide_a_good_worker_result(self):
+        malformed = {**self.timed, "id": 1, "albumName": "[" * 8000}
+        good = {**self.timed, "id": 2}
+        self.worker.request = Mock(return_value=[malformed, good])
+        self.worker.fetch(self.track, 1)
+        self.assertEqual(self.results[0].source_id, "2")
+        self.assertEqual(len(self.results[0].lines), 2)
+
+    def test_unclosed_brackets_and_regular_version_labels_remain_safe(self):
+        self.assertEqual(version_labels("Original", "[" * MAX_METADATA_CHARS), frozenset())
+        self.assertEqual(version_labels("Original (Live)", "[" * MAX_METADATA_CHARS), frozenset({"live"}))
+        self.assertIn("acoustic", version_labels("Original", "Release [Edition (Acoustic)]"))
+
+    def test_version_label_scans_bound_each_field_before_parsing(self):
+        with patch("halo.lyric_matching._bracketed_labels", return_value=[]) as labels:
+            version_labels("x" * (MAX_METADATA_CHARS * 4), "y" * (MAX_METADATA_CHARS * 4))
+        self.assertEqual([len(call.args[0]) for call in labels.call_args_list], [MAX_METADATA_CHARS] * 2)
 
     def test_choices_are_safe_bounded_metadata_and_selection_keeps_automatic_lookup_separate(self):
         choices = []
