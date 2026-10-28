@@ -7,11 +7,12 @@ from pathlib import Path
 import sys
 import time
 from dataclasses import replace
-from PySide6.QtCore import QObject, Signal, QTimer, Qt, QSettings, QLockFile, QThread, QEvent
+from PySide6.QtCore import QObject, Signal, QTimer, Qt, QSettings, QLockFile, QThread, QEvent, QSize
 from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap, QCursor, QShortcut, QKeySequence
 from PySide6.QtWidgets import (QApplication, QHBoxLayout, QLabel, QCheckBox, QSlider,
     QFileDialog, QSystemTrayIcon, QMenu, QMessageBox, QDialog, QVBoxLayout,
     QListWidget, QPushButton, QPlainTextEdit)
+from . import __version__
 from .models import Track, Lyrics, parse_lrc, load_lrc, DEMO_LRC
 from .spotify import SpotifyWorker
 from .lyrics import LyricsWorker
@@ -19,6 +20,8 @@ from .lyric_store import LyricStore, recording_key, MAX_OFFSET_MS
 from .audio import AudioMeter
 from .artwork import ArtworkWorker
 from .widgets import EdgeOverlay, FloatingLyrics, AmbientBackdrop, artwork_palette
+from .glass import DesktopBackdrop, GlassButton, GlassSlider
+from .taskbar import allow_taskbar_reveal
 from .positioning import PositionDialog
 
 from .frontend import STYLE, build_main
@@ -704,7 +707,7 @@ class LyricChoiceDialog(QDialog):
             self.c.select_lyric_source(self.c.lyric_choices[index]["id"])
 
 
-class MainWindow(AmbientBackdrop):
+class MainWindow(DesktopBackdrop):
     def __init__(self, controller):
         super().__init__(controller)
         self.c = controller
@@ -715,21 +718,25 @@ class MainWindow(AmbientBackdrop):
         self._mode_return_settings = None
         self._mode_return_immersive = False
         self._return_to_immersive_settings = False
+        self._workspace_geometry = None
+        self._immersive_return_page = "listening"
         self._initial_placed = False
         self._placing_initial = False
         self._return_maximized = controller.settings.value("window_maximized", False, type=bool)
-        self.setWindowTitle("Halo · Spotify companion")
+        self.setWindowTitle("Halo · Your listening space")
         self.setWindowIcon(make_icon())
         build_main(self, controller)
         self.settings_shortcut = QShortcut(QKeySequence("Ctrl+,"), self)
         self.settings_shortcut.activated.connect(self.open_settings)
 
-        self.immersive = Immersive(controller)
+        self.immersive = Immersive(controller, parent=self, embedded=True)
+        self.app_stack.addWidget(self.immersive)
         self.immersive.setWindowIcon(self.windowIcon())
-        self.immersive.exited.connect(self.reopen)
+        self.immersive.exited.connect(self._leave_immersive)
         self.immersive.backgroundRequested.connect(self.open_background_settings)
         self.immersive.modesRequested.connect(lambda: self.open_modes("scenes"))
         self.settings_dialog.finished.connect(self._restore_immersive_after_settings)
+        self.settings_dialog.pages.currentChanged.connect(lambda _index: self.sync_navigation())
         self.overlay = FloatingLyrics(controller)
         self.edges = []
         self.rebuild_edges()
@@ -756,11 +763,101 @@ class MainWindow(AmbientBackdrop):
         controller.lyricsChanged.connect(self.refresh_lyrics)
         controller.settingChanged.connect(lambda: self.tray_glow.setChecked(controller.glow))
         controller.settingChanged.connect(self.place_overlay)
+        controller.settingChanged.connect(self.sync_navigation)
+        controller.paletteChanged.connect(self.update)
         self.draw_timer = QTimer(self)
         self.draw_timer.timeout.connect(self.draw)
         self.draw_timer.start(16)
         self.refresh()
         self.refresh_lyrics()
+        self.sync_navigation()
+        self.page_escape = QShortcut(QKeySequence("Esc"), self)
+        self.page_escape.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        self.page_escape.activated.connect(self._escape_page)
+        self.player_shortcut = QShortcut(QKeySequence("Space"), self.player)
+        self.player_shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        self.player_shortcut.activated.connect(lambda: self.c.transport("toggle") if self.c.track.connected else None)
+
+    def _immersive_active(self):
+        return hasattr(self, "immersive") and self.app_stack.currentWidget() is self.immersive
+
+    def _sync_preview_activity(self):
+        if hasattr(self, "settings_dialog"):
+            self.settings_dialog.sync_visibility()
+        if self.mode_library is not None:
+            self.mode_library._sync_timer()
+
+    def _show_workspace(self):
+        self.app_stack.setCurrentWidget(self.shell)
+        if hasattr(self, "page_escape"):
+            self.page_escape.setEnabled(True)
+        if self.isFullScreen():
+            maximized = self._return_maximized
+            placing = self._placing_initial
+            self._placing_initial = True
+            try:
+                self.showNormal()
+                if maximized:
+                    self.showMaximized()
+                elif self._workspace_geometry is not None:
+                    self.setGeometry(self._workspace_geometry)
+            finally:
+                self._return_maximized = maximized
+                self._placing_initial = placing
+
+    def navigate(self, page):
+        """Change the visible page; no dialog or second native window is opened."""
+        widgets = {"listening": self.listening_page, "settings": self.settings_dialog,
+                   "modes": self.mode_library}
+        target = widgets.get(page)
+        if target is None or self.exiting:
+            return
+        if self.sheet.isVisible():
+            self.sheet.dismiss()
+        self._show_workspace()
+        self.current_page = page
+        self.page_stack.setCurrentWidget(target)
+        target.show()
+        self.sync_navigation()
+        self._sync_preview_activity()
+
+    def sync_navigation(self):
+        if not hasattr(self, "nav_buttons"):
+            return
+        section = getattr(self.settings_dialog, "section", "general")
+        selected = (section if section != "general" else "settings") if self.current_page == "settings" else self.current_page
+        for key, button in self.nav_buttons.items():
+            button.setChecked(key == selected)
+        for button in self.findChildren(GlassButton):
+            if button.c is None:
+                button.c = self.c
+            button._settle_motion()
+        if hasattr(self, "atmosphere_label"):
+            spec = find_mode("halo", self.c.halo_mode)
+            self.atmosphere_label.setText(f"{self.c.palette} · {spec.title if spec else self.c.halo_mode}")
+
+    def _escape_page(self):
+        if self.sheet.isVisible():
+            self.sheet.dismiss()
+        elif self._immersive_active():
+            self.immersive.leave()
+        elif self.current_page == "modes" and self.mode_library is not None:
+            self.mode_library.reject()
+        elif self.current_page == "settings":
+            self.settings_dialog.reject()
+
+    def show_sheet(self, dialog, title):
+        if not getattr(dialog, "_halo_sheet_connected", False):
+            dialog.finished.connect(lambda _result, item=dialog: self.sheet.finished(item))
+            dialog._halo_sheet_connected = True
+        self.sheet.present(dialog, title)
+
+    def _leave_immersive(self):
+        if self.exiting:
+            return
+        self._show_workspace()
+        self.navigate(self._immersive_return_page)
+        self.reopen()
 
     def checkbox(self, text, setting, layout, tooltip):
         check = QCheckBox(text)
@@ -778,7 +875,7 @@ class MainWindow(AmbientBackdrop):
         value_label = label(str(getattr(self.c, name)) + suffix, "muted")
         row.addWidget(value_label)
         layout.addLayout(row)
-        slider = QSlider(Qt.Orientation.Horizontal)
+        slider = GlassSlider(Qt.Orientation.Horizontal)
         slider.setAccessibleName(text)
         slider.setRange(low, high)
         slider.setValue(getattr(self.c, name))
@@ -802,58 +899,75 @@ class MainWindow(AmbientBackdrop):
     def open_position_settings(self):
         if self.position_dialog is None:
             self.position_dialog = PositionDialog(self.c, self)
-        self.position_dialog.show()
-        self.position_dialog.raise_()
-        self.position_dialog.activateWindow()
+            self.position_dialog.setStyleSheet("QDialog#positionDialog { background: transparent; }")
+        self.show_sheet(self.position_dialog, "Lyric placement")
 
     def open_settings(self):
-        if self.settings_dialog.isVisible():
-            self.settings_dialog.raise_()
-            self.settings_dialog.activateWindow()
-        else:
-            self.settings_dialog.open_studio()
+        if self.current_page == "settings" and not self._immersive_active():
+            self.reopen()
+            self.sync_navigation()
+            return
+        self.open_settings_section("general")
+
+    def open_settings_section(self, section="general"):
+        if self._immersive_active():
+            self._return_to_immersive_settings = True
+        self.navigate("settings")
+        self.settings_dialog.open_studio(section)
+        self.sync_navigation()
+        if not self.isVisible() or self.isMinimized():
+            self.reopen()
 
     def open_modes(self, kind="all"):
         from .mode_library import ModeLibrary
         kind = kind if isinstance(kind, str) else "all"
         if self.mode_library is None:
-            self.mode_library = ModeLibrary(self, self.c)
+            self.mode_library = ModeLibrary(self, self.c, embedded=True)
+            self.page_stack.addWidget(self.mode_library)
             self.mode_library.finished.connect(self._restore_after_modes)
-        if not self.mode_library.isVisible():
-            self._mode_return_settings = self.settings_dialog.section if self.settings_dialog.isVisible() else None
-            self._mode_return_immersive = self.immersive.isVisible()
-            if self._mode_return_settings:
-                self.settings_dialog.hide()
-            if self._mode_return_immersive:
-                self.immersive.hide()
+        if self.current_page != "modes" or self._immersive_active():
+            self._mode_return_settings = self.settings_dialog.section if self.current_page == "settings" and not self._immersive_active() else None
+            self._mode_return_immersive = self._immersive_active()
+        self.navigate("modes")
         self.mode_library.open_page(kind)
+        if not self.isVisible() or self.isMinimized():
+            self.reopen()
 
     def _restore_after_modes(self, *_):
-        if not self.exiting:
-            if self._mode_return_immersive:
-                self.immersive.showFullScreen()
-                self.immersive.raise_()
-                self.immersive.activateWindow()
-            if self._mode_return_settings:
-                self.settings_dialog.open_studio(self._mode_return_settings)
-            elif not self._mode_return_immersive:
-                self.reopen()
+        settings_section = self._mode_return_settings
+        return_immersive = self._mode_return_immersive
         self._mode_return_settings = None
         self._mode_return_immersive = False
+        if not self.exiting:
+            if settings_section:
+                self.open_settings_section(settings_section)
+            elif return_immersive:
+                self.fullscreen()
+            else:
+                self.navigate("listening")
 
     def open_background_settings(self):
-        self._return_to_immersive_settings = self.immersive.isVisible()
+        self._return_to_immersive_settings = self._immersive_active()
+        self.navigate("settings")
         self.settings_dialog.open_backgrounds()
+        self.sync_navigation()
 
     def _restore_immersive_after_settings(self, *_):
-        if self._return_to_immersive_settings and not self.exiting and self.immersive.isVisible():
-            self.immersive.raise_()
-            self.immersive.activateWindow()
+        return_immersive = self._return_to_immersive_settings
         self._return_to_immersive_settings = False
+        if self.exiting:
+            return
+        if return_immersive:
+            self.fullscreen()
+        else:
+            self.navigate("listening")
 
     def refresh(self):
         self.title.setText(self.c.track.title)
         self.artist.setText(self.c.track.artist)
+        self.player_title.setText(self.c.track.title)
+        self.player_artist.setText(self.c.track.artist)
+        self.album_label.setText(self.c.track.album or "Spotify desktop · music in colour")
         self.badge.setText("◉  Visual demo" if self.c.demo else
                            ("●  Spotify connected" if self.c.track.connected else "○  Waiting for Spotify"))
         self.play.setText("Ⅱ" if self.c.track.playing else "▶")
@@ -890,8 +1004,8 @@ class MainWindow(AmbientBackdrop):
         c = self.c
         visible = c.track.connected and c.track.playing
         main_visible = self.isVisible() and not self.isMinimized()
-        immersive_visible = self.immersive.isVisible() and not self.immersive.isMinimized()
-        modes_visible = self.mode_library is not None and self.mode_library.isVisible()
+        immersive_visible = main_visible and self._immersive_active()
+        modes_visible = main_visible and self.mode_library is not None and self.mode_library.isVisible()
         for edge in self.edges:
             should_show = c.glow and visible and not immersive_visible and c.intensity > 0
             if should_show != edge.isVisible():
@@ -909,6 +1023,7 @@ class MainWindow(AmbientBackdrop):
             self.overlay.update()
         if main_visible:
             self.mark.update()
+            self.playback_signal.update()
             for tile in self.mode_tiles:
                 if tile.isVisible():
                     tile.update()
@@ -925,13 +1040,21 @@ class MainWindow(AmbientBackdrop):
             self.immersive.tick()
 
     def fullscreen(self):
+        if self._immersive_active() and self.isFullScreen():
+            return
         self._remember_window_state()
-        self.settings_dialog.hide()
-        if self.position_dialog:
-            self.position_dialog.close()
+        if not self.isFullScreen() and not self.isMaximized():
+            self._workspace_geometry = self.geometry()
+        self._immersive_return_page = "listening"
+        if self.sheet.isVisible():
+            self.sheet.dismiss()
         self.immersive.refresh()
-        self.immersive.showFullScreen()
-        self.immersive.activateWindow()
+        self.app_stack.setCurrentWidget(self.immersive)
+        self.page_escape.setEnabled(False)
+        self.immersive.show()
+        self.showFullScreen()
+        self.activateWindow()
+        self._sync_preview_activity()
 
     def import_lrc(self):
         filename, _ = QFileDialog.getOpenFileName(self, "Import timed lyrics for this song", "", "Timed lyrics (*.lrc *.elrc *.lyricsfile.yaml *.yaml *.yml)")
@@ -947,18 +1070,22 @@ class MainWindow(AmbientBackdrop):
             return
         if self.lyric_choice_dialog is None:
             self.lyric_choice_dialog = LyricChoiceDialog(self, self.c)
-        self.lyric_choice_dialog.show()
-        self.lyric_choice_dialog.raise_()
-        self.lyric_choice_dialog.activateWindow()
+        self.show_sheet(self.lyric_choice_dialog, "Choose a lyric match")
         self.c.find_lyric_choices()
 
     def reopen(self):
-        self.showMaximized() if self._return_maximized else self.showNormal()
+        if self._immersive_active():
+            self.showFullScreen()
+        else:
+            self.showMaximized() if self._return_maximized else self.showNormal()
         self.raise_()
         self.activateWindow()
+        self._sync_preview_activity()
 
     def _remember_window_state(self):
-        if not self.isMinimized():
+        if self._immersive_active():
+            return
+        if not self.isMinimized() and not self.isFullScreen():
             self._return_maximized = self.isMaximized()
         self.c.settings.setValue("window_maximized", self._return_maximized)
 
@@ -971,7 +1098,11 @@ class MainWindow(AmbientBackdrop):
             area = screen.availableGeometry()
             self._placing_initial = True
             try:
-                self.resize(min(self.width(), area.width() - 64), min(self.height(), area.height() - 80))
+                # Small or highly scaled displays can be narrower than the
+                # workspace minimum; never let the first window spill off-screen.
+                fit = QSize(max(1, area.width() - 64), max(1, area.height() - 80))
+                self.setMinimumSize(self.minimumSize().boundedTo(fit))
+                self.resize(self.size().boundedTo(fit))
                 bounds = self.frameGeometry()
                 bounds.moveCenter(area.center())
                 self.move(bounds.topLeft())
@@ -980,12 +1111,45 @@ class MainWindow(AmbientBackdrop):
             self._return_maximized = requested_maximized
             if requested_maximized:
                 QTimer.singleShot(0, self, self.showMaximized)
+        QTimer.singleShot(0, self, self._sync_preview_activity)
 
     def changeEvent(self, event):
+        if (event.type() == QEvent.Type.WindowStateChange and hasattr(self, "_return_maximized")
+                and event.oldState() & Qt.WindowState.WindowFullScreen):
+            # Windows can deliver its final fullscreen-exit event after Qt has
+            # already restored the workspace. Preserve the workspace preference
+            # through that native transition and reassert its maximized state.
+            maximized, placing = self._return_maximized, self._placing_initial
+            self._placing_initial = True
+            try:
+                super().changeEvent(event)
+                if (not self._immersive_active() and not self.isMinimized()
+                        and maximized and not self.isMaximized()):
+                    self.showMaximized()
+            finally:
+                self._return_maximized = maximized
+                self._placing_initial = placing
+            QTimer.singleShot(0, self, self._sync_preview_activity)
+            return
         super().changeEvent(event)
         if (event.type() == QEvent.Type.WindowStateChange and hasattr(self, "_return_maximized")
                 and not self._placing_initial):
             self._remember_window_state()
+            QTimer.singleShot(0, self, self._sync_preview_activity)
+
+    def hideEvent(self, event):
+        super().hideEvent(event)
+        self._sync_preview_activity()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, "sheet"):
+            self.sheet.setGeometry(self.rect())
+
+    def event(self, event):
+        if event.type() == QEvent.Type.WinIdChange:
+            allow_taskbar_reveal(self.effectiveWinId())
+        return super().event(event)
 
     def quit(self):
         self._remember_window_state()
@@ -993,6 +1157,8 @@ class MainWindow(AmbientBackdrop):
         self._return_to_immersive_settings = False
         self._mode_return_settings = None
         self._mode_return_immersive = False
+        if self.sheet.isVisible():
+            self.sheet.dismiss()
         if self.mode_library is not None:
             self.mode_library.hide()
         self.settings_dialog.hide()
@@ -1007,7 +1173,8 @@ class MainWindow(AmbientBackdrop):
         self._remember_window_state()
         if not self.exiting and self.tray.isSystemTrayAvailable():
             event.ignore()
-            self.settings_dialog.hide()
+            if self.sheet.isVisible():
+                self.sheet.dismiss()
             self.hide()
         else:
             self.quit()
@@ -1041,6 +1208,7 @@ def main():
     app = QApplication(sys.argv[:1])
     app.setApplicationName("Halo")
     app.setOrganizationName("Halo")
+    app.setApplicationVersion(__version__)
     app.setQuitOnLastWindowClosed(False)
     app.setStyleSheet(STYLE)
     lock = QLockFile(str(data_dir / "instance.lock"))
@@ -1073,11 +1241,7 @@ def main():
         elif args.snapshot_view == "modes":
             window.open_modes(args.mode_category)
         def snapshot():
-            target = window.immersive if args.snapshot_view == "immersive" else (
-                     window.position_dialog if args.snapshot_view == "position" else
-                     window.settings_dialog if args.snapshot_view == "settings" else
-                     window.mode_library if args.snapshot_view == "modes" else window)
-            target.grab().save(args.snapshot)
+            window.grab().save(args.snapshot)
             window.quit()
         QTimer.singleShot(2300 if args.snapshot_view == "immersive" else 1600, snapshot)
     if args.report:

@@ -83,6 +83,11 @@
     });
     body.classList.toggle('demo-paused', !playing);
   };
+  // Ship is a whole-line style in Halo: no per-word highlight, scale or colour.
+  const markActiveWord = () => {
+    const wholeLine = $('#lyric-stage').dataset.style === 'ship';
+    $$('#lyric-line-current>span').forEach((span, i) => span.classList.toggle('active-word', !wholeLine && i === currentWord));
+  };
   const renderDemo = () => {
     const index = Math.floor(demoTime / 10) % demoLines.length;
     const words = demoLines[index];
@@ -125,8 +130,8 @@
       currentWord = -1;
     }
     if (word !== currentWord) {
-      $$('#lyric-line-current>span').forEach((span, i) => span.classList.toggle('active-word', i === word));
       currentWord = word;
+      markActiveWord();
     }
     $('#demo-time').textContent = `0:${String(Math.floor(demoTime)).padStart(2, '0')}`;
     $('#demo-progress').style.width = `${demoTime / 60 * 100}%`;
@@ -247,15 +252,15 @@
   [$('#colour-primary'), $('#colour-secondary')].forEach(input => input.addEventListener('input', updatePalette));
 
   const styleDescriptions = {
-    ship: 'A flowing wall of lyrics with a moving word spotlight.',
-    fisheye: 'A kinetic word stack. The active word swells into focus.',
-    'fisheye-visual': 'The word stack, with tilted colour strips and original symbols.',
+    ship: 'Smooth whole-line scrolling, with fine illustrations.',
+    'fisheye-visual': 'A kinetic word stack, with tilted colour strips and original symbols.',
     visual: 'One large word and symbol at a time, with soft transitions.'
   };
   $$('.lyric-picker button').forEach(button => button.addEventListener('click', () => {
     choose($$('.lyric-picker button'), button);
     $('#lyric-stage').dataset.style = button.dataset.style;
     $('#lyric-style-note').textContent = styleDescriptions[button.dataset.style];
+    markActiveWord();
   }));
 
   const scenes = {

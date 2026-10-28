@@ -19,49 +19,114 @@ from .color_controls import LightControls
 from .frontend import ModeTile, ElidedLabel, action, text_label, selector
 from .backgrounds import BackgroundRenderer, BACKGROUND_PRESETS
 from .mode_catalog import available_specs
+from .glass import GlassSlider
 from .scene_extras import extra_scene_layout, paint_extra_scene
 
 
 STUDIO_STYLE = """
-QDialog#settingsStudio { background: #141416; }
-QWidget#studioSidebar { background: #19191c; border: 1px solid #303034; border-radius: 16px; }
-QFrame#studioPreview { background: #101013; border: 1px solid #303035; border-radius: 18px; }
-QFrame#studioGroup { background: #202023; border: 1px solid #333337; border-radius: 14px; }
-QLabel#studioTitle { color: #f7f6f8; font-size: 25px; font-weight: 600; }
-QLabel#studioSectionTitle { color: #ecebee; font-size: 15px; font-weight: 600; }
-QLabel#studioRowTitle { color: #eeedf1; font-size: 12px; font-weight: 600; }
-QLabel#studioHint { color: #94939e; font-size: 11px; }
-QLabel#studioValue { color: #d0c9df; font-size: 11px; }
-QLabel#studioEyebrow { color: #777581; font-size: 9px; letter-spacing: 1.5px; font-weight: 600; }
+QDialog#settingsStudio { background: #0e1016; }
+QDialog#embeddedSettings { background: transparent; }
+QWidget#studioSidebar { background: rgba(255, 255, 255, 5); border: 1px solid rgba(255, 255, 255, 15); border-radius: 18px; }
+QFrame#studioPreview { background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 rgba(255,255,255,10),stop:1 rgba(255,255,255,3)); border: 1px solid rgba(255, 255, 255, 22); border-radius: 24px; }
+QFrame#studioGroup { background: qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 rgba(255,255,255,10),stop:1 rgba(255,255,255,5)); border: 1px solid rgba(255, 255, 255, 20); border-radius: 18px; }
+QLabel { background: transparent; }
+QLabel#studioTitle { color: #f5f3fa; font-size: 28px; font-weight: 600; }
+QLabel#studioSectionTitle { color: #e9e6f1; font-size: 13px; font-weight: 600; }
+QLabel#studioRowTitle { color: #edeaf4; font-size: 12px; font-weight: 500; }
+QLabel#studioHint { color: #999aaa; font-size: 11px; }
+QLabel#studioValue { color: #c4b4f8; font-size: 11px; }
+QLabel#studioEyebrow { color: #78798c; font-size: 9px; letter-spacing: 1.6px; font-weight: 600; }
 QPushButton#studioNav { background: transparent; border: 0; border-radius: 9px; text-align: left;
-                       padding: 11px 12px; color: #a3a1ad; font-size: 12px; }
+                       padding: 11px 10px; color: #999aaa; font-size: 12px; }
 QPushButton#studioNav:checked { color: #faf7ff; font-weight: 600; }
-QPushButton#studioNav:hover { color: #ffffff; background: rgba(255, 255, 255, 5); }
-QPushButton#studioNav:focus { border: 1px solid #b7a7d3; padding: 10px 11px; }
-QFrame#studioNavSelection { background: #323036; border: 1px solid #403a49; border-radius: 9px; }
-QPushButton#studioClose { background: #242427; border: 1px solid #39393e; padding: 0;
-                        border-radius: 10px; font-size: 19px; color: #b7b3bf; }
-QPushButton#studioClose:hover { color: #ffffff; background: #39333f; }
-QPushButton#backgroundChoice { background: #25242a; border: 1px solid #403b47;
-                               border-radius: 9px; padding: 9px 5px; font-size: 11px; }
-QPushButton#backgroundChoice:checked { background: #3b3249; border-color: #bba7dc;
-                                      color: #f5eaff; }
-QPushButton#backgroundPreset { background: #29262e; border: 1px solid #49404f;
-                               border-radius: 9px; padding: 8px 4px; font-size: 11px; }
-QPushButton#backgroundPreset:hover { background: #42374e; border-color: #bba7dc; }
+QPushButton#studioNav:hover { color: #ffffff; }
+QPushButton#studioNav:focus { border: 1px solid rgba(196,180,248,155); padding: 10px 9px; }
+QFrame#studioNavSelection { background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 rgba(196,180,248,31),stop:1 rgba(160,174,240,13)); border: 1px solid rgba(196,180,248,52); border-radius: 11px; }
+QPushButton#studioClose { background: rgba(255,255,255,7); border: 1px solid rgba(255,255,255,22); padding: 0;
+                        border-radius: 11px; font-size: 19px; color: #b5b2c4; }
+QPushButton#studioClose:hover { color: #ffffff; background: rgba(196,180,248,23); }
+QPushButton#studioBack { background: rgba(255,255,255,5); border: 1px solid rgba(255,255,255,18); padding: 7px 12px;
+                       border-radius: 12px; font-size: 11px; color: #aaa7bc; }
+QPushButton#studioBack:hover { color: #f5f3fa; background: rgba(196,180,248,18); border-color: rgba(196,180,248,66); }
+QPushButton#backgroundChoice { background: rgba(255,255,255,7); border: 1px solid rgba(255,255,255,20);
+                               border-radius: 11px; padding: 9px 5px; font-size: 11px; }
+QPushButton#backgroundChoice:checked { background: rgba(196,180,248,30); border-color: rgba(196,180,248,135);
+                                      color: #ece5ff; }
+QPushButton#backgroundPreset { background: rgba(255,255,255,7); border: 1px solid rgba(255,255,255,19);
+                               border-radius: 10px; padding: 8px 4px; font-size: 11px; }
+QPushButton#backgroundPreset:hover { background: rgba(196,180,248,25); border-color: rgba(196,180,248,100); }
 QPushButton#backgroundDisclosure { text-align: left; background: transparent;
-                                   border: 0; padding: 10px 0; color: #bba7dc; font-size: 11px; }
-QPushButton { background: #2b2930; border-color: #45404d; }
-QPushButton:hover { background: #3b3544; border-color: #796a8d; }
-QPushButton#primary { background: #ded2fa; color: #20192d; }
-QComboBox { background: #29272e; border-color: #46404f; }
-QComboBox QAbstractItemView { background: #242128; selection-background-color: #51425f; }
-QSlider::groove:horizontal { background: #39343e; height: 4px; }
-QSlider::sub-page:horizontal { background: #bba7dc; }
-QSlider::handle:horizontal { background: #efe6ff; width: 11px; margin: -5px 0; border-radius: 5px; }
+                                   border: 0; padding: 10px 0; color: #c4b4f8; font-size: 11px; }
+QPushButton { background: rgba(255,255,255,7); border: 1px solid rgba(255,255,255,23); border-radius: 11px; padding: 8px 11px; color: #d7d4e2; }
+QPushButton:hover { background: rgba(196,180,248,20); border-color: rgba(196,180,248,76); }
+QPushButton:disabled { color: #626272; border-color: rgba(255,255,255,10); }
+QPushButton#primary { background: #c4b4f8; color: #211b35; border: 0; font-weight: 600; }
+QPushButton#primary:hover { background: #d8cbff; }
+QComboBox { background: rgba(255,255,255,8); border: 1px solid rgba(255,255,255,24); border-radius: 10px; padding: 8px 10px; color: #e0dce9; }
+QComboBox:hover { border-color: rgba(196,180,248,90); }
+QComboBox QAbstractItemView { background: #20212b; selection-background-color: #40394f; }
+QSlider::groove:horizontal { background: rgba(255,255,255,23); border: 0px solid transparent; height: 3px; border-radius: 1px; }
+QSlider::sub-page:horizontal { background: #bcaef0; border: 0px solid transparent; height: 3px; border-radius: 1px; }
+QSlider::handle:horizontal { background: #eee8ff; width: 11px; margin: -5px 0; border-radius: 5px; }
 QScrollArea, QWidget#studioPage, QWidget#studioViewport { background: transparent; border: 0; }
-QScrollBar::handle:vertical { background: #45404b; }
+QScrollBar::handle:vertical { background: rgba(196,180,248,55); }
 """
+
+
+class StudioNavButton(QPushButton):
+    """A restrained glass highlight that eases in with the pointer."""
+    def __init__(self, controller, title):
+        super().__init__(title)
+        self.c = controller
+        self._hover = 0.
+        self.hover_animation = QPropertyAnimation(self, b"hover", self)
+        self.hover_animation.setDuration(170)
+        self.hover_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        controller.settingChanged.connect(self._settle_motion)
+
+    def get_hover(self):
+        return self._hover
+
+    def set_hover(self, value):
+        self._hover = float(value)
+        self.update()
+
+    hover = Property(float, get_hover, set_hover)
+
+    def _animate_hover(self, target):
+        self.hover_animation.stop()
+        if self.c.reduced_motion or not self.isVisible():
+            self.set_hover(target)
+        else:
+            self.hover_animation.setStartValue(self._hover)
+            self.hover_animation.setEndValue(target)
+            self.hover_animation.start()
+
+    def _settle_motion(self):
+        if self.c.reduced_motion:
+            self.hover_animation.stop()
+            self.set_hover(float(self.underMouse()))
+
+    def enterEvent(self, event):
+        self._animate_hover(1.)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self._animate_hover(0.)
+        super().leaveEvent(event)
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if self._hover > .001:
+            p = QPainter(self)
+            p.setRenderHint(QPainter.RenderHint.Antialiasing)
+            sheen = QLinearGradient(0, 0, self.width(), self.height())
+            sheen.setColorAt(0, QColor(220, 211, 255, round(14 * self._hover)))
+            sheen.setColorAt(1, QColor(220, 211, 255, 0))
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(sheen)
+            p.drawRoundedRect(QRectF(self.rect()).adjusted(1, 1, -1, -1), 10, 10)
 
 
 def studio_icon(kind="general"):
@@ -293,7 +358,8 @@ class PreviewScreen(QWidget):
         self.update()
 
     def refresh_background(self):
-        active = self.section == "scenes" and self.isVisible() and self.window().isVisible()
+        active = (self.section == "scenes" and self.isVisible()
+                  and self.window().isVisible() and not self.window().isMinimized())
         if active:
             self.background.sync(self.c, active=True, preview=True)
         else:
@@ -425,12 +491,12 @@ class StudioPreview(QFrame):
         super().__init__()
         self.c = controller
         self.setObjectName("studioPreview")
-        self.setMinimumWidth(310)
+        self.setMinimumWidth(240)
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(22, 23, 22, 22)
+        layout.setContentsMargins(20, 22, 20, 22)
         header = QHBoxLayout()
         dot = QLabel("●")
-        dot.setStyleSheet("color: #b5d5bc; font-size: 10px;")
+        dot.setStyleSheet("color: #a6d7bd; font-size: 8px;")
         header.addWidget(dot)
         header.addWidget(text_label("LIVE PREVIEW", "studioEyebrow"))
         header.addStretch()
@@ -482,6 +548,10 @@ class StudioPreview(QFrame):
         self.scene.update()
 
     def tick(self):
+        if not self.isVisible() or not self.window().isVisible() or self.window().isMinimized():
+            self.timer.stop()
+            self.scene.background.close()
+            return
         self.scene.proxy.advance()
         self.swatches.setText(f"{self.c.halo_primary.name().upper()}    /    {self.c.halo_secondary.name().upper()}")
         self.scene.update()
@@ -500,7 +570,8 @@ class StudioPreview(QFrame):
     def showEvent(self, event):
         super().showEvent(event)
         self.scene.proxy.last = time.monotonic()
-        self.timer.start()
+        if self.window().isVisible() and not self.window().isMinimized():
+            self.timer.start()
 
     def hideEvent(self, event):
         self.timer.stop()
@@ -546,17 +617,20 @@ class StudioPreview(QFrame):
 
 class SettingsStudio(QDialog):
     SECTIONS = (("general", "General", "A few essentials for your desktop."),
-                ("halo", "Halo", "Shape the light around your music."),
+                ("halo", "Lighting", "Shape the light around your music."),
                 ("lyrics", "Lyrics", "Find the way you like to see every word."),
                 ("scenes", "Immersive", "Set the stage for a closer listen."))
 
-    def __init__(self, owner, controller):
+    def __init__(self, owner, controller, embedded=False):
         super().__init__(owner)
         self.owner, self.c = owner, controller
-        self.setObjectName("settingsStudio")
+        self.embedded = bool(embedded)
+        if self.embedded:
+            self.setWindowFlags(Qt.WindowType.Widget)
+        self.setObjectName("embeddedSettings" if self.embedded else "settingsStudio")
         self.setWindowTitle("Halo · Settings")
         self.setWindowIcon(owner.windowIcon())
-        self.setMinimumSize(960, 600)
+        self.setMinimumSize(0, 0) if self.embedded else self.setMinimumSize(960, 600)
         self.setStyleSheet(STUDIO_STYLE)
         self.section = "general"
         self.switches = {}
@@ -570,26 +644,28 @@ class SettingsStudio(QDialog):
         owner.setting_controls = {}
         owner.setting_sliders = {}
         root = QVBoxLayout(self)
-        root.setContentsMargins(24, 19, 24, 18)
-        root.setSpacing(19)
+        root.setContentsMargins(4, 8, 4, 4) if self.embedded else root.setContentsMargins(24, 21, 24, 18)
+        root.setSpacing(18)
         heading = QHBoxLayout()
-        heading.addWidget(text_label("Settings", "studioSectionTitle"))
+        heading.addWidget(text_label("PREFERENCES" if self.embedded else "Settings", "studioEyebrow" if self.embedded else "studioSectionTitle"))
         heading.addStretch()
-        heading.addWidget(text_label("MAKE HALO YOURS", "studioEyebrow"))
-        heading.addSpacing(18)
-        close = action("×", self.close, "studioClose")
-        close.setFixedSize(32, 32)
-        close.setAccessibleName("Close settings")
-        close.setToolTip("Close settings · Esc")
+        if not self.embedded:
+            heading.addWidget(text_label("MAKE HALO YOURS", "studioEyebrow"))
+            heading.addSpacing(18)
+        close = action("‹  Back to listening" if self.embedded else "×", self.close, "studioBack" if self.embedded else "studioClose")
+        if not self.embedded:
+            close.setFixedSize(32, 32)
+        close.setAccessibleName("Back to listening" if self.embedded else "Close settings")
+        close.setToolTip("Return to listening · Esc" if self.embedded else "Close settings · Esc")
         heading.addWidget(close)
         root.addLayout(heading)
         columns = QHBoxLayout()
-        columns.setSpacing(22)
+        columns.setSpacing(20)
         self.sidebar = QWidget()
         self.sidebar.setObjectName("studioSidebar")
-        self.sidebar.setFixedWidth(172)
+        self.sidebar.setFixedWidth(132 if self.embedded else 156)
         navigation = QVBoxLayout(self.sidebar)
-        navigation.setContentsMargins(10, 18, 10, 15)
+        navigation.setContentsMargins(8, 18, 8, 15)
         navigation.setSpacing(5)
         navigation.addWidget(text_label("YOUR SPACE", "studioEyebrow"))
         navigation.addSpacing(12)
@@ -600,46 +676,51 @@ class SettingsStudio(QDialog):
         self.nav_animation.setDuration(240)
         self.nav_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
         for index, (key, title, description) in enumerate(self.SECTIONS):
-            button = QPushButton(title)
+            button = StudioNavButton(self.c, title)
             button.setObjectName("studioNav")
             button.setIcon(studio_icon(key))
             button.setIconSize(QSize(19, 19))
             button.setCheckable(True)
             button.setAutoExclusive(True)
-            button.setFixedHeight(43)
+            button.setFixedHeight(42)
             button.setAccessibleName(f"{title} settings")
             button.clicked.connect(lambda checked=False, i=index: self.select(i))
             navigation.addWidget(button)
             self.nav_buttons.append(button)
         navigation.addStretch()
-        navigation.addWidget(text_label("H A L O  /  01", "studioEyebrow"))
+        navigation.addWidget(text_label("YOUR HALO", "studioEyebrow"))
         columns.addWidget(self.sidebar)
+        if self.embedded:
+            self.sidebar.hide()
+            self.selection.hide()
         center = QVBoxLayout()
-        center.setSpacing(10)
+        center.setSpacing(8)
         self.page_title = text_label("General", "studioTitle")
+        self.page_title.setFocusPolicy(Qt.FocusPolicy.StrongFocus if self.embedded else Qt.FocusPolicy.NoFocus)
         center.addWidget(self.page_title)
         self.page_hint = text_label(self.SECTIONS[0][2], "studioHint")
         self.page_hint.setWordWrap(True)
         center.addWidget(self.page_hint)
-        center.addSpacing(10)
+        center.addSpacing(12)
         self.pages = QStackedWidget()
-        self.pages.setMinimumWidth(330)
-        self.curtain = PageCurtain(self.pages)
+        self.pages.setMinimumWidth(270 if self.embedded else 330)
+        self.curtain = PageCurtain(self.pages, "#14151d")
         center.addWidget(self.pages, 1)
-        columns.addLayout(center, 5)
+        columns.addLayout(center, 6)
         self.preview = StudioPreview(controller)
-        columns.addWidget(self.preview, 6)
+        columns.addWidget(self.preview, 5)
         root.addLayout(columns, 1)
         footer = QHBoxLayout()
         self.saved = text_label("✓   Changes save automatically", "studioHint")
         footer.addWidget(self.saved)
         footer.addStretch()
-        footer.addWidget(text_label("Esc to close   ·   Ctrl+, to open", "studioEyebrow"))
+        footer.addWidget(text_label("Esc to return" if self.embedded else "Esc to close   ·   Ctrl+, to open", "studioEyebrow"))
         root.addLayout(footer)
         self.build_pages()
         self.preview.scene.background.changed.connect(self.sync_background)
         for button in self.findChildren(QPushButton):
             button.setAutoDefault(False)
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.pages.currentChanged.connect(self.sync_nav)
         controller.settingChanged.connect(self.sync)
         if hasattr(controller, "modeLibraryChanged"):
@@ -671,15 +752,15 @@ class SettingsStudio(QDialog):
         frame = QFrame()
         frame.setObjectName("studioGroup")
         content = QVBoxLayout(frame)
-        content.setContentsMargins(15, 6, 15, 6)
+        content.setContentsMargins(16, 6, 16, 6)
         content.setSpacing(0)
         layout.addWidget(frame)
         return content
 
     def row(self, layout, title, hint="", control=None):
         row = QHBoxLayout()
-        row.setContentsMargins(0, 12, 0, 12)
-        row.setSpacing(15)
+        row.setContentsMargins(0, 14, 0, 14)
+        row.setSpacing(14)
         words = QVBoxLayout()
         words.setSpacing(5)
         words.addWidget(text_label(title, "studioRowTitle"))
@@ -744,7 +825,7 @@ class SettingsStudio(QDialog):
         line.addWidget(value)
         layout.addSpacing(13)
         layout.addLayout(line)
-        slider = QSlider(Qt.Orientation.Horizontal)
+        slider = GlassSlider(Qt.Orientation.Horizontal)
         slider.setAccessibleName(title)
         slider.setRange(low, high)
         slider.setValue(getattr(self.c, field))
@@ -963,13 +1044,13 @@ class SettingsStudio(QDialog):
         halo.addWidget(self.light_controls)
         halo.addWidget(text_label("Explore looks", "studioSectionTitle"))
         self.modes(halo, "halo_mode", HALO_MODES)
-        halo.addWidget(action("Browse more light modes   ↗", lambda: self.owner.open_modes("halo"), "ghost"))
+        halo.addWidget(action("Explore light modes   →", lambda: self.owner.open_modes("halo"), "ghost"))
         halo.addStretch()
 
         lyrics = self.page()
         lyrics.addWidget(text_label("Lyric style", "studioSectionTitle"))
         self.modes(lyrics, "lyric_style", LYRIC_STYLES)
-        lyrics.addWidget(action("Browse more lyric styles   ↗", lambda: self.owner.open_modes("lyrics"), "ghost"))
+        lyrics.addWidget(action("Explore lyric styles   →", lambda: self.owner.open_modes("lyrics"), "ghost"))
         desktop = self.group(lyrics, "On your desktop")
         self.owner.floating = self.switch(desktop, "floating", "Floating lyrics", "Keep words above your desktop while Halo is minimized.")
         self.row(desktop, "Position", "Choose a monitor and place your words.", action("Adjust…", self.owner.open_position_settings, "ghost"))
@@ -1010,8 +1091,8 @@ class SettingsStudio(QDialog):
         scenes = self.page()
         scenes.addWidget(text_label("Choose your room", "studioSectionTitle"))
         self.modes(scenes, "immersive_mode", IMMERSIVE_SCENES)
-        scenes.addWidget(action("Browse more immersive rooms   ↗", lambda: self.owner.open_modes("scenes"), "ghost"))
-        scenes.addWidget(action("Enter immersive view   ↗", self.enter_immersive, "primary"))
+        scenes.addWidget(action("Explore immersive rooms   →", lambda: self.owner.open_modes("scenes"), "ghost"))
+        scenes.addWidget(action("Enter immersive view   →", self.enter_immersive, "primary"))
         hint = text_label("Space to play or pause. Esc to return. Your window size is kept when you come back.", "studioHint")
         hint.setWordWrap(True)
         scenes.addWidget(hint)
@@ -1051,19 +1132,30 @@ class SettingsStudio(QDialog):
         self.pages.setCurrentIndex(index)
         self.section, title, description = self.SECTIONS[index]
         self.page_title.setText(title)
+        self.page_title.setAccessibleName(f"{title} settings")
         self.page_hint.setText(description)
+        if (self.embedded and getattr(self.owner, "settings_dialog", None) is self
+                and hasattr(self.owner, "sync_navigation")):
+            self.owner.sync_navigation()
         self.preview.set_section(self.section)
         self.sync_nav()
         if self.isVisible():
-            self.nav_buttons[index].setFocus(Qt.FocusReason.OtherFocusReason)
+            target = self.page_title if self.embedded else self.nav_buttons[index]
+            target.setFocus(Qt.FocusReason.OtherFocusReason)
         if before is not None:
             self.curtain.start(before, self.pages.currentWidget().grab())
 
     def sync_nav(self):
         index = self.pages.currentIndex()
         self.nav_buttons[index].setChecked(True)
-        target = self.nav_buttons[index].geometry()
         self.nav_animation.stop()
+        if self.embedded:
+            self.selection.hide()
+            for button in self.nav_buttons:
+                button.hover_animation.stop()
+                button.set_hover(0.)
+            return
+        target = self.nav_buttons[index].geometry()
         if self.c.reduced_motion or not self.isVisible():
             self.selection.setGeometry(target)
         else:
@@ -1083,23 +1175,56 @@ class SettingsStudio(QDialog):
             value.setText(str(getattr(self.c, name)) + suffix)
         if self.c.reduced_motion:
             self.nav_animation.stop()
-            self.selection.setGeometry(self.nav_buttons[self.pages.currentIndex()].geometry())
+            if not self.embedded:
+                self.selection.setGeometry(self.nav_buttons[self.pages.currentIndex()].geometry())
             self.curtain.animation.stop()
             self.curtain.finish()
 
     def open_studio(self, section="general"):
-        area = self.owner.screen().availableGeometry()
-        self.resize(min(1260, area.width() - 48), min(790, area.height() - 70))
+        if self.embedded:
+            if hasattr(self.owner, "navigate"):
+                self.owner.navigate("settings")
+        else:
+            area = self.owner.screen().availableGeometry()
+            self.resize(min(1260, area.width() - 48), min(790, area.height() - 70))
         index = next((index for index, item in enumerate(self.SECTIONS) if item[0] == section), 0)
         self.select(index, animate=False)
         self.show()
-        bounds = self.frameGeometry()
-        bounds.moveCenter(area.center())
-        self.move(bounds.topLeft())
-        self.raise_()
-        self.activateWindow()
-        self.nav_buttons[index].setFocus(Qt.FocusReason.OtherFocusReason)
-        self.sync_nav()
+        if not self.embedded:
+            bounds = self.frameGeometry()
+            bounds.moveCenter(area.center())
+            self.move(bounds.topLeft())
+            self.raise_()
+            self.activateWindow()
+        if self.embedded:
+            self.page_title.setFocus(Qt.FocusReason.OtherFocusReason)
+            self.sync_nav()
+        else:
+            self.nav_buttons[index].setFocus(Qt.FocusReason.OtherFocusReason)
+            self.sidebar.layout().activate()
+            self.nav_animation.stop()
+            self.nav_buttons[index].setChecked(True)
+            self.selection.setGeometry(self.nav_buttons[index].geometry())
+            self.selection.lower()
+        self.sync_visibility()
+
+    def sync_visibility(self):
+        """Suspend preview work while the shell is hidden or minimized."""
+        active = (self.isVisible() and self.preview.isVisible()
+                  and self.window().isVisible() and not self.window().isMinimized())
+        if active:
+            if not self.preview.timer.isActive():
+                self.preview.scene.proxy.last = time.monotonic()
+                self.preview.timer.start()
+            self.preview.scene.refresh_background()
+        else:
+            self.preview.timer.stop()
+            self.preview.scene.background.close()
+            self.preview.transition.animation.stop()
+            self.preview.transition.finish()
+            self.nav_animation.stop()
+            self.curtain.animation.stop()
+            self.curtain.finish()
 
     def open_backgrounds(self):
         self.open_studio("scenes")
@@ -1114,10 +1239,21 @@ class SettingsStudio(QDialog):
         self.curtain.animation.stop()
         self.curtain.finish()
         super().resizeEvent(event)
+        if self.embedded:
+            self.preview.setVisible(self.width() >= 730)
         QTimer.singleShot(0, self, self.sync_nav)
+        QTimer.singleShot(0, self, self.sync_visibility)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        QTimer.singleShot(0, self, self.sync_visibility)
 
     def hideEvent(self, event):
         self.nav_animation.stop()
         self.curtain.animation.stop()
         self.curtain.finish()
+        self.preview.timer.stop()
+        self.preview.scene.background.close()
+        for button in self.nav_buttons:
+            button.hover_animation.stop()
         super().hideEvent(event)

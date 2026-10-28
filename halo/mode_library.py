@@ -21,50 +21,60 @@ from .widgets import LyricCanvas
 
 
 LIBRARY_STYLE = """
-QDialog#modeLibrary { background: #111217; color: #ecebf3; }
-QWidget { font-family: 'Segoe UI'; }
+QDialog#modeLibrary { background: #0e1016; color: #f5f3fa; }
+QDialog#embeddedModes { background: transparent; color: #f5f3fa; }
+QWidget { font-family: 'Segoe UI'; color: #f5f3fa; }
 QLabel { background: transparent; }
-QLabel#libraryEyebrow { color: #9693ac; font-size: 10px; font-weight: 600; letter-spacing: 2px; }
-QLabel#libraryTitle { color: #f2effa; font-size: 29px; font-weight: 600; }
-QLabel#librarySubtitle { color: #9997a9; font-size: 12px; }
-QLabel#libraryCount { color: #b2afc1; font-size: 11px; }
-QLabel#libraryDetailTitle { color: #f5f0fe; font-size: 25px; font-weight: 600; }
-QLabel#libraryDescription { color: #b7b2c6; font-size: 12px; }
-QLabel#libraryState { color: #b4d8ca; font-size: 11px; }
-QLabel#libraryFooter { color: #838197; font-size: 10px; }
-QFrame#libraryDetail { background: #191a22; border: 1px solid #353442; border-radius: 18px; }
+QLabel#libraryEyebrow { color: #9a98b2; font-size: 9px; font-weight: 600; letter-spacing: 2px; }
+QLabel#libraryTitle { color: #f5f3fa; font-size: 30px; font-weight: 600; letter-spacing: -1px; }
+QLabel#librarySubtitle { color: #999aaa; font-size: 12px; }
+QLabel#libraryCount { color: #999aaa; font-size: 11px; }
+QLabel#libraryDetailTitle { color: #f5f3fa; font-size: 25px; font-weight: 600; letter-spacing: -0.5px; }
+QLabel#libraryDescription { color: #b0afc0; font-size: 12px; }
+QLabel#libraryState { color: #b8daca; font-size: 11px; }
+QLabel#libraryFooter { color: #868697; font-size: 10px; }
+QFrame#libraryDetail { background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+    stop:0 rgba(39, 39, 52, 206), stop:0.42 rgba(26, 27, 37, 194), stop:1 rgba(21, 24, 33, 218));
+    border: 1px solid rgba(238, 232, 255, 30); border-radius: 22px; }
+QFrame#libraryToolbar { background: rgba(255, 255, 255, 5); border: 1px solid rgba(255, 255, 255, 12);
+    border-radius: 14px; }
 QPushButton#libraryTab { border: 1px solid transparent; border-radius: 10px;
-    background: transparent; color: #9a97ad; padding: 9px 12px; font-size: 11px; }
-QPushButton#libraryTab:hover { background: #252532; color: #f3eafa; }
-QPushButton#libraryTab:checked { border-color: #65577d; background: #373044; color: #f5efff; }
-QPushButton#libraryTab:focus { border-color: #c0a8ec; }
-QPushButton#libraryClose { background: #24252e; color: #c1bbd3; border: 1px solid #3d3b4b;
-    border-radius: 11px; padding: 0; font-size: 22px; }
-QPushButton#libraryClose:hover { background: #383241; }
-QPushButton#libraryPause { background: #20222b; color: #beb9d0; border: 1px solid #3a3949;
-    border-radius: 10px; padding: 8px 12px; font-size: 11px; }
-QPushButton#libraryPause:checked { background: #393044; border-color: #88739f; }
-QPushButton#libraryAdd { background: #d7c5fb; color: #21182e; border: 1px solid #d7c5fb;
-    border-radius: 11px; padding: 11px 16px; font-weight: 600; }
-QPushButton#libraryAdd:hover { background: #e9ddff; }
-QPushButton#libraryAdd:disabled { background: #292d31; color: #a3b8ac; border-color: #424b47; }
-QPushButton#libraryUse { background: #2c2a38; color: #e6ddf6; border: 1px solid #51465f;
-    border-radius: 11px; padding: 10px 16px; }
-QPushButton#libraryUse:hover { background: #44364f; }
-QPushButton#libraryUse:disabled { color: #a4a0b0; border-color: #393641; background: #25242b; }
-QPushButton#libraryRemove { background: transparent; color: #b2a4bb; border: 0;
+    background: transparent; color: #999aaa; padding: 8px 12px; font-size: 11px; }
+QPushButton#libraryTab:hover { background: rgba(255, 255, 255, 8); color: #f5f3fa; }
+QPushButton#libraryTab:checked { border-color: rgba(222, 209, 255, 28);
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 rgba(196, 180, 248, 35), stop:1 rgba(196, 180, 248, 15)); color: #e3d9ff; }
+QPushButton#libraryTab:focus { border-color: #c4b4f8; }
+QPushButton#libraryClose { background: rgba(255, 255, 255, 7); color: #c3bfd1;
+    border: 1px solid rgba(255, 255, 255, 18); border-radius: 11px; padding: 0; font-size: 19px; }
+QPushButton#libraryClose:hover { background: rgba(196, 180, 248, 22); color: #f5f3fa; }
+QPushButton#libraryPause { background: rgba(255, 255, 255, 7); color: #c3bfd1;
+    border: 1px solid rgba(255, 255, 255, 18); border-radius: 12px; padding: 9px 12px; font-size: 11px; }
+QPushButton#libraryPause:hover { background: rgba(196, 180, 248, 18); }
+QPushButton#libraryPause:checked { background: rgba(196, 180, 248, 25); border-color: rgba(196, 180, 248, 80); }
+QPushButton#libraryAdd { background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+    stop:0 #d5c8ff, stop:1 #bba8f2); color: #211d30; border: 1px solid rgba(255, 255, 255, 80);
+    border-radius: 12px; padding: 10px 12px; font-size: 11px; font-weight: 600; }
+QPushButton#libraryAdd:hover { background: #ded3ff; border-color: #f1ebff; }
+QPushButton#libraryAdd:disabled { background: rgba(175, 219, 194, 11); color: #a8c7b6; border-color: rgba(175, 219, 194, 30); }
+QPushButton#libraryUse { background: rgba(255, 255, 255, 9); color: #e2dced; border: 1px solid rgba(255, 255, 255, 30);
+    border-radius: 12px; padding: 10px 12px; font-size: 11px; }
+QPushButton#libraryUse:hover { background: rgba(196, 180, 248, 28); border-color: rgba(196, 180, 248, 75); }
+QPushButton#libraryUse:disabled { color: #878492; border-color: rgba(255, 255, 255, 10); background: rgba(255, 255, 255, 3); }
+QPushButton#libraryRemove { background: transparent; color: #9d91aa; border: 0;
     font-size: 10px; padding: 6px 2px; text-align: left; }
 QPushButton#libraryRemove:hover { color: #ebadbd; }
-QLineEdit#librarySearch { background: #1d1f29; border: 1px solid #38394a;
-    border-radius: 11px; padding: 9px 13px; color: #e1dbea; font-size: 11px; }
-QLineEdit#librarySearch:focus { border-color: #a690ca; }
-QScrollArea#libraryScroll, QWidget#libraryGrid, QWidget#libraryViewport { background: transparent; border: 0; }
-QScrollBar:vertical { background: transparent; width: 6px; margin: 4px 0; }
-QScrollBar::handle:vertical { background: #4a455d; border-radius: 3px; min-height: 32px; }
+QLineEdit#librarySearch { background: rgba(5, 6, 12, 65); border: 1px solid rgba(255, 255, 255, 16);
+    border-radius: 10px; padding: 8px 12px; color: #e1dbea; font-size: 11px; selection-background-color: #675a8c; }
+QLineEdit#librarySearch:focus { border-color: rgba(196, 180, 248, 125); background: rgba(5, 6, 12, 95); }
+QScrollArea#libraryScroll, QScrollArea#libraryDetailScroll, QWidget#libraryDetailBody,
+QWidget#libraryGrid, QWidget#libraryViewport, QWidget#libraryDetailViewport { background: transparent; border: 0; }
+QScrollBar:vertical { background: transparent; width: 5px; margin: 4px 0; }
+QScrollBar::handle:vertical { background: rgba(206, 198, 229, 55); border-radius: 2px; min-height: 32px; }
+QScrollBar::handle:vertical:hover { background: rgba(206, 198, 229, 110); }
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
 QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
-QSplitter::handle { background: transparent; width: 16px; }
-QPushButton:focus { border-color: #cdb3f2; }
+QSplitter::handle { background: transparent; width: 18px; }
+QPushButton:focus { border-color: #c4b4f8; }
 """
 
 _SAMPLE = Lyrics([
@@ -373,9 +383,9 @@ class ModePreview(QWidget):
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
         clip = QPainterPath()
-        clip.addRoundedRect(QRectF(self.rect()), 11, 11)
+        clip.addRoundedRect(QRectF(self.rect()), 15, 15)
         p.setClipPath(clip)
-        p.fillRect(self.rect(), QColor("#0a101a"))
+        p.fillRect(self.rect(), QColor("#0c0e17"))
         p.save()
         scale = min(self.width() / 1000., self.height() / 625.)
         p.translate((self.width() - 1000 * scale) / 2, (self.height() - 625 * scale) / 2)
@@ -401,7 +411,7 @@ class ModePreview(QWidget):
             badge = QRectF(self.width() - width - 9, 9, width, 20)
             tone = QColor("#c0e5d5") if self.badge_tone == "added" else QColor("#d8c5f5")
             p.setPen(QPen(_alpha(tone, .23), 1))
-            p.setBrush(QColor(19, 24, 33, 220))
+            p.setBrush(QColor(20, 22, 31, 215))
             p.drawRoundedRect(badge, 7, 7)
             p.setPen(tone)
             p.drawText(badge, Qt.AlignmentFlag.AlignCenter, self.badge)
@@ -429,6 +439,8 @@ class ModeCard(QAbstractButton):
 
     def set_hover(self, value):
         self._hover = value
+        if hasattr(self, "preview"):
+            self.preview.move(10, round(10 - 2 * self._hover))
         self.update()
 
     hover = Property(float, get_hover, set_hover)
@@ -451,10 +463,10 @@ class ModeCard(QAbstractButton):
         super().leaveEvent(event)
 
     def resizeEvent(self, event):
-        width = max(1, self.width() - 18)
+        width = max(1, self.width() - 20)
         preview_height = round(width * .625)
-        self.preview.setGeometry(9, 9, width, preview_height)
-        desired = preview_height + 99
+        self.preview.setGeometry(10, round(10 - 2 * self._hover), width, preview_height)
+        desired = preview_height + 101
         if self.height() != desired:
             self.setFixedHeight(desired)
         super().resizeEvent(event)
@@ -471,18 +483,31 @@ class ModeCard(QAbstractButton):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         rect = QRectF(self.rect()).adjusted(.7, .7, -.7, -.7)
-        base = QColor("#282333") if self.isChecked() else QColor("#1b1d27")
-        border = QColor("#ad8dd5") if self.isChecked() else _alpha(QColor("#aa98c5"), .22 + self._hover * .28)
+        gradient = QLinearGradient(rect.topLeft(), rect.bottomRight())
+        gradient.setColorAt(0, QColor(57, 48, 78, 190) if self.isChecked()
+                            else QColor(40, 41, 54, round(185 + 30 * self._hover)))
+        gradient.setColorAt(.48, QColor(31, 29, 44, 190) if self.isChecked()
+                            else QColor(27, 29, 40, 185))
+        gradient.setColorAt(1, QColor(28, 30, 41, 220))
+        border = _alpha(QColor("#c4b4f8"), .65) if self.isChecked() else _alpha(QColor("#e9e3fb"), .11 + self._hover * .20)
         if self.hasFocus():
-            border = QColor("#ddc5ff")
+            border = QColor("#ddd1ff")
         p.setPen(QPen(border, 1.25 if self.isChecked() or self.hasFocus() else 1))
-        p.setBrush(base)
-        p.drawRoundedRect(rect, 15, 15)
-        y = self.preview.geometry().bottom() + 9
+        p.setBrush(gradient)
+        p.drawRoundedRect(rect, 22, 22)
+        # A fine inner reflection keeps the dark cards glassy without costly blur.
+        sheen = QLinearGradient(rect.topLeft(), rect.bottomRight())
+        sheen.setColorAt(0, QColor(255, 255, 255, round(20 + 12 * self._hover)))
+        sheen.setColorAt(.32, QColor(255, 255, 255, 2))
+        sheen.setColorAt(1, QColor(255, 255, 255, 0))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.setPen(QPen(sheen, 1))
+        p.drawRoundedRect(rect.adjusted(1.5, 1.5, -1.5, -1.5), 20, 20)
+        y = 10 + self.preview.height() + 8
         _text(p, QRectF(14, y, self.width() - 28, 24), self.spec.title, 15,
-              QColor("#efebf8"), QFont.Weight.DemiBold)
+              QColor("#f5f3fa"), QFont.Weight.DemiBold)
         _text(p, QRectF(14, y + 24, self.width() - 28, 17), MODE_TITLES[self.spec.kind].upper(),
-              8, QColor("#9f90b9"), QFont.Weight.DemiBold)
+              8, QColor("#b0a3cf"), QFont.Weight.DemiBold)
         p.save()
         desc = QRectF(14, y + 45, self.width() - 28, 29)
         p.setClipRect(desc)
@@ -497,15 +522,19 @@ class ModeLibrary(QDialog):
     CATEGORIES = (("all", "All modes"), ("lyrics", "Lyrics"), ("scenes", "Immersive"),
                   ("halo", "Halo light"), ("mine", "My modes"))
 
-    def __init__(self, owner, controller):
+    def __init__(self, owner, controller, embedded=False):
         super().__init__(owner)
         self.owner, self.c = owner, controller
-        self.setObjectName("modeLibrary")
+        self.embedded = bool(embedded)
+        if self.embedded:
+            self.setWindowFlags(Qt.WindowType.Widget)
+        self.setObjectName("embeddedModes" if self.embedded else "modeLibrary")
         self.setWindowTitle("Halo · Modes")
         self.setWindowIcon(owner.windowIcon())
         self.setStyleSheet(LIBRARY_STYLE)
-        self.setMinimumSize(900, 600)
-        self.resize(1320, 840)
+        if not self.embedded:
+            self.setMinimumSize(900, 600)
+            self.resize(1320, 840)
         self.clock = _PreviewClock()
         self.category = "all"
         priority = {"lyrics": 0, "scenes": 1, "halo": 2}
@@ -519,14 +548,16 @@ class ModeLibrary(QDialog):
         self._positioned = False
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(26, 20, 26, 16)
-        root.setSpacing(16)
+        root.setContentsMargins(26, 22, 26, 16)
+        root.setSpacing(16 if not self.embedded else 12)
         heading = QHBoxLayout()
         title_group = QVBoxLayout()
         title_group.setSpacing(3)
-        title_group.addWidget(_label("MAKE ROOM FOR SOMETHING DIFFERENT", "libraryEyebrow"))
-        title_group.addWidget(_label("Find your next atmosphere.", "libraryTitle"))
-        title_group.addWidget(_label("Places, words and light. Preview a mode, then make it yours.", "librarySubtitle"))
+        title_group.addWidget(_label("THE COLLECTION", "libraryEyebrow"))
+        title_group.addWidget(_label("Find your atmosphere.", "libraryTitle"))
+        subtitle = _label("A different way to feel your music. Make it yours.", "librarySubtitle")
+        subtitle.setWordWrap(True)
+        title_group.addWidget(subtitle)
         heading.addLayout(title_group, 1)
         self.pause_button = QPushButton("Ⅱ  Pause previews")
         self.pause_button.setObjectName("libraryPause")
@@ -534,16 +565,20 @@ class ModeLibrary(QDialog):
         self.pause_button.setAccessibleName("Pause live mode previews")
         self.pause_button.toggled.connect(self._pause_changed)
         heading.addWidget(self.pause_button, 0, Qt.AlignmentFlag.AlignVCenter)
-        self.close_button = QPushButton("×")
+        self.close_button = QPushButton("‹" if self.embedded else "×")
         self.close_button.setObjectName("libraryClose")
         self.close_button.setFixedSize(34, 34)
-        self.close_button.setAccessibleName("Close Modes")
+        self.close_button.setAccessibleName("Back to listening" if self.embedded else "Close Modes")
+        self.close_button.setToolTip("Back to listening · Esc" if self.embedded else "Close Modes · Esc")
         self.close_button.clicked.connect(self.reject)
         heading.addWidget(self.close_button, 0, Qt.AlignmentFlag.AlignTop)
         root.addLayout(heading)
 
-        toolbar = QHBoxLayout()
-        toolbar.setSpacing(5)
+        toolbar_frame = QFrame()
+        toolbar_frame.setObjectName("libraryToolbar")
+        toolbar = QHBoxLayout(toolbar_frame)
+        toolbar.setContentsMargins(5, 5, 5, 5)
+        toolbar.setSpacing(3)
         self.category_buttons = {}
         for key, title in self.CATEGORIES:
             button = QPushButton(title)
@@ -559,11 +594,11 @@ class ModeLibrary(QDialog):
         self.search.setPlaceholderText("Search modes…")
         self.search.setClearButtonEnabled(True)
         self.search.setAccessibleName("Search modes")
-        self.search.setMinimumWidth(150)
+        self.search.setMinimumWidth(130)
         self.search.setMaximumWidth(260)
         self.search.textChanged.connect(self.refresh_filter)
         toolbar.addWidget(self.search, 1)
-        root.addLayout(toolbar)
+        root.addWidget(toolbar_frame)
 
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
         self.splitter.setChildrenCollapsible(False)
@@ -593,35 +628,48 @@ class ModeLibrary(QDialog):
         self.empty_label.setWordWrap(True)
         left_layout.addWidget(self.scroll, 1)
         left_layout.addWidget(self.empty_label)
-        left.setMinimumWidth(310)
+        left.setMinimumWidth(280 if self.embedded else 310)
         self.splitter.addWidget(left)
 
         self.detail = QFrame()
         self.detail.setObjectName("libraryDetail")
-        self.detail.setMinimumWidth(330)
+        self.detail.setMinimumWidth(290 if self.embedded else 330)
         detail = QVBoxLayout(self.detail)
         detail.setContentsMargins(18, 18, 18, 16)
         detail.setSpacing(10)
+        self.detail_scroll = QScrollArea()
+        self.detail_scroll.setObjectName("libraryDetailScroll")
+        self.detail_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.detail_scroll.setWidgetResizable(True)
+        self.detail_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.detail_scroll.viewport().setObjectName("libraryDetailViewport")
+        self.detail_body = QWidget()
+        self.detail_body.setObjectName("libraryDetailBody")
+        self.body_layout = QVBoxLayout(self.detail_body)
+        self.body_layout.setContentsMargins(0, 0, 2, 0)
+        self.body_layout.setSpacing(10)
         stage_heading = QHBoxLayout()
         self.detail_category = _label("", "libraryEyebrow")
         stage_heading.addWidget(self.detail_category)
         stage_heading.addStretch()
         stage_heading.addWidget(_label("LIVE PREVIEW", "libraryEyebrow"))
-        detail.addLayout(stage_heading)
+        self.body_layout.addLayout(stage_heading)
         self.selected_preview = ModePreview(controller, self.clock, self.selected, self.detail)
         self.selected_preview.setMinimumHeight(120)
         self.selected_preview.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        detail.addWidget(self.selected_preview)
+        self.body_layout.addWidget(self.selected_preview)
         self.detail_title = _label("", "libraryDetailTitle")
-        detail.addWidget(self.detail_title)
+        self.body_layout.addWidget(self.detail_title)
         self.description = _label("", "libraryDescription")
         self.description.setWordWrap(True)
         self.description.setMinimumHeight(28)
-        detail.addWidget(self.description)
+        self.body_layout.addWidget(self.description)
         self.state_label = _label("", "libraryState")
         self.state_label.setWordWrap(True)
-        detail.addWidget(self.state_label)
-        detail.addStretch(1)
+        self.body_layout.addWidget(self.state_label)
+        self.body_layout.addStretch(1)
+        self.detail_scroll.setWidget(self.detail_body)
+        detail.addWidget(self.detail_scroll, 1)
         self.add_button = QPushButton("Add to my modes")
         self.add_button.setObjectName("libraryAdd")
         self.add_button.clicked.connect(self.add_selected)
@@ -643,7 +691,7 @@ class ModeLibrary(QDialog):
         self.splitter.addWidget(self.detail)
         self.splitter.setStretchFactor(0, 3)
         self.splitter.setStretchFactor(1, 2)
-        self.splitter.setSizes([720, 460])
+        self.splitter.setSizes([520, 340] if self.embedded else [720, 460])
         self.splitter.splitterMoved.connect(self._fit_detail)
         root.addWidget(self.splitter, 1)
         self.status_label = _label("Added modes appear automatically in their mode selectors.", "libraryFooter")
@@ -657,6 +705,10 @@ class ModeLibrary(QDialog):
         self.timer = QTimer(self)
         self.timer.setInterval(33)
         self.timer.timeout.connect(self.tick)
+        if self.embedded:
+            owner.installEventFilter(self)
+        for button in self.findChildren(QPushButton):
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
         controller.modeLibraryChanged.connect(self.refresh_collection)
         controller.settingChanged.connect(self.sync_state)
         if hasattr(controller, "paletteChanged"):
@@ -693,7 +745,7 @@ class ModeLibrary(QDialog):
 
     def reflow(self):
         width = max(1, self.scroll.viewport().width())
-        columns = 2 if width >= 540 else 1
+        columns = 2 if width >= 420 else 1
         while self.grid.count():
             item = self.grid.takeAt(0)
             if item.widget():
@@ -746,7 +798,7 @@ class ModeLibrary(QDialog):
             self.selected_preview._reveal = 1.
             for card in self.cards.values():
                 card.hover_animation.stop()
-                card._hover = 0.
+                card.set_hover(0.)
         self._sync_timer()
         self.sync_preview_note()
 
@@ -797,7 +849,7 @@ class ModeLibrary(QDialog):
         self.repaint_previews()
 
     def _sync_timer(self):
-        run = (self.isVisible() and not self.isMinimized() and self.clock.running
+        run = (self.isVisible() and not self.window().isMinimized() and self.clock.running
                and (self.selected_preview.proxy.uses_live or not getattr(self.c, "reduced_motion", False)))
         if run and not self.timer.isActive():
             self.clock.last = None
@@ -815,7 +867,7 @@ class ModeLibrary(QDialog):
 
     def tick(self):
         live = self.selected_preview.proxy.uses_live
-        if (not self.isVisible() or self.isMinimized() or not self.clock.running
+        if (not self.isVisible() or self.window().isMinimized() or not self.clock.running
                 or (getattr(self.c, "reduced_motion", False) and not live)):
             self._sync_timer()
             return
@@ -830,8 +882,11 @@ class ModeLibrary(QDialog):
                 card.preview.update()
 
     def eventFilter(self, obj, event):
+        if self.embedded and obj is self.owner and event.type() in (
+                QEvent.Type.WindowStateChange, QEvent.Type.Show, QEvent.Type.Hide):
+            QTimer.singleShot(0, self, self._sync_timer)
         if obj is self.scroll.viewport() and event.type() == QEvent.Type.Resize:
-            columns = 2 if self.scroll.viewport().width() >= 540 else 1
+            columns = 2 if self.scroll.viewport().width() >= 420 else 1
             if columns != self._columns:
                 QTimer.singleShot(0, self, self.reflow)
         return super().eventFilter(obj, event)
@@ -852,6 +907,7 @@ class ModeLibrary(QDialog):
         layout.setContentsMargins(14 if compact else 18, 12 if compact else 18,
                                   14 if compact else 18, 12 if compact else 16)
         layout.setSpacing(7 if compact else 10)
+        self.body_layout.setSpacing(7 if compact else 10)
         self.preview_note.setVisible(not compact)
         self.description.setMaximumHeight(38 if compact else 80)
         width = max(1, self.detail.width() - (28 if compact else 36))
@@ -861,7 +917,7 @@ class ModeLibrary(QDialog):
 
     def showEvent(self, event):
         super().showEvent(event)
-        if not self._positioned:
+        if not self._positioned and not self.embedded:
             self._positioned = True
             available = (self.owner.screen() or self.screen()).availableGeometry()
             self.resize(min(self.width(), available.width() - 36), min(self.height(), available.height() - 52))
@@ -879,12 +935,13 @@ class ModeLibrary(QDialog):
         self.selected_preview._reveal = 1.
         for card in self.cards.values():
             card.hover_animation.stop()
-            card._hover = 0.
+            card.set_hover(0.)
         super().hideEvent(event)
 
     def open_page(self, kind="all"):
         self.search.clear()
         self.set_category(kind)
         self.show()
-        self.raise_()
-        self.activateWindow()
+        if not self.embedded:
+            self.raise_()
+            self.activateWindow()

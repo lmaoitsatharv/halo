@@ -42,8 +42,12 @@ class SettingsStudioTests(unittest.TestCase):
         self.temp.cleanup()
 
     def open_studio(self):
+        # The live preview is responsive; use the default workspace size so
+        # it is shown whatever the host screen's size is.
+        self.window.resize(1280, 800)
         QTest.mouseClick(self.window.settings_button, Qt.MouseButton.LeftButton)
         self.app.processEvents()
+        self.assertTrue(self.studio.preview.isVisible())
 
     def test_familiar_settings_entry_opens_general_and_navigation_changes_preview(self):
         self.open_studio()
@@ -51,11 +55,18 @@ class SettingsStudioTests(unittest.TestCase):
         self.assertEqual(self.studio.section, "general")
         self.assertEqual(self.studio.pages.currentIndex(), 0)
         self.assertEqual(self.window.settings_shortcut.key().toString(), "Ctrl+,")
+        self.assertFalse(self.studio.sidebar.isVisible())
+        self.assertFalse(self.studio.selection.isVisible())
         for index, (key, title, _) in enumerate(self.studio.SECTIONS):
-            QTest.mouseClick(self.studio.nav_buttons[index], Qt.MouseButton.LeftButton)
+            visible_key = "settings" if key == "general" else key
+            button = self.window.nav_buttons[visible_key]
+            self.assertTrue(button.isVisible())
+            QTest.mouseClick(button, Qt.MouseButton.LeftButton)
             self.assertEqual(self.studio.section, key)
             self.assertEqual(self.studio.page_title.text(), title)
             self.assertEqual(self.studio.preview.scene.section, key)
+            self.assertTrue(button.isChecked())
+            self.assertFalse(self.studio.nav_buttons[index].isVisible())
         self.studio.close()
         self.open_studio()
         self.assertEqual(self.studio.section, "general")
@@ -98,19 +109,22 @@ class SettingsStudioTests(unittest.TestCase):
         self.open_studio()
         self.studio.select(1)
         self.assertEqual(self.studio.curtain.animation.state(), QAbstractAnimation.State.Running)
-        self.assertEqual(self.studio.nav_animation.state(), QAbstractAnimation.State.Running)
+        self.assertEqual(self.studio.nav_animation.state(), QAbstractAnimation.State.Stopped)
+        self.assertTrue(self.window.nav_buttons["halo"].isChecked())
         self.assertEqual(self.studio.preview.transition.animation.state(), QAbstractAnimation.State.Running)
         QTest.qWait(300)
         self.assertFalse(self.studio.curtain.isVisible())
-        self.assertEqual(self.studio.selection.geometry(), self.studio.nav_buttons[1].geometry())
+        self.assertFalse(self.studio.selection.isVisible())
         self.studio.select(2)
+        self.assertTrue(self.window.nav_buttons["lyrics"].isChecked())
         self.c.set("reduced_motion", True)
         self.assertEqual(self.studio.curtain.animation.state(), QAbstractAnimation.State.Stopped)
         self.assertEqual(self.studio.nav_animation.state(), QAbstractAnimation.State.Stopped)
         self.assertEqual(self.studio.preview.transition.animation.state(), QAbstractAnimation.State.Stopped)
         self.studio.select(3)
         self.assertFalse(self.studio.curtain.isVisible())
-        self.assertEqual(self.studio.selection.geometry(), self.studio.nav_buttons[3].geometry())
+        self.assertTrue(self.window.nav_buttons["scenes"].isChecked())
+        self.assertFalse(self.studio.selection.isVisible())
 
     def test_preview_stops_when_closed_and_escape_returns_to_main(self):
         self.open_studio()

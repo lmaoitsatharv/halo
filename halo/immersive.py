@@ -15,6 +15,7 @@ from .taskbar import allow_taskbar_reveal
 from .backgrounds import BackgroundRenderer
 from .lyric_rendering import LYRIC_STYLES, canonical_lyric_style
 from .mode_catalog import available_specs
+from .glass import GlassSlider
 from .scene_extras import EXTRA_SCENES, SCENE_CAPTIONS, extra_scene_layout, paint_extra_scene
 
 
@@ -27,29 +28,30 @@ IMMERSIVE_SCENES = (
 
 
 SCENE_STYLE = """
-QWidget#immersiveRoom { color: #edf3ed; font-family: 'Segoe UI'; }
+QWidget#immersiveRoom { color: #f5f3fa; font-family: 'Segoe UI Variable', 'Segoe UI'; }
 QLabel { background: transparent; }
-QLabel#roomBrand { color: #e5eee7; font-size: 15px; font-weight: 600; letter-spacing: 5px; }
-QLabel#roomCaption { color: #a2b5ac; font-size: 10px; letter-spacing: 2px; }
-QLabel#roomSong { color: #f2f5ef; font-weight: 600; }
-QLabel#roomArtist { color: #b9c8c0; font-size: 15px; }
-QLabel#roomAlbum { color: #82968d; font-size: 11px; }
-QLabel#roomStatus { color: #81968c; font-size: 10px; }
-QFrame#roomPlayer { background: rgba(12, 20, 20, 205); border: 1px solid rgba(208, 229, 218, 34); border-radius: 28px; }
-QPushButton#roomExit { background: rgba(18, 29, 28, 140); color: #cedbd3; border: 1px solid rgba(208, 229, 218, 32); border-radius: 14px; padding: 7px 13px; font-size: 11px; }
-QPushButton#roomExit:hover { background: rgba(203, 230, 214, 22); border-color: rgba(208, 229, 218, 80); }
-QPushButton#roomControl { background: transparent; border: none; border-radius: 22px; padding: 0; color: #c9d8cf; font-size: 27px; }
-QPushButton#roomControl:hover { background: rgba(225, 244, 232, 18); }
-QPushButton#roomPlay { background: #e4eddd; color: #13241c; border: none; border-radius: 23px; padding: 0; font-size: 17px; }
-QPushButton#roomPlay:hover { background: #f5ffee; }
-QPushButton:disabled { color: #63746d; }
-QComboBox#roomSelect { color: #c6d4cc; background: rgba(16, 26, 25, 165); border: 1px solid rgba(205, 226, 215, 30); border-radius: 12px; padding: 7px 12px; font-size: 11px; }
-QComboBox#roomSelect:hover { background: rgba(41, 61, 54, 150); border-color: rgba(205, 226, 215, 65); }
+QLabel#roomBrand { color: #f3effb; font-size: 15px; font-weight: 600; letter-spacing: 5px; }
+QLabel#roomCaption { color: #aaa4b8; font-size: 10px; letter-spacing: 2px; }
+QLabel#roomSong { color: #f5f3fa; font-weight: 600; }
+QLabel#roomArtist { color: #c9c2d4; font-size: 15px; }
+QLabel#roomAlbum { color: #9892a5; font-size: 11px; }
+QLabel#roomStatus { color: #9892a5; font-size: 10px; }
+QFrame#roomPlayer { background: rgba(24, 24, 32, 214); border: 1px solid rgba(240, 232, 255, 38); border-radius: 28px; }
+QPushButton#roomExit { background: rgba(28, 27, 37, 165); color: #ded7eb; border: 1px solid rgba(240, 232, 255, 36); border-radius: 14px; padding: 7px 13px; font-size: 11px; }
+QPushButton#roomExit:hover { background: rgba(205, 187, 240, 28); border-color: rgba(229, 214, 255, 90); }
+QPushButton#roomControl { background: transparent; border: none; border-radius: 22px; padding: 0; color: #d9d1e4; font-size: 27px; }
+QPushButton#roomControl:hover { background: rgba(229, 214, 255, 22); }
+QPushButton#roomPlay { background: #d9cdfa; color: #241b35; border: none; border-radius: 23px; padding: 0; font-size: 17px; }
+QPushButton#roomPlay:hover { background: #eee5ff; }
+QPushButton:focus { border: 1px solid #c4b4f8; }
+QPushButton:disabled { color: #716b7d; }
+QComboBox#roomSelect { color: #d3cbdf; background: rgba(26, 25, 35, 190); border: 1px solid rgba(240, 232, 255, 34); border-radius: 12px; padding: 7px 12px; font-size: 11px; }
+QComboBox#roomSelect:hover { background: rgba(57, 49, 72, 190); border-color: rgba(229, 214, 255, 72); }
 QComboBox#roomSelect::drop-down { border: none; width: 24px; }
-QComboBox QAbstractItemView { background: #14221e; color: #e5eee7; border: 1px solid #3a5147; selection-background-color: #304a3f; padding: 4px; }
-QSlider::groove:horizontal { height: 3px; background: rgba(188, 211, 197, 32); border-radius: 1px; }
-QSlider::sub-page:horizontal { background: #bdcfaf; border-radius: 1px; }
-QSlider::handle:horizontal { width: 9px; margin: -4px 0; border-radius: 4px; background: #e4eddd; }
+QComboBox QAbstractItemView { background: #1b1923; color: #f0eaf8; border: 1px solid #494053; selection-background-color: #433550; padding: 4px; }
+QSlider::groove:horizontal { height: 3px; background: rgba(222, 209, 241, 34); border-radius: 1px; }
+QSlider::sub-page:horizontal { background: #c7b7f0; border-radius: 1px; }
+QSlider::handle:horizontal { width: 9px; margin: -4px 0; border-radius: 4px; background: #eee5ff; }
 """
 
 
@@ -66,13 +68,18 @@ class Immersive(QWidget):
     modesRequested = Signal()
     IDLE_INTERVAL = 1500
 
-    def __init__(self, controller):
-        super().__init__()
+    def __init__(self, controller, parent=None, embedded=False):
+        super().__init__(parent)
         self.controller = controller
+        self.embedded = embedded
         self.setObjectName("immersiveRoom")
         self.setWindowTitle("Halo · immersive listening")
-        self.setWindowFlag(Qt.WindowType.FramelessWindowHint)
-        self.setMinimumSize(800, 580)
+        if embedded:
+            self.setWindowFlags(Qt.WindowType.Widget)
+            self.setMinimumSize(0, 0)
+        else:
+            self.setWindowFlag(Qt.WindowType.FramelessWindowHint)
+            self.setMinimumSize(800, 580)
         self.setStyleSheet(SCENE_STYLE)
         self.scene = "studio"
         self.scene_key = None
@@ -161,7 +168,7 @@ class Immersive(QWidget):
         self.elapsed.setMinimumWidth(32)
         self.total.setMinimumWidth(32)
         player_layout.addWidget(self.elapsed)
-        self.progress = QSlider(Qt.Orientation.Horizontal, self.player)
+        self.progress = GlassSlider(Qt.Orientation.Horizontal, self.player)
         self.progress.setRange(0, 1000)
         self.progress.setAccessibleName("Track position")
         self.progress.sliderReleased.connect(self._seek)
@@ -201,6 +208,10 @@ class Immersive(QWidget):
         for widget in [self, *self.findChildren(QWidget), *popup_widgets]:
             widget.setMouseTracking(True)
             widget.installEventFilter(self)
+        if embedded and parent is not None:
+            # Activation and minimization belong to the containing app window.
+            # A child page does not receive the window-state events itself.
+            self.window().installEventFilter(self)
         controller.trackChanged.connect(self.changed)
         controller.lyricsChanged.connect(self.changed)
         controller.settingChanged.connect(self.changed)
@@ -208,7 +219,8 @@ class Immersive(QWidget):
             controller.modeLibraryChanged.connect(self._refresh_mode_options)
         if hasattr(controller, "backgroundChanged"):
             controller.backgroundChanged.connect(self._sync_background)
-        self.resize(1280, 800)
+        if not embedded:
+            self.resize(1280, 800)
         self.changed()
 
     def _populate_styles(self):
@@ -256,7 +268,9 @@ class Immersive(QWidget):
         self.backgroundRequested.emit()
 
     def _sync_background(self):
-        self.media_background.sync(self.controller, active=self.isVisible() and self.isActiveWindow())
+        host = self.window()
+        self.media_background.sync(self.controller, active=(
+            self.isVisible() and host.isActiveWindow() and not host.isMinimized()))
         self.background_button.setToolTip(self.media_background.status or "Choose a wallpaper, video or album artwork")
         self.update()
 
@@ -444,7 +458,7 @@ class Immersive(QWidget):
         self._arrange()
 
     def event(self, event):
-        if event.type() == QEvent.Type.WinIdChange:
+        if event.type() == QEvent.Type.WinIdChange and not getattr(self, "embedded", False):
             allow_taskbar_reveal(self.effectiveWinId())
         return super().event(event)
 
@@ -473,6 +487,11 @@ class Immersive(QWidget):
 
     def eventFilter(self, obj, event):
         kind = event.type()
+        host_event = self.embedded and obj is self.window()
+        if host_event and kind not in (QEvent.Type.WindowActivate,
+                                       QEvent.Type.WindowDeactivate,
+                                       QEvent.Type.WindowStateChange):
+            return super().eventFilter(obj, event)
         if kind == QEvent.Type.MouseMove:
             position = event.globalPosition()
             point = (position.x(), position.y())
@@ -504,15 +523,24 @@ class Immersive(QWidget):
                 self._wake_chrome()
         elif kind == QEvent.Type.FocusOut:
             QTimer.singleShot(0, self._focus_changed)
-        elif obj is self and kind == QEvent.Type.WindowDeactivate:
+        elif (obj is self or host_event) and kind == QEvent.Type.WindowDeactivate:
             self.media_background.set_active(False)
             self._pointer_pressed = False
             self._pressed_keys.clear()
             self._keyboard_navigation = False
             self._wake_chrome()
-        elif obj is self and kind == QEvent.Type.WindowActivate:
+        elif (obj is self or host_event) and kind == QEvent.Type.WindowActivate:
             self._sync_background()
-            self._wake_chrome()
+            if self.isVisible():
+                self._wake_chrome()
+        elif host_event and kind == QEvent.Type.WindowStateChange:
+            if obj.isMinimized():
+                self.media_background.set_active(False)
+                self._set_cursor_hidden(False)
+                self.idle.stop()
+            elif self.isVisible():
+                self._sync_background()
+                self._wake_chrome()
         elif obj in self._popup_widgets and kind in (QEvent.Type.Show, QEvent.Type.Hide):
             # Closing a menu starts a fresh quiet interval rather than using
             # the already-expired timeout from while the menu was open.
@@ -538,7 +566,7 @@ class Immersive(QWidget):
         self._set_cursor_hidden(False)
         self._fade_chrome(True)
         self._idle_deferred = False
-        if self.isVisible():
+        if self.isVisible() and not self.window().isMinimized():
             self.idle.start(self.IDLE_INTERVAL)
 
     def _hide_chrome(self):
@@ -557,7 +585,7 @@ class Immersive(QWidget):
         if hidden == self._cursor_hidden:
             return
         if hidden:
-            if not self.isVisible() or not self.isActiveWindow():
+            if not self.isVisible() or not self.window().isActiveWindow() or self.window().isMinimized():
                 return
             # Children such as the lyric canvas have their own hand cursor.
             # Save explicit/inherited cursors before blanking this window only.

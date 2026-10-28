@@ -9,6 +9,7 @@ from PySide6.QtGui import QColor, QImage, QPainter
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
+from qt_support import ensure_system_fonts
 from halo.extra_lyrics import EXTRA_LYRIC_STYLES, LINE_BASED_STYLES, paint_lyric_mode
 from halo.lyric_rendering import WordTimeline
 from halo.models import Lyrics, LyricLine, Track
@@ -38,6 +39,7 @@ class ExtraLyricTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
+        ensure_system_fonts()
 
     def controller(self, style="lyric_monument"):
         return SimpleNamespace(

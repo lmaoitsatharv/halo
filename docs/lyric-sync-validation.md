@@ -1,5 +1,7 @@
 # Lyric synchronization update — 17 October 2026
 
+> Historical record of the 17 October 2026 update. Its test count (205) and window sizes describe that build. The lyric timing and source controls it covers are now found under **Lyrics → Timing & lyrics** in Halo's sidebar (0.4.0 single-window redesign).
+
 The three implementation tasks were assigned separately, followed by two independent testing agents. All **205 native regression tests passed**, and the existing native UI lifecycle check passed: settings, floating/minimized lyrics, seeking, pause, immersive entry/exit, responsive layout, stale results and worker shutdown.
 
 ## What changed

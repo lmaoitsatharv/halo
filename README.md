@@ -2,6 +2,8 @@
 
 A Windows companion for the **Spotify desktop app**, inspired by ambient music lighting and desktop lyrics. Independent software; not affiliated with Spotify, Lumn or Verci.
 
+> **Version:** this guide describes **Halo 0.4.0**, an unreleased preview of the single-window dark-glass redesign. The latest public release is **v0.3.0**. Until 0.4.0 is published, the download link below provides v0.3.0, whose interface differs: Settings opens in its own window from a gear at the top-right (with General, Halo, Lyrics and Immersive sections), and Modes opens from the top bar.
+
 ## Download for Windows
 
 ### [Download Halo for Windows (.zip)](https://github.com/lmaoitsatharv/halo/releases/latest/download/Halo-Windows-x64.zip)
@@ -11,9 +13,9 @@ Windows 10 (1809+) or Windows 11 · 64-bit · Portable · No Python or GitHub ac
 1. Click **Download Halo for Windows** above and save **Halo-Windows-x64.zip**.
 2. Right-click the downloaded ZIP → **Extract All…** → **Extract**.
 3. Open the extracted **Halo** folder and double-click **Halo.exe** (Windows may show it as **Halo**, type **Application**).
-4. Play a song in the **Spotify desktop app**. Open the **Settings** gear at the top-right to customize Halo.
+4. Play a song in the **Spotify desktop app**. Choose **Settings** in the sidebar to customize Halo.
 
-Keep **Halo.exe**, **_internal** and **licenses** together in the extracted folder. Run the app from that folder, after extraction. No installation is needed. To quit completely, right-click the Halo icon in the system tray → **Quit**.
+Keep **Halo.exe**, **_internal** and **licenses** together in the extracted folder. Run the app from that folder, after extraction. No installation is needed. To quit completely, right-click the Halo icon in the system tray → **Quit Halo**.
 
 **Updating?** Quit Halo from its tray icon, extract the new ZIP into a fresh folder, then open the new **Halo.exe**. Your saved preferences are kept separately in Windows.
 
@@ -21,10 +23,15 @@ Keep **Halo.exe**, **_internal** and **licenses** together in the extracted fold
 
 ![Halo desktop app showing its original visual demo](docs/images/halo-desktop.png)
 
-## What's new
+## What's new in 0.4.0 (preview)
+
+- **A new dark glass workspace:** a persistent sidebar, spacious listening view, smooth hover effects and a player that remains available across pages. The window keeps the standard Windows title bar and controls.
+- **Everything in one app window:** Settings, Modes and immersive listening share the same window instead of opening separate windows. Lyric placement, lyric matching and colour pickers appear in inset sheets.
+- Settings opens on **General**; **Lighting**, **Lyrics** and **Immersive** are available directly in the sidebar, with live previews.
+
+Earlier highlights, already in v0.3.0 or before:
 
 - **Modes library:** browse 21 live lyric, immersive and light previews, following the current song, and add your favourites to the mode selectors.
-- Settings opens on **General**, with separate **Halo**, **Lyrics** and **Immersive** sections and a live preview.
 - Smoother audio pulses with a stronger, softer glow, plus cleaner Ship lyrics.
 - Better missing-cover recovery, with an optional online cover lookup.
 - Centered startup and remembered maximized state after immersive view.
@@ -37,17 +44,17 @@ Keep **Halo.exe**, **_internal** and **licenses** together in the extracted fold
 
 ## Use the app
 
-1. Open **Halo.exe** from the extracted **Halo** folder. If you built from source, it is in `dist/Halo/Halo.exe`.
+1. Open **Halo.exe** from the extracted **Halo** folder. If you built from source, it is in `dist/Halo/Halo.exe` (or `<dir>/Halo/Halo.exe` when built with `--dist-dir <dir>`).
 2. Start a song in the Spotify desktop app. Halo detects it automatically; no Spotify login, API key or Premium account is required by Halo.
-3. Click the **Settings** gear at the top-right (or press **Ctrl+,**). Settings opens on **General**, with **Halo**, **Lyrics** and **Immersive** in the left menu and a live monitor preview on the right. Changes save automatically. **Halo** contains the screen-edge and audio switches, style picker, light sliders and colour controls. **Album colours** uses two colours from the track's artwork and smoothly fades between tracks. **General** includes Reduce motion and the optional **Find missing covers online** switch, which is off by default.
-4. In **Settings → Lyrics**, turn on **Floating lyrics**, then minimize Halo or close its main window to the tray. Lyrics keep advancing above your desktop with clicks passing through them. Restoring the main window hides the floating text while you adjust settings.
+3. Halo's sidebar has **Listening** and **Modes** under *Your space*, **Lighting**, **Lyrics** and **Immersive** under *Personalize*, and **Settings** at the bottom. Choose **Settings** (or press **Ctrl+,**). Settings opens on **General** inside the main window; **‹ Back to listening** or **Esc** leaves it (Esc closes an open sheet first). Choose **Lighting**, **Lyrics** or **Immersive** in the same sidebar to adjust that part of Halo, with a live monitor preview on the right. Changes save automatically. The player stays available while browsing preferences or Modes. **Lighting** contains the screen-edge and audio switches, style picker, light sliders and colour controls. **Album colours** uses two colours from the track's artwork and smoothly fades between tracks. **General** includes Reduce motion and the optional **Find missing covers online** switch, which is off by default.
+4. In **Lyrics** in the sidebar, turn on **Floating lyrics**, then minimize Halo or close its main window to the tray. Lyrics keep advancing above your desktop with clicks passing through them. Restoring the main window hides the floating text while you adjust settings.
    Use **Adjust…** in the Position row to choose a monitor, drag the preview, adjust horizontal/vertical position, or use the nine presets. **Preview on desktop** lets you see the actual placement while the settings are open. Position is saved automatically; **Reset position** restores bottom-center placement on the primary display.
-5. **Enter immersive view** opens the selected scene. **Settings → Immersive** offers Listening room, Lyrics only, Cinema and Orbit; scene and lyric-style selectors are also available inside immersive view. All scenes fade the header and player and hide the cursor after 1.5 seconds without cursor movement. Move the mouse to reveal them. Leaving immersive view or switching to another app restores the cursor. **Lyrics only** hides artwork and credits. Press **Space** to play/pause and **Esc** to return. The progress bar also supports seeking.
-6. Right-click Halo's icon in the system tray to open it, toggle the glow or quit completely.
+5. **Open immersive view** on the Listening page, the full-screen button at the right of the player, or **Enter immersive view** in **Immersive** opens the selected scene inside the same window. **Lyrics only** on the Listening page opens the words-only scene directly. **Immersive** in the sidebar offers Listening room, Lyrics only, Cinema and Orbit; scene and lyric-style selectors are also available inside immersive view. All scenes fade the header and player and hide the cursor after 1.5 seconds without cursor movement. Move the mouse to reveal them. Leaving immersive view or switching to another app restores the cursor. **Lyrics only** hides artwork and credits. Press **Space** to play/pause and **Esc** to return. The progress bar also supports seeking.
+6. Right-click Halo's icon in the system tray to open Halo, Settings, Modes or immersive view, toggle the screen-edge glow, or **Quit Halo** completely.
 
-**Try the visual demo** previews lighting and original timed text without Spotify. **Return to Spotify** ends the demo. The demo does not play audio.
+**Try the visual demo** (bottom of the sidebar) previews lighting and original timed text without Spotify. **Return to Spotify** ends the demo. The demo does not play audio.
 
-The main window opens centered in your monitor's usable area. Maximizing Halo is remembered, including when returning from immersive view, restoring from the tray and starting the app again. Settings previews use the same native glow and lyric renderers as the app; when synced lyrics are missing, clearly labelled original sample words appear without starting demo mode or changing playback. Settings section changes, the selection marker and switches animate gently; Reduce motion settles these transitions immediately. Preview rendering stops when settings closes.
+The main window opens centered in your monitor's usable area. Maximizing Halo is remembered, including when returning from immersive view, restoring from the tray and starting the app again. Settings previews use the same native glow and lyric renderers as the app; when synced lyrics are missing, clearly labelled original sample words appear without starting demo mode or changing playback. Page and settings-section changes, hover effects and switches animate gently; Reduce motion settles these transitions immediately. Preview rendering stops when settings closes.
 
 ## Motion and lyric styles
 
@@ -63,7 +70,7 @@ The lyric-style selector controls the main preview, floating lyrics and all imme
 - **Fisheye:** a kinetic word stack with quieter surrounding words, tilted colour strips and original contextual symbols.
 - **Visual:** one large word and symbol at a time, with soft transitions.
 
-Open **Modes** in the top bar to browse live previews of more lyric styles, immersive rooms and halo lights. **Add to my modes** saves a look to its usual selector immediately; **Use mode** adds and applies it. Search, category filters and **My modes** help keep your collection organised. The familiar modes stay included, and optional additions can be removed again.
+Open **Modes** in the sidebar (or **Explore modes** on the Listening page, **Modes** in the tray menu or inside immersive view) to browse live previews of more lyric styles, immersive rooms and halo lights. **Add to my modes** saves a look to its usual selector immediately; **Use mode** adds and applies it. Search, category filters and **My modes** help keep your collection organised. The familiar modes stay included, and optional additions can be removed again.
 
 Nine additional designs are available in the bundled gallery:
 
@@ -77,13 +84,13 @@ Previews follow the current song's lyrics, playback position, saved correction a
 
 Ship follows the source's line timestamps. The word-based styles use supplied word timestamps from LRCLIB Lyricsfile data or Enhanced LRC imports when available. Otherwise, they estimate word timing between line timestamps and reanchor at each line. The lyrics badge distinguishes **Word synced**, **Mixed timing**, and **Line synced · words estimated**. Supplied timestamps can still be inaccurate; Halo does not listen to the singing to verify them. Click a visible lyric to seek to that line. **Reduce motion** keeps steady typography and a calm halo, and playback pause freezes the animated flow. During a source-marked singing break, the scrolling styles focus the empty space between lyrics without waiting dots.
 
-In **Settings → Lyrics → Timing & lyrics**, **Earlier** advances lyrics by 0.1 seconds and **Later** delays them. The slider supports a correction of up to 10 seconds either way. **Reset** clears this recording's correction. Corrections are remembered across song changes and restarts; an existing all-song calibration remains the baseline. A fixed correction cannot repair uneven timestamps.
+In **Lyrics** (sidebar) → **Timing & lyrics**, **Earlier** advances lyrics by 0.1 seconds and **Later** delays them. The slider supports a correction of up to 10 seconds either way. **Reset** clears this recording's correction. Corrections are remembered across song changes and restarts; an existing all-song calibration remains the baseline. A fixed correction cannot repair uneven timestamps.
 
 For different or incorrect words, use **Wrong lyrics? Choose a match…** to compare matched releases, their album, duration and a short preview. Your chosen source is remembered. You can also **Import timed lyrics…** from UTF-8 `.lrc`, Enhanced LRC (`.lrc` or `.elrc`), or Lyricsfile 1.0 (`.lyricsfile.yaml`, `.yaml`, `.yml`). Saved choices and imports take priority over automatic lookup. **Use automatic lyrics again** clears the saved source while keeping its timing correction.
 
 ## Immersive backgrounds
 
-Open **Settings → Immersive**, or choose **Background…** inside immersive view. Select the original **Ambient** scene, current-song **Album artwork**, a local **Image**, or a local **Video**. These choices apply inside Halo's immersive view; they do not change the Windows desktop wallpaper.
+Open **Immersive** in the sidebar, or choose **Background…** inside immersive view. Select the original **Ambient** scene, current-song **Album artwork**, a local **Image**, or a local **Video**. These choices apply inside Halo's immersive view; they do not change the Windows desktop wallpaper.
 
 The right-hand preview uses the actual media and rendering controls. Start with **Cinematic**, **Soft focus**, **Vivid**, **Monochrome** or **Dreamy**, then adjust blur, dimming, saturation, vignette and album-colour tint. Framing controls include fill/fit, zoom and horizontal/vertical focus. Still, drift and breathe motion have an adjustable speed. The chosen scene and lyric style remain independent of the background.
 
@@ -119,7 +126,7 @@ Audio-reactive mode measures **all sound on the current default output device**,
 
 Lyrics coverage and accuracy depend on LRCLIB or your import. When words are wrong, choose a different matched source or import corrected timed lyrics. A constant offset helps consistently early/late lyrics; it cannot repair uneven drift. If the service is unavailable, use **Retry** after a moment. Ads, podcasts and untimed tracks may have no synced lyrics. No audio recording or automatic audio alignment is used for these lyric features.
 
-Malformed or unusually large lyric inputs are rejected before display. Imports are limited to 512 KiB, 2,000 cues, 32 timestamps per source line, 2,000 characters and 256 words per cue, and 20,000 expanded words across the track. CJK character animation uses the same word budget. Expanded text is also bounded, and HTTP lyric responses are limited to 4 MiB. Catalogue title, artist and album fields are limited to 2,000 characters before recording matching. A rejected import keeps the current lyrics.
+Malformed or unusually large lyric inputs are rejected before display. Imports are limited to 512 KiB, 2,000 cues, 32 timestamps per source line, 2,000 characters and 256 words per cue, and 20,000 expanded words and 250,000 expanded characters across the track (repeated timestamps count each repetition). CJK character animation uses the same word budget. HTTP lyric responses are limited to 4 MiB. Catalogue title, artist and album fields are limited to 2,000 characters before recording matching. A rejected import keeps the current lyrics.
 
 The lyrics badge distinguishes timing quality, a lookup in progress, an untimed result, missing lyrics and an unavailable service. A single timestamp containing the entire lyric text is treated as untimed unless it has genuine internal word timestamps. Lyricsfile 1.0 is a draft: its unresolved `metadata.offset_ms` field is currently ignored. Overlapping word intervals are retained, but the current single-line focus does not show simultaneous singers separately.
 
@@ -131,10 +138,10 @@ The portable build is unsigned. Source is included here so the app can be review
 
 - **Downloaded “Source code (zip)” or used Code → Download ZIP?** That is the developer source. Use the **Download Halo for Windows** link at the top of this page to get the ready-to-run app.
 - **Missing files or the app does not start?** Extract the entire ZIP first. Keep the `_internal` folder beside **Halo.exe**; copying only the executable will not work.
-- **Windows shows a publisher warning?** This preview is unsigned. Check that your download came from this repository's Releases page. A SHA-256 checksum is included with each release.
+- **Windows shows a publisher or SmartScreen warning?** This preview is unsigned. Check that your download came from this repository's Releases page. A SHA-256 checksum is included with each release.
 - **No song appears?** Open the Spotify desktop app on Windows and start playback. Spotify Web and other music players are not currently supported.
-- **No lyrics?** Some tracks have no timed lyrics. Try **Retry** or import a local `.lrc` file in **Settings → Lyrics**.
-- **Closed the window but Halo is still running?** It stays in the system tray. Right-click its icon → **Quit** to stop it completely.
+- **No lyrics?** Some tracks have no timed lyrics. Try **Retry** or import a local `.lrc` file in **Lyrics** in the sidebar.
+- **Closed the window but Halo is still running?** It stays in the system tray. Right-click its icon → **Quit Halo** to stop it completely.
 
 ## Run from source
 
@@ -161,12 +168,14 @@ Source runs keep settings/logs in `.data/` beside the source. Packaged builds us
 
 `diagnostics.py` only reads the Spotify session; it does not change playback. `qa_check.py` checks UI state, overlays and worker shutdown using original demo text. The test suite covers timestamp parsing, matching, pause/resume/seek, audio levels, motion controls, rendered halo modes and lyric typography. Generated previews are in `qa/`.
 
-Install `requirements-dev.txt` for the packaging tool. `build.py` uses a clean native-library search path and includes an icon, dependency notices, this guide and a portable ZIP. Run the build in a normal Windows development environment; restricted application containers cannot access the desktop media session.
+Install `requirements-dev.txt` for the packaging tool (PyInstaller). `build.py` runs PyInstaller with command-line options; it does not use a `.spec` file. It uses a clean native-library search path and includes an icon, dependency notices, this guide, the `docs` folder and a portable ZIP. Run the build in a normal Windows development environment; restricted application containers cannot access the desktop media session.
 
-Each build captures a consistent source snapshot and uses its own work and cache directories. Its `source-manifest.json` records the exact module hashes. For safe updates while Halo is running, package with `--dist-dir` pointing to a fresh staging folder, check the executable, then replace the existing app folder.
+By default, `build.py` writes the app folder to `dist\Halo` and the archive to `dist\Halo-Windows-x64.zip`. With `--dist-dir <dir>`, it writes `<dir>\Halo` and `<dir>\Halo-Windows-x64.zip` instead. Each build captures a consistent source snapshot and uses its own work and cache directories under `.staging`. The package contains `source-manifest.json`, which records the exact module hashes, and `VERSION.txt`, which records the version from `halo/__init__.py`.
 
-The packaged app must be distributed with **the whole `dist/Halo` folder**, including `_internal`. Copying just the executable is insufficient. Keep the bundled dependency licenses with it.
+If Halo may be running from an existing build, do not overwrite that folder. Package with `--dist-dir` pointing to a fresh, empty staging folder (for example `.venv\Scripts\python.exe build.py --dist-dir .staging\release-check`), check the new executable, quit the running Halo from its tray icon, then replace the existing app folder.
+
+The packaged app must be distributed as **the whole `Halo` folder** (or the ZIP that contains it), including `_internal` and `licenses`. Copying just `Halo.exe` is insufficient. Keep the bundled dependency licenses with it.
 
 ## Dependencies
 
-Qt for Python / PySide6 (LGPLv3), PyWinRT (MIT), NumPy (BSD), SoundCard (BSD). PyInstaller is the build tool. Their bundled licenses and notices are retained in the portable distribution. This project includes no Spotify assets, credentials or copyrighted lyric fixtures.
+Qt for Python / PySide6 (LGPLv3), PyWinRT (MIT), NumPy (BSD), SoundCard (BSD), PyYAML (MIT; reads imported Lyricsfile documents). PyInstaller is the build tool. Their bundled licenses and notices are retained in the portable distribution. This project includes no Spotify assets, credentials or copyrighted lyric fixtures.

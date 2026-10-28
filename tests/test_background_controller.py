@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from PySide6.QtCore import QBuffer, QIODevice, QSettings
+from PySide6.QtCore import QBuffer, QIODevice, QSettings, Qt
 from PySide6.QtGui import QColor, QImage
 from PySide6.QtWidgets import QApplication
 
@@ -139,20 +139,28 @@ class BackgroundControllerTests(unittest.TestCase):
                 widget.deleteLater()
             self.app.processEvents()
 
-    def test_closing_background_settings_returns_focus_to_the_existing_immersive_window(self):
+    def test_closing_background_settings_returns_to_immersive_in_the_same_app_window(self):
         c = self.controller()
         window = MainWindow(c)
+        window.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen)
         window.draw_timer.stop()
         try:
-            with patch.object(window.immersive, "isVisible", return_value=True), \
-                    patch.object(window.immersive, "raise_") as raised, \
-                    patch.object(window.immersive, "activateWindow") as activated:
-                window.open_background_settings()
-                self.app.processEvents()
+            window.show()
+            window.fullscreen()
+            self.app.processEvents()
+            window.open_background_settings()
+            self.app.processEvents()
+            self.assertTrue(window.settings_dialog.isVisible())
+            self.assertFalse(window.immersive.isVisible())
+            self.assertFalse(window.isFullScreen())
+            with patch.object(window, "activateWindow") as activated:
                 window.settings_dialog.close()
-                raised.assert_called_once()
                 activated.assert_called_once()
-                self.assertFalse(window._return_to_immersive_settings)
+            self.assertTrue(window.isFullScreen())
+            self.assertTrue(window.immersive.isVisible())
+            self.assertFalse(window.settings_dialog.isVisible())
+            self.assertIs(window.immersive.window(), window)
+            self.assertFalse(window._return_to_immersive_settings)
         finally:
             window.settings_dialog.hide()
             window.tray.hide()

@@ -69,6 +69,9 @@ shutil.copy2(root / "README.md", target / "README.md")
 if (root / "docs").is_dir():
     shutil.copytree(root / "docs", target / "docs", dirs_exist_ok=True)
 shutil.copy2(job_dir / "source-manifest.json", target / "source-manifest.json")
+version = {}
+exec((snapshot_dir / "halo" / "__init__.py").read_text(encoding="utf-8"), version)
+(target / "VERSION.txt").write_text(version["__version__"] + "\n", encoding="utf-8")
 for dist in importlib.metadata.distributions():
     for file in dist.files or []:
         name = str(file).replace("\\", "/")

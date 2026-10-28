@@ -399,9 +399,9 @@ class CorrectionControllerTests(unittest.TestCase):
             c.saved_lyric_kind = "selected"
             c.lyricsChanged.emit()
             c.set("reduced_motion", True)
-            studio.resize(960, 600)
-            studio.show()
-            studio.select(2, animate=False)
+            window.resize(960, 640)
+            window.show()
+            window.open_settings_section("lyrics")
             self.app.processEvents()
             scroll = studio.pages.currentWidget()
             controls = [studio.song_timing_slider, *studio.song_timing_buttons,

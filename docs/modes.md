@@ -1,6 +1,8 @@
 # Make room for a different kind of listening
 
-Open **Modes** from Halo's top bar, the tray menu, or the **Modes** button inside immersive view. Settings also links directly to the relevant category.
+Open **Modes** from Halo's sidebar, **Explore modes** on the Listening page, **Modes** in the tray menu, or the **Modes** button inside immersive view (which opens the immersive-room category). **Lighting**, **Lyrics** and **Immersive** also link directly to their category with **Explore light modes**, **Explore lyric styles** and **Explore immersive rooms**. Modes opens inside the main Halo window; **Back to listening** or **Esc** leaves it.
+
+In Halo v0.3.0 and earlier, Modes opened from the top bar instead; the 0.4.0 single-window redesign moved it into the sidebar.
 
 The gallery includes live lyric, immersive and light previews. Select a card for its larger preview. Search by name or description, browse one category, or choose **My modes** to see the looks already in your collection.
 

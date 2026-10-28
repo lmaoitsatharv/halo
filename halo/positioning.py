@@ -4,6 +4,7 @@ from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, Q
                               QSlider, QPushButton, QComboBox, QCheckBox, QWidget, QApplication)
 from .models import floating_geometry
 from .widgets import font, tint
+from .glass import GlassSlider
 
 
 class PositionPreview(QWidget):
@@ -140,7 +141,7 @@ class PositionDialog(QDialog):
         value = QLabel(str(getattr(self.c, setting)) + "%")
         row.addWidget(value)
         layout.addLayout(row)
-        slider = QSlider(Qt.Orientation.Horizontal)
+        slider = GlassSlider(Qt.Orientation.Horizontal)
         slider.setRange(0, 100)
         slider.setValue(getattr(self.c, setting))
         slider.setAccessibleName(title + " lyrics position")

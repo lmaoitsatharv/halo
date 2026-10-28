@@ -1,4 +1,7 @@
-"""Exercise Halo UI and worker lifecycle; save only original demo text."""
+"""Exercise Halo UI and worker lifecycle; save only original demo text.
+
+Settings and screenshots go to HALO_DATA_DIR when set, otherwise ./qa.
+"""
 import os
 from pathlib import Path
 import time
@@ -9,8 +12,8 @@ from halo.models import Track, Lyrics, parse_lrc
 
 app = QApplication([])
 app.setStyleSheet(STYLE)
-root = Path("qa")
-root.mkdir(exist_ok=True)
+root = Path(os.getenv("HALO_DATA_DIR") or "qa")
+root.mkdir(parents=True, exist_ok=True)
 settings = QSettings(str(root / "settings.ini"), QSettings.Format.IniFormat)
 controller = Controller(settings, offline=True)
 window = MainWindow(controller)
@@ -27,6 +30,7 @@ def verify():
         window.open_position_settings()
         app.processEvents()
         dialog = window.position_dialog
+        assert window.sheet.isVisible() and not dialog.isWindow() and dialog.window() is window
         dialog.set_position(0, 0)
         assert QApplication.primaryScreen().availableGeometry().contains(window.overlay.geometry())
         dialog.set_position(100, 100)
@@ -90,7 +94,8 @@ def verify():
         window.fullscreen()
         app.processEvents()
         window.draw()
-        assert window.immersive.isFullScreen()
+        assert window.isFullScreen() and window.app_stack.currentWidget() is window.immersive
+        assert window.immersive.isVisible() and not window.immersive.isWindow()
         assert not window.overlay.isVisible()
         assert all(not edge.isVisible() for edge in window.edges)
         # Verify rendered edge pixels, not merely overlay visibility: fullscreen
@@ -122,19 +127,21 @@ def verify():
         controller.tick()
         controller.trackChanged.emit()
         controller.lyricsChanged.emit()
-        window.immersive.showNormal()
-        window.immersive.resize(960, 640)
+        window.showNormal()
+        window.resize(960, 640)
         app.processEvents()
         window.draw()
         window.immersive.grab().save(str(root / "immersive-small.png"))
         assert window.immersive.cover.geometry().bottom() < window.immersive.height()
+        assert window.immersive.isVisible() and window.immersive.height() <= 640
         window.immersive.leave()
-        assert window.isVisible() and not window.immersive.isVisible()
+        app.processEvents()
+        assert window.isVisible() and not window.isFullScreen() and not window.immersive.isVisible()
+        assert window.current_page == "listening"
         controller.track.title = original_title
         controller.lyrics = original_lyrics
         controller.trackChanged.emit()
         controller.lyricsChanged.emit()
-        window.immersive.hide()
         controller.set("palette", "Album colours")
         controller.set("floating", False)
         controller.seek(11)

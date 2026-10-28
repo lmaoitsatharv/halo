@@ -8,6 +8,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
+from qt_support import ensure_system_fonts
 from halo.lyric_rendering import LYRIC_STYLES, TypeCache, WordTimeline, spring
 from halo.models import LyricLine, Lyrics, Track
 from halo.widgets import LyricCanvas
@@ -17,6 +18,7 @@ class LyricModeTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
+        ensure_system_fonts()
 
     def controller(self):
         return SimpleNamespace(

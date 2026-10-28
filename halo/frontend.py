@@ -4,58 +4,16 @@ import time
 from PySide6.QtCore import Qt, QRectF, QPointF, QSignalBlocker, QRect, QSize
 from PySide6.QtGui import QColor, QPainter, QPen, QPainterPath, QLinearGradient, QFont, QFontMetrics, QPixmap
 from PySide6.QtWidgets import (QWidget, QFrame, QLabel, QPushButton, QAbstractButton,
-    QVBoxLayout, QHBoxLayout, QComboBox, QSlider, QSizePolicy)
+    QVBoxLayout, QHBoxLayout, QComboBox, QSlider, QSizePolicy, QStackedWidget,
+    QScrollArea, QSizeGrip, QApplication)
 from .widgets import Artwork, LyricCanvas, font, tint
 from .glow import paint_halo_preview
 from .lyric_rendering import LYRIC_STYLES, SYMBOLS
 from .mode_catalog import available_specs
+from .glass import APP_STYLE, GlassPanel, GlassButton, icon, draw_icon, colour
 
 
-STYLE = """
-QWidget { color: #f0f0f4; font-family: 'Segoe UI'; font-size: 13px; }
-QLabel { background: transparent; }
-QFrame#card { background: rgba(20, 23, 31, 235); border: 1px solid #30333e; border-radius: 20px; }
-QFrame#settingsCard { background: rgba(18, 21, 28, 240); border: 1px solid #30333e; border-radius: 20px; }
-QLabel#eyebrow { color: #9093a5; font-size: 10px; font-weight: 600; letter-spacing: 2px; }
-QLabel#muted { color: #9398ac; font-size: 12px; }
-QLabel#title { font-size: 27px; font-weight: 600; color: #f2f1f6; }
-QLabel#brand { font-size: 29px; font-weight: 600; letter-spacing: 4px; }
-QLabel#badge { background: #1d2927; border: 1px solid #334c42; border-radius: 12px;
-              color: #b5ddc6; padding: 6px 12px; font-size: 11px; }
-QLabel#panelTitle { color: #eeeef5; font-size: 18px; font-weight: 600; }
-QPushButton { border: 1px solid #393d4c; border-radius: 11px; padding: 9px 14px;
-              background: #222632; color: #e3e5ed; }
-QPushButton:hover { background: #313646; border-color: #646780; }
-QPushButton:pressed { background: #3d4257; }
-QPushButton:disabled { color: #64697b; border-color: #2c303d; }
-QPushButton#primary { color: #181925; background: #dad1fa; border: 0; font-weight: 600; }
-QPushButton#primary:hover { background: #ece5ff; }
-QPushButton#ghost { background: transparent; border-color: #333747; font-size: 11px; padding: 6px 10px; }
-QPushButton#sectionTab { background: transparent; border: 0; border-radius: 10px; padding: 8px 12px; color: #969bb1; }
-QPushButton#sectionTab:checked { background: #343447; color: #f4f0ff; }
-QPushButton#sectionTab:hover { background: #292c3b; color: #f4f0ff; }
-QPushButton:focus { border-color: #cbb9f3; }
-QPushButton#sectionTab:focus { border: 1px solid #b6a5d7; padding: 7px 11px; }
-QCheckBox { spacing: 10px; color: #d9dce8; }
-QCheckBox::indicator { width: 30px; height: 17px; border-radius: 8px; background: #3b4051; border: 1px solid #454b5f; }
-QCheckBox::indicator:checked { background: #c9baf3; border-color: #ddd0ff; }
-QCheckBox::indicator:hover { border-color: #a18cbf; }
-QSlider::groove:horizontal { height: 4px; background: #35394a; border-radius: 2px; }
-QSlider::sub-page:horizontal { background: #bba8e7; border-radius: 2px; }
-QSlider::handle:horizontal { width: 10px; margin: -4px 0; border-radius: 5px; background: #e1d6fa; }
-QComboBox { color: #d8dbe9; background: #232734; border: 1px solid #3a4050; border-radius: 9px; padding: 8px 10px; }
-QComboBox::drop-down { border: 0; width: 24px; }
-QComboBox QAbstractItemView { background: #222735; color: #eef0f5; border: 1px solid #464c62; selection-background-color: #44405e; }
-QScrollArea#settingsScroll, QWidget#settingsPage, QWidget#settingsViewport { background: transparent; border: 0; }
-QScrollBar:vertical { background: transparent; width: 6px; margin: 2px; }
-QScrollBar::handle:vertical { background: #464b5c; border-radius: 3px; min-height: 30px; }
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
-QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
-QMenu { background: #202432; color: #e5e7ef; border: 1px solid #434a5d; padding: 6px; }
-QMenu::item { padding: 8px 20px; }
-QMenu::item:selected { background: #41425c; }
-QToolTip { color: #edf0f7; background: #2b3040; border: 1px solid #626984; padding: 5px; }
-"""
+STYLE = APP_STYLE
 
 
 def text_label(text, name="muted"):
@@ -66,7 +24,7 @@ def text_label(text, name="muted"):
 
 
 def action(text, callback, name=None):
-    result = QPushButton(text)
+    result = GlassButton(text)
     if name:
         result.setObjectName(name)
     result.clicked.connect(callback)
@@ -154,6 +112,7 @@ class HaloMark(QWidget):
     def paintEvent(self, event):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.scale(self.width() / 45., self.height() / 45.)
         now = time.monotonic()
         elapsed = max(0, min(.08, now - self.last_phase_tick))
         self.last_phase_tick = now
@@ -168,12 +127,12 @@ class HaloMark(QWidget):
         p.drawArc(QRectF(13, 13, 19, 19), int((-phase + 130) * 16), 220 * 16)
 
 
-class TransportButton(QPushButton):
+class TransportButton(GlassButton):
     """Crisp vector transport icons rather than platform-dependent glyphs."""
-    def __init__(self, kind, callback):
-        super().__init__("▶" if kind == "play" else kind)
+    def __init__(self, kind, callback, controller=None):
+        super().__init__("▶" if kind == "play" else kind, controller=controller)
         self.kind = kind
-        self.setFixedSize(48 if kind == "play" else 36, 48 if kind == "play" else 36)
+        self.setFixedSize(42 if kind == "play" else 32, 42 if kind == "play" else 32)
         self.clicked.connect(callback)
         self.setAccessibleName({"play": "Play or pause", "previous": "Previous track", "next": "Next track"}[kind])
         self.setToolTip(self.accessibleName())
@@ -184,13 +143,19 @@ class TransportButton(QPushButton):
         primary = self.kind == "play"
         box = QRectF(self.rect()).adjusted(1, 1, -1, -1)
         p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(QColor("#e4dafa") if primary else QColor("#34394a" if self.underMouse() else "#222734"))
-        if primary and self.underMouse():
-            p.setBrush(QColor("#f0eaff"))
+        p.setBrush(QColor.fromRgbF(.83 + self._hover * .07, .79 + self._hover * .08, .97)
+                   if primary else QColor(223, 211, 255, round(self._hover * 20)))
+        if self.isDown():
+            p.setBrush(QColor("#b3a0df") if primary else QColor(223, 211, 255, 30))
         p.drawEllipse(box)
-        ink = QColor("#222334" if primary else "#d5dae6")
+        ink = QColor("#221c30" if primary else "#b9b1c9")
         if not self.isEnabled():
             ink.setAlpha(70)
+        if self.hasFocus():
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.setPen(QPen(QColor("#c4b4f8"), 1))
+            p.drawEllipse(box.adjusted(2, 2, -2, -2))
+        p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(ink)
         x, y = self.width() / 2, self.height() / 2
         if primary and self.text() == "Ⅱ":
@@ -387,119 +352,5 @@ def selector(controller, field, specs, accessible):
 
 
 def build_main(window, c):
-    window.resize(1140, 740)
-    window.setMinimumSize(860, 600)
-    root = QVBoxLayout(window)
-    root.setContentsMargins(28, 20, 28, 18)
-    root.setSpacing(18)
-    header = QHBoxLayout()
-    window.mark = HaloMark(c)
-    header.addWidget(window.mark)
-    header.addSpacing(8)
-    header.addWidget(text_label("halo", "brand"))
-    header.addSpacing(18)
-    header.addWidget(text_label("MAKE YOUR MUSIC MOVE", "eyebrow"))
-    header.addStretch()
-    window.badge = text_label("○  Waiting for Spotify", "badge")
-    header.addWidget(window.badge)
-    window.modes_button = action("Modes", window.open_modes, "ghost")
-    window.modes_button.setAccessibleName("Browse modes")
-    window.modes_button.setMinimumHeight(38)
-    window.modes_button.setToolTip("Browse live previews and add modes to your collection")
-    header.addSpacing(10)
-    header.addWidget(window.modes_button)
-    from .settings_ui import SettingsStudio, studio_icon
-    window.settings_button = action("Settings", window.open_settings, "ghost")
-    window.settings_button.setIcon(studio_icon())
-    window.settings_button.setIconSize(QSize(20, 20))
-    window.settings_button.setMinimumHeight(38)
-    window.settings_button.setAccessibleName("Open settings")
-    window.settings_button.setToolTip("Settings · Ctrl+,")
-    header.addSpacing(10)
-    header.addWidget(window.settings_button)
-    root.addLayout(header)
-
-    hero = QFrame()
-    hero.setObjectName("card")
-    hero.setMinimumHeight(151)
-    hero.setMaximumHeight(177)
-    row = QHBoxLayout(hero)
-    row.setContentsMargins(20, 18, 24, 18)
-    row.setSpacing(20)
-    window.main_art = Artwork(c, 100)
-    row.addWidget(window.main_art)
-    info = QVBoxLayout()
-    info.setSpacing(5)
-    info.addWidget(text_label("NOW PLAYING", "eyebrow"))
-    window.title = FittedTitle("Waiting for Spotify")
-    info.addWidget(window.title)
-    window.artist = ElidedLabel("Open Spotify and play something you love.")
-    window.artist.setMaximumHeight(36)
-    info.addWidget(window.artist)
-    info.addStretch()
-    row.addLayout(info, 1)
-    player = QVBoxLayout()
-    transport = QHBoxLayout()
-    transport.setSpacing(10)
-    window.previous = TransportButton("previous", lambda: c.transport("previous"))
-    window.play = TransportButton("play", lambda: c.transport("toggle"))
-    window.next = TransportButton("next", lambda: c.transport("next"))
-    for item in (window.previous, window.play, window.next):
-        transport.addWidget(item)
-    player.addLayout(transport)
-    window.time_label = text_label("0:00 / 0:00")
-    window.time_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    player.addWidget(window.time_label)
-    row.addLayout(player)
-    root.addWidget(hero)
-
-    columns = QHBoxLayout()
-    columns.setSpacing(18)
-    left = QVBoxLayout()
-    left.setSpacing(14)
-    lyric_panel = QFrame()
-    lyric_panel.setObjectName("card")
-    lyric = QVBoxLayout(lyric_panel)
-    lyric.setContentsMargins(23, 19, 23, 19)
-    heading = QHBoxLayout()
-    heading.addWidget(text_label("THE WORDS", "eyebrow"))
-    heading.addStretch()
-    window.lyrics_badge = text_label("Waiting for a song")
-    heading.addWidget(window.lyrics_badge)
-    window.retry_button = action("Retry", c.retry_lyrics, "ghost")
-    window.retry_button.setAccessibleName("Retry lyrics")
-    heading.addWidget(window.retry_button)
-    lyric.addLayout(heading)
-    window.canvas = LyricCanvas(c)
-    lyric.addWidget(window.canvas, 1)
-    window.progress = QSlider(Qt.Orientation.Horizontal)
-    window.progress.setRange(0, 1000)
-    window.progress.setAccessibleName("Track position")
-    window.progress.sliderReleased.connect(lambda: c.seek(window.progress.value() / 1000 * c.track.duration))
-    lyric.addWidget(window.progress)
-    bottom = QHBoxLayout()
-    bottom.addStretch()
-    window.style_select = selector(c, "lyric_style", LYRIC_STYLES, "Lyric animation style")
-    window.style_select.setFixedWidth(152)
-    bottom.addWidget(window.style_select)
-    lyric.addLayout(bottom)
-    left.addWidget(lyric_panel, 1)
-    actions = QHBoxLayout()
-    actions.addWidget(action("Enter immersive view   ↗", window.fullscreen, "primary"), 1)
-    actions.addWidget(action("Lyrics only", lambda: (c.set("immersive_mode", "lyrics"), window.fullscreen())))
-    actions.addWidget(action("Import .lrc", window.import_lrc))
-    left.addLayout(actions)
-    columns.addLayout(left, 1)
-
-    root.addLayout(columns, 1)
-    footer = QHBoxLayout()
-    window.demo_button = action("Try the visual demo", lambda: c.set_demo(not c.demo), "ghost")
-    footer.addWidget(window.demo_button)
-    footer.addStretch()
-    window.footer = ElidedLabel("Spotify desktop · close to keep Halo in the tray")
-    window.footer.setStyleSheet("font-size: 10px; color: #777f96;")
-    footer.addWidget(window.footer)
-    root.addLayout(footer)
-
-    window.settings_dialog = SettingsStudio(window, c)
-    window.settings_pages = window.settings_dialog.pages
+    from .shell import build_shell
+    build_shell(window, c)

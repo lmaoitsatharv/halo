@@ -86,7 +86,6 @@ class LyricCanvas(QWidget):
         self.alignment = "left" if mode == "immersive" else "center"
         self.visual_index = -1.0
         self.last_generation = -1
-        self.fitted_sizes = {}  # Retained for callers of earlier Halo versions.
         self.type_cache = TypeCache()
         self.timeline = None
         self._timeline_key = None
@@ -354,10 +353,6 @@ class LyricCanvas(QWidget):
             return min(48, max(20, w / 15))
         giant = self.scene_mode in {"lyrics", "cinema", "orbit", "scene_runway"}
         return min(110 if giant else 76, max(25, min(w / (9 if giant else 11), h / 7)))
-
-    def _ship(self, p, index):
-        # Compatibility for older callers; the plain renderer is retired.
-        self._ship_visual(p, index, self._clock())
 
     def _line_emblem(self, p, kind, x, y, radius, focus, opacity, phase):
         """An airy line illustration, never a backdrop behind the lyric text."""

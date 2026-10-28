@@ -30,6 +30,9 @@ class BackgroundSettingsTests(unittest.TestCase):
         self.studio = self.window.settings_dialog
         self.studio.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen)
         self.window.show()
+        # The responsive live preview needs the default workspace size,
+        # whatever the host screen's size is.
+        self.window.resize(1280, 800)
         self.app.processEvents()
         self.image = Path(self.temp.name) / "Quiet evening.png"
         image = QImage(500, 340, QImage.Format.Format_RGB32)
@@ -59,6 +62,7 @@ class BackgroundSettingsTests(unittest.TestCase):
     def open_backgrounds(self):
         self.studio.open_studio("scenes")
         self.app.processEvents()
+        self.assertTrue(self.studio.preview.isVisible())
         self.studio.preview.transition.finish()
 
     def test_background_entry_opens_immersive_and_default_entry_remains_general(self):

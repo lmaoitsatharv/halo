@@ -9,7 +9,8 @@ from pathlib import Path
 import tempfile
 import unicodedata
 
-from .models import Lyrics, LyricLine, validate_lyric_lines, MAX_LYRIC_WORDS
+from .models import (Lyrics, LyricLine, validate_lyric_lines, MAX_LYRIC_CUES, MAX_LYRIC_LINE_CHARS,
+                     MAX_LYRIC_WORDS, MAX_LYRIC_WORDS_PER_LINE)
 
 MAX_RECORD_BYTES = 2 * 1024 * 1024
 MAX_RECORDS = 512
@@ -45,7 +46,7 @@ def lyrics_from_data(data):
     from .models import LyricWord
     if not isinstance(data, dict) or not isinstance(data.get("lines"), list):
         raise ValueError("Invalid saved lyrics.")
-    if not 1 <= len(data["lines"]) <= 2000:
+    if not 1 <= len(data["lines"]) <= MAX_LYRIC_CUES:
         raise ValueError("Invalid saved lyric count.")
     lines, word_count, previous = [], 0, -math.inf
     for item in data["lines"]:
@@ -59,11 +60,11 @@ def lyrics_from_data(data):
         if end is not None and end < start:
             raise ValueError("Invalid saved line end.")
         raw_words = item.get("words", [])
-        if not isinstance(raw_words, (list, tuple)) or len(raw_words) > 256:
+        if not isinstance(raw_words, (list, tuple)) or len(raw_words) > MAX_LYRIC_WORDS_PER_LINE:
             raise ValueError("Invalid saved words.")
         words, previous_word = [], -math.inf
         for raw in raw_words:
-            if not isinstance(raw, dict) or not isinstance(raw.get("text"), str) or len(raw["text"]) > 2000:
+            if not isinstance(raw, dict) or not isinstance(raw.get("text"), str) or len(raw["text"]) > MAX_LYRIC_LINE_CHARS:
                 raise ValueError("Invalid saved word.")
             a = _number(raw.get("start"))
             b = None if raw.get("end") is None else _number(raw["end"])

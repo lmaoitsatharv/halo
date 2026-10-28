@@ -207,7 +207,7 @@ class WordLyricsTests(unittest.TestCase):
                             reduced_motion=True, primary=QColor("#e9b7a1"), secondary=QColor("#c494aa"))
         canvas = LyricCanvas(c)
         canvas.resize(420, 240)
-        with patch.object(canvas, "_visual") as words, patch.object(canvas, "_ship") as preview, \
+        with patch.object(canvas, "_visual") as words, patch.object(canvas, "_ship_visual") as preview, \
              patch.object(canvas, "_instrumental") as waiting:
             canvas.grab()
             words.assert_not_called()

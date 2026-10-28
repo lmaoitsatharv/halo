@@ -4,6 +4,7 @@ from PySide6.QtGui import QColor, QPainter, QPen, QFont
 from PySide6.QtWidgets import (QWidget, QLabel, QPushButton, QVBoxLayout, QHBoxLayout,
                               QComboBox, QSlider, QStackedWidget, QButtonGroup,
                               QColorDialog, QSizePolicy, QCheckBox)
+from .glass import GlassSlider
 
 
 HALO_ANIMATIONS = (
@@ -185,7 +186,7 @@ class LightControls(QWidget):
         value_label = self._label("", "haloTuneValue")
         heading.addWidget(value_label)
         box.addLayout(heading)
-        slider = QSlider(Qt.Orientation.Horizontal)
+        slider = GlassSlider(Qt.Orientation.Horizontal)
         slider.setRange(low, high)
         slider.setValue(getattr(self.controller, field, default))
         slider.setAccessibleName(title)
@@ -209,16 +210,27 @@ class LightControls(QWidget):
 
     def _choose_color(self, side):
         if self.color_dialog is not None:
-            self.color_dialog.raise_()
-            self.color_dialog.activateWindow()
+            if self.color_dialog.isWindow():
+                self.color_dialog.raise_()
+                self.color_dialog.activateWindow()
+            else:
+                self.color_dialog.setFocus(Qt.FocusReason.ShortcutFocusReason)
             return
         dialog = QColorDialog(self._raw_color(side), self)
         dialog.setWindowTitle(f"{side.capitalize()} halo colour")
         dialog.setOption(QColorDialog.ColorDialogOption.ShowAlphaChannel, False)
         dialog.colorSelected.connect(lambda color: self.set_custom_color(side, color))
-        dialog.finished.connect(lambda result: self._finish_dialog(dialog))
         self.color_dialog = dialog
-        dialog.open()
+        host = self.window()
+        if callable(getattr(host, "show_sheet", None)):
+            dialog.setOption(QColorDialog.ColorDialogOption.DontUseNativeDialog, True)
+            host.show_sheet(dialog, f"{side.capitalize()} halo colour")
+            # The sheet host registers its finish handler first, so the sheet is
+            # hidden before this short-lived picker is scheduled for deletion.
+            dialog.finished.connect(lambda result: self._finish_dialog(dialog))
+        else:
+            dialog.finished.connect(lambda result: self._finish_dialog(dialog))
+            dialog.open()
 
     def _finish_dialog(self, dialog):
         if self.color_dialog is dialog:
