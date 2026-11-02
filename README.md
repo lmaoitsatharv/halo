@@ -31,6 +31,8 @@ Keep **Halo.exe**, **_internal** and **licenses** together in the extracted fold
 - **A GPU lens for Fisheye:** surrounding words bend through a real lens on the graphics card in the main window, immersive view and floating lyrics, with standard drawing as the fallback.
 - **Lucide symbols:** about 250 [Lucide](https://lucide.dev) line icons, matched to about 780 English words, replace the hand-drawn symbols.
 - **Strata:** a new lyric style in **Modes**, a tilted wall of words that sways in 3D and swings to each new line.
+- **Glow lyric styles:** Cascade, Starline, Neon and Impact join Strata in **Modes**, each lighting words as they are sung.
+- **Optional word timing from playback:** off by default, in **Lyrics → Timing & lyrics**. A small model on your PC places lyric words from the sound playing on your default output device; see the privacy note under Lyrics for what it keeps.
 
 Earlier highlights, already in v0.3.0 or before:
 
@@ -75,7 +77,7 @@ The lyric-style selector controls the main preview, floating lyrics and all imme
 
 Open **Modes** in the sidebar (or **Explore modes** on the Listening page, **Modes** in the tray menu or inside immersive view) to browse live previews of more lyric styles, immersive rooms and halo lights. **Add to my modes** saves a look to its usual selector immediately; **Use mode** adds and applies it. Search, category filters and **My modes** help keep your collection organised. The familiar modes stay included, and optional additions can be removed again.
 
-Ten additional designs are available in the bundled gallery:
+Fourteen additional designs are available in the bundled gallery:
 
 | Lyrics | Immersive rooms | Halo light |
 | --- | --- | --- |
@@ -83,6 +85,10 @@ Ten additional designs are available in the bundled gallery:
 | **Marquee** — a horizontal word ribbon | **Runway** — a perspective light corridor | **Echo** — opposing waves and expanding ripples |
 | **Afterimage** — layered typographic echoes | **Refraction** — glass facets and spectral ribbons | **Meteor** — three separated comets and their trails |
 | **Strata** — a tilted wall of words that sways in 3D and swings to each new line | | |
+| **Cascade** — words climb a rising stack, the newest large and lit on a bold block | | |
+| **Starline** — each word lands as a star, joined by a bright thread | | |
+| **Neon** — a line of glass tubes that strike on word by word | | |
+| **Impact** — one huge word at a time, thrown at the screen with a shockwave | | |
 
 Previews follow the current song's lyrics, playback position, saved correction and artwork. Clearly labelled sample words appear when timed lyrics are unavailable. Browsing keeps your music playing; additions and choices are saved locally. Preview motion can be paused and honours Reduce motion. See the [Modes guide](docs/modes.md).
 
