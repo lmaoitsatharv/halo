@@ -2,7 +2,7 @@
 
 A Windows companion for the **Spotify desktop app**, inspired by ambient music lighting and desktop lyrics. Independent software; not affiliated with Spotify, Lumn or Verci.
 
-> **Version:** this guide describes **Halo 0.4.0**, an unreleased preview of the single-window dark-glass redesign. The latest public release is **v0.3.0**. Until 0.4.0 is published, the download link below provides v0.3.0, whose interface differs: Settings opens in its own window from a gear at the top-right (with General, Halo, Lyrics and Immersive sections), and Modes opens from the top bar.
+> **Version:** this guide describes **Halo 0.4.0**, the single-window dark-glass redesign. Earlier releases (v0.3.0 and before) look different: Settings opened in its own window from a gear at the top-right (with General, Halo, Lyrics and Immersive sections), and Modes opened from the top bar.
 
 ## Download for Windows
 
@@ -23,7 +23,7 @@ Keep **Halo.exe**, **_internal** and **licenses** together in the extracted fold
 
 ![Halo desktop app showing its original visual demo](docs/images/halo-desktop.png)
 
-## What's new in 0.4.0 (preview)
+## What's new in 0.4.0
 
 - **A new dark glass workspace:** a persistent sidebar, spacious listening view, smooth hover effects and a player that remains available across pages. The window keeps the standard Windows title bar and controls.
 - **Everything in one app window:** Settings, Modes and immersive listening share the same window instead of opening separate windows. Lyric placement, lyric matching and colour pickers appear in inset sheets.
@@ -148,7 +148,7 @@ The portable build is unsigned. Source is included here so the app can be review
 
 - **Downloaded “Source code (zip)” or used Code → Download ZIP?** That is the developer source. Use the **Download Halo for Windows** link at the top of this page to get the ready-to-run app.
 - **Missing files or the app does not start?** Extract the entire ZIP first. Keep the `_internal` folder beside **Halo.exe**; copying only the executable will not work.
-- **Windows shows a publisher or SmartScreen warning?** This preview is unsigned. Check that your download came from this repository's Releases page. A SHA-256 checksum is included with each release.
+- **Windows shows a publisher or SmartScreen warning?** This build is unsigned. Check that your download came from this repository's Releases page. A SHA-256 checksum is included with each release.
 - **No song appears?** Open the Spotify desktop app on Windows and start playback. Spotify Web and other music players are not currently supported.
 - **No lyrics?** Some tracks have no timed lyrics. Try **Retry** or import a local `.lrc` file in **Lyrics** in the sidebar.
 - **Closed the window but Halo is still running?** It stays in the system tray. Right-click its icon → **Quit Halo** to stop it completely.
