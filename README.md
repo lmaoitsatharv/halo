@@ -28,6 +28,9 @@ Keep **Halo.exe**, **_internal** and **licenses** together in the extracted fold
 - **A new dark glass workspace:** a persistent sidebar, spacious listening view, smooth hover effects and a player that remains available across pages. The window keeps the standard Windows title bar and controls.
 - **Everything in one app window:** Settings, Modes and immersive listening share the same window instead of opening separate windows. Lyric placement, lyric matching and colour pickers appear in inset sheets.
 - Settings opens on **General**; **Lighting**, **Lyrics** and **Immersive** are available directly in the sidebar, with live previews.
+- **A GPU lens for Fisheye:** surrounding words bend through a real lens on the graphics card in the main window, immersive view and floating lyrics, with standard drawing as the fallback.
+- **Lucide symbols:** about 250 [Lucide](https://lucide.dev) line icons, matched to about 780 English words, replace the hand-drawn symbols.
+- **Strata:** a new lyric style in **Modes**, a tilted wall of words that sways in 3D and swings to each new line.
 
 Earlier highlights, already in v0.3.0 or before:
 
@@ -54,7 +57,7 @@ Earlier highlights, already in v0.3.0 or before:
 
 **Try the visual demo** (bottom of the sidebar) previews lighting and original timed text without Spotify. **Return to Spotify** ends the demo. The demo does not play audio.
 
-The main window opens centered in your monitor's usable area. Maximizing Halo is remembered, including when returning from immersive view, restoring from the tray and starting the app again. Settings previews use the same native glow and lyric renderers as the app; when synced lyrics are missing, clearly labelled original sample words appear without starting demo mode or changing playback. Page and settings-section changes, hover effects and switches animate gently; Reduce motion settles these transitions immediately. Preview rendering stops when settings closes.
+The main window opens centered in your monitor's usable area. Maximizing Halo is remembered, including when returning from immersive view, restoring from the tray and starting the app again. Settings previews use the same native glow and lyric renderers as the app, except that Fisheye in Settings and the Modes library is drawn with the standard painter; the main window, immersive view and floating lyrics use the GPU lens when it is available. When synced lyrics are missing, clearly labelled original sample words appear without starting demo mode or changing playback. Page and settings-section changes, hover effects and switches animate gently; Reduce motion settles these transitions immediately. Preview rendering stops when settings closes.
 
 ## Motion and lyric styles
 
@@ -67,22 +70,23 @@ The main window opens centered in your monitor's usable area. Maximizing Halo is
 The lyric-style selector controls the main preview, floating lyrics and all immersive scenes:
 
 - **Ship:** smooth whole-line scrolling, smaller surrounding lines and fine, unframed illustrations. No word highlighting or spotlight box.
-- **Fisheye:** a kinetic word stack with quieter surrounding words, tilted colour strips and original contextual symbols.
+- **Fisheye:** a kinetic word stack with quieter surrounding words and tilted colour strips, bent by a GPU lens when one is available, with [Lucide](https://lucide.dev) line symbols.
 - **Visual:** one large word and symbol at a time, with soft transitions.
 
 Open **Modes** in the sidebar (or **Explore modes** on the Listening page, **Modes** in the tray menu or inside immersive view) to browse live previews of more lyric styles, immersive rooms and halo lights. **Add to my modes** saves a look to its usual selector immediately; **Use mode** adds and applies it. Search, category filters and **My modes** help keep your collection organised. The familiar modes stay included, and optional additions can be removed again.
 
-Nine additional designs are available in the bundled gallery:
+Ten additional designs are available in the bundled gallery:
 
 | Lyrics | Immersive rooms | Halo light |
 | --- | --- | --- |
 | **Monument** — an editorial verse poster | **Gallery** — framed artwork with a travelling key-light | **Aurora** — flowing light curtains |
 | **Marquee** — a horizontal word ribbon | **Runway** — a perspective light corridor | **Echo** — opposing waves and expanding ripples |
 | **Afterimage** — layered typographic echoes | **Refraction** — glass facets and spectral ribbons | **Meteor** — three separated comets and their trails |
+| **Strata** — a tilted wall of words that sways in 3D and swings to each new line | | |
 
 Previews follow the current song's lyrics, playback position, saved correction and artwork. Clearly labelled sample words appear when timed lyrics are unavailable. Browsing keeps your music playing; additions and choices are saved locally. Preview motion can be paused and honours Reduce motion. See the [Modes guide](docs/modes.md).
 
-Ship follows the source's line timestamps. The word-based styles use supplied word timestamps from LRCLIB Lyricsfile data or Enhanced LRC imports when available. Otherwise, they estimate word timing between line timestamps and reanchor at each line. The lyrics badge distinguishes **Word synced**, **Mixed timing**, and **Line synced · words estimated**. Supplied timestamps can still be inaccurate; Halo does not listen to the singing to verify them. Click a visible lyric to seek to that line. **Reduce motion** keeps steady typography and a calm halo, and playback pause freezes the animated flow. During a source-marked singing break, the scrolling styles focus the empty space between lyrics without waiting dots.
+Ship follows the source's line timestamps. The word-based styles use supplied word timestamps from LRCLIB Lyricsfile data or Enhanced LRC imports when available. Otherwise, they estimate word timing between line timestamps and reanchor at each line. The lyrics badge distinguishes **Word synced**, **Mixed timing**, and **Line synced · words estimated**. Supplied timestamps can still be inaccurate. **Learn word timing from playback**, off by default, follows each word by listening to your PC's sound and saves word times for replays; the badge then shows **Line synced · words following playback** or **Word timing learned on this PC**. Learned timing is an estimate, not verified sync. Click a visible lyric to seek to that line. **Reduce motion** keeps steady typography and a calm halo, and playback pause freezes the animated flow. During a source-marked singing break, the scrolling styles focus the empty space between lyrics without waiting dots.
 
 In **Lyrics** (sidebar) → **Timing & lyrics**, **Earlier** advances lyrics by 0.1 seconds and **Later** delays them. The slider supports a correction of up to 10 seconds either way. **Reset** clears this recording's correction. Corrections are remembered across song changes and restarts; an existing all-song calibration remains the baseline. A fixed correction cannot repair uneven timestamps.
 
@@ -102,7 +106,7 @@ The halo preserves dark, saturated and neutral colours. Black creates an unlit s
 
 **Flow** moves at a steady speed, **Music sync** swells on output-audio accents, **Idle** moves slowly and **Still** keeps the light stationary. The audio toggle and Music sync selection stay in sync. Music sync adapts to the playback volume and detects sudden bass and percussion changes, including accents in compressed music whose overall loudness stays almost constant. Pulse keeps a soft bed of light between accents and blooms inward on each hit. A rounded attack and longer fade smooth each swell; it does not estimate tempo or predict a precise beat grid. Changing speed preserves the current motion phase, and album-colour fades take about 0.9 seconds. Dark halo colours do not make lyric text unreadable because the interface uses a separate readable accent.
 
-Lighting research used [Lumn's official overview](https://www.trylumn.xyz/). Lyric styling was guided by the Verci demo video supplied with this project. The original style labels are also documented by an [independent Windows interpretation](https://github.com/darshanseenivasakumar/theaestheticslyrics); Verci's official site was unreachable during that update. Halo uses its own native renderer, motion, symbols and layouts. Its current lyric selector offers Ship, Fisheye and Visual.
+Lighting research used [Lumn's official overview](https://www.trylumn.xyz/). Lyric styling was guided by the Verci demo video supplied with this project. The original style labels are also documented by an [independent Windows interpretation](https://github.com/darshanseenivasakumar/theaestheticslyrics); Verci's official site was unreachable during that update. Halo uses its own native renderer, motion and layouts. Its line symbols are [Lucide](https://lucide.dev) icons, matched to words by Halo's own word list. Its current lyric selector offers Ship, Fisheye and Visual.
 
 ## What this version does
 
@@ -124,13 +128,19 @@ Spotify sometimes omits its cover from Windows' media feed. Halo retries late or
 
 Audio-reactive mode measures **all sound on the current default output device**, including other apps. It does not use the microphone, save recordings or send audio anywhere. If the output device changes, it reconnects. Silence and incompatible devices gracefully fall back to gentle motion.
 
-Lyrics coverage and accuracy depend on LRCLIB or your import. When words are wrong, choose a different matched source or import corrected timed lyrics. A constant offset helps consistently early/late lyrics; it cannot repair uneven drift. If the service is unavailable, use **Retry** after a moment. Ads, podcasts and untimed tracks may have no synced lyrics. No audio recording or automatic audio alignment is used for these lyric features.
+**Learn word timing from playback** is optional and off by default, in **Lyrics → Timing & lyrics**. While it is on and a song is playing, a small model running on this PC analyses **all sound on the current default output device**, including other apps, to place each lyric word. Audio stays in memory for about 30 seconds at most and is never saved or sent anywhere; only word times are stored, in a `learned-timing` folder beside your settings, for up to 512 songs. **Forget learned timing** and **Forget all** remove them. Words can move abruptly on a first listen, because Halo can't see the next word coming; replays use saved timing and glide. Songs need another listen for any lines that were not clear enough to keep. It cannot follow lyrics in scripts other than Latin, or imported lyrics. Spotify's User Guidelines restrict recording content and feeding it into machine learning models, so turn this on only if you accept that.
+
+Lyrics coverage and accuracy depend on LRCLIB or your import. When words are wrong, choose a different matched source or import corrected timed lyrics. A constant offset helps consistently early/late lyrics; it cannot repair uneven drift. If the service is unavailable, use **Retry** after a moment. Ads, podcasts and untimed tracks may have no synced lyrics. Unless **Learn word timing from playback** is on, Halo does not analyse the vocals.
 
 Malformed or unusually large lyric inputs are rejected before display. Imports are limited to 512 KiB, 2,000 cues, 32 timestamps per source line, 2,000 characters and 256 words per cue, and 20,000 expanded words and 250,000 expanded characters across the track (repeated timestamps count each repetition). CJK character animation uses the same word budget. HTTP lyric responses are limited to 4 MiB. Catalogue title, artist and album fields are limited to 2,000 characters before recording matching. A rejected import keeps the current lyrics.
 
 The lyrics badge distinguishes timing quality, a lookup in progress, an untimed result, missing lyrics and an unavailable service. A single timestamp containing the entire lyric text is treated as untimed unless it has genuine internal word timestamps. Lyricsfile 1.0 is a draft: its unresolved `metadata.offset_ms` field is currently ignored. Overlapping word intervals are retained, but the current single-line focus does not show simultaneous singers separately.
 
 This app uses an ordinary fullscreen view. It does not draw over the secure Windows lock screen or replace Windows locking. Overlays can also be hidden by games running in exclusive fullscreen.
+
+Fisheye's lens runs on the GPU, through an offscreen OpenGL 3.3 context that PySide6 already provides. If that context cannot start, a lens pass fails or frames stay over budget, Fisheye falls back to standard drawing and **Lyrics** shows a line saying the GPU lens is off on this PC. Setting the environment variable `HALO_DISABLE_LENS=1` forces the fallback. The lens has only been tested on one PC, so other graphics hardware and drivers are untested.
+
+On laptops with two GPUs, Windows may run the lens on the discrete GPU, and battery use hasn't been measured. To avoid that, choose **Power saving** for `Halo.exe` in Windows graphics settings, or use another lyric style and restart Halo.
 
 The portable build is unsigned. Source is included here so the app can be reviewed and rebuilt. Target: Windows 10 version 1809 or later, Windows 11, x64. Only the current development PC has been tested so far.
 
@@ -155,7 +165,7 @@ uv --cache-dir .cache pip install --python .venv\Scripts\python.exe -r requireme
 
 Alternatively, create a virtual environment with Python and install `requirements.txt` with pip. All app code is in `halo/`.
 
-Source runs keep settings/logs in `.data/` beside the source. Packaged builds use `%LOCALAPPDATA%\Halo`. `HALO_DATA_DIR` overrides that location. Logs rotate and record status and errors; Halo does not intentionally record audio samples or lyric text. Developer diagnostics and explicitly requested screenshots/reports can preserve listening metadata or visible lyrics, so review those files before sharing them.
+Source runs keep settings/logs in `.data/` beside the source. Packaged builds use `%LOCALAPPDATA%\Halo`. `HALO_DATA_DIR` overrides that location. Logs rotate and record status and errors; Halo does not intentionally record audio samples or lyric text. Learned word timing files hold word times, a hashed recording key and the lyric source id. The source id and file dates amount to a listening history, so treat that folder as private. Developer diagnostics and explicitly requested screenshots/reports can preserve listening metadata or visible lyrics, so review those files before sharing them.
 
 ## Build and verify
 
@@ -178,4 +188,4 @@ The packaged app must be distributed as **the whole `Halo` folder** (or the ZIP 
 
 ## Dependencies
 
-Qt for Python / PySide6 (LGPLv3), PyWinRT (MIT), NumPy (BSD), SoundCard (BSD), PyYAML (MIT; reads imported Lyricsfile documents). PyInstaller is the build tool. Their bundled licenses and notices are retained in the portable distribution. This project includes no Spotify assets, credentials or copyrighted lyric fixtures.
+Qt for Python / PySide6 (LGPLv3), PyWinRT (MIT), NumPy (BSD), SoundCard (BSD), PyYAML (MIT; reads imported Lyricsfile documents), Lucide (ISC, with MIT for its Feather-derived icons; Halo's line symbols). PyInstaller is the build tool. Their bundled licenses and notices are retained in the portable distribution. This project includes no Spotify assets, credentials or copyrighted lyric fixtures.

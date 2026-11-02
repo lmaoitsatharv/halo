@@ -1,14 +1,14 @@
 """Halo's native control room: live previews and a focused listening surface."""
-import math
 import time
 from PySide6.QtCore import Qt, QRectF, QPointF, QSignalBlocker, QRect, QSize
-from PySide6.QtGui import QColor, QPainter, QPen, QPainterPath, QLinearGradient, QFont, QFontMetrics, QPixmap
+from PySide6.QtGui import QColor, QPainter, QPen, QPainterPath, QFont, QFontMetrics, QPixmap
 from PySide6.QtWidgets import (QWidget, QFrame, QLabel, QPushButton, QAbstractButton,
     QVBoxLayout, QHBoxLayout, QComboBox, QSlider, QSizePolicy, QStackedWidget,
     QScrollArea, QSizeGrip, QApplication)
 from .widgets import Artwork, LyricCanvas, font, tint
 from .glow import paint_halo_preview
-from .lyric_rendering import LYRIC_STYLES, SYMBOLS
+from .lyric_rendering import LYRIC_STYLES
+from .mode_library import SceneCard, StyleCard
 from .mode_catalog import available_specs
 from .glass import APP_STYLE, GlassPanel, GlassButton, icon, draw_icon, colour
 
@@ -173,6 +173,9 @@ class TransportButton(GlassButton):
                 p.drawRoundedRect(QRectF(x + direction * 6 - 1, y - 5, 2, 10), .7, .7)
 
 
+LYRIC_CARD_PREVIEW, ROOM_CARD_PREVIEW = 45, 140
+
+
 class ModeTile(QAbstractButton):
     def __init__(self, controller, setting, spec):
         super().__init__()
@@ -183,7 +186,9 @@ class ModeTile(QAbstractButton):
         self.preview_cache = QPixmap()
         self.preview_cache_key = None
         self.preview_cache_at = 0.
-        self.setFixedHeight(82)
+        self.live_card = None
+        self.preview_height = ROOM_CARD_PREVIEW if setting == "immersive_mode" else LYRIC_CARD_PREVIEW
+        self.setFixedHeight(self.preview_height + 37)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setCheckable(True)
@@ -216,13 +221,15 @@ class ModeTile(QAbstractButton):
         p.setPen(QPen(tint(self.c.primary, 150) if selected else QColor("#464b60" if self.underMouse() else "#323745"), 1.2))
         p.setBrush(QColor("#2a2b3e" if selected else "#1e2330" if self.underMouse() else "#1a1e28"))
         p.drawRoundedRect(box, 12, 12)
-        preview = QRectF(9, 7, self.width() - 18, 45)
+        preview = QRectF(9, 7, self.width() - 18, self.preview_height)
+        if self.setting == "immersive_mode":
+            preview.setWidth(min(preview.width(), self.preview_height * 1.6))
+            preview.moveLeft((self.width() - preview.width()) / 2)
         now = time.monotonic()
         elapsed = max(0, min(.08, now - self.last_phase_tick))
         self.last_phase_tick = now
         if self.underMouse() and not self.c.reduced_motion:
             self.hover_phase += elapsed
-        phase = self.c.motion_time + (self.hover_phase if not self.c.reduced_motion else 0)
         if self.setting == "halo_mode":
             dpr = self.devicePixelRatioF()
             a, b = getattr(self.c, "halo_primary", self.c.primary), getattr(self.c, "halo_secondary", self.c.secondary)
@@ -245,73 +252,25 @@ class ModeTile(QAbstractButton):
                                    self.mode_id, motion_phase=current_phase)
                 cached.end()
             p.drawPixmap(preview.topLeft(), self.preview_cache)
-        elif self.setting == "lyric_style":
-            p.save()
-            p.setClipRect(preview)
-            center = preview.center()
-            p.setPen(tint(self.c.secondary, 120))
-            p.setFont(font(6))
-            if self.mode_id == "ship_visual":
-                p.drawText(QRectF(preview.x(), preview.top(), preview.width(), 13), Qt.AlignmentFlag.AlignCenter, "Let the room fall quiet")
-                p.setFont(font(9))
-                p.setPen(self.c.primary)
-                p.drawText(QRectF(preview.x(), center.y() - 10, preview.width(), 20), Qt.AlignmentFlag.AlignCenter, "Feel every word")
-                p.setFont(font(6))
-                p.setPen(tint(self.c.secondary, 120))
-                p.drawText(QRectF(preview.x(), preview.bottom() - 13, preview.width(), 13), Qt.AlignmentFlag.AlignCenter, "Let the colours find their way")
-                p.save()
-                p.translate(preview.left() + 9, center.y())
-                p.scale(4, 4)
-                p.setPen(QPen(self.c.primary, .3))
-                p.setBrush(Qt.BrushStyle.NoBrush)
-                p.drawPath(SYMBOLS["heart"])
-                p.restore()
-            else:
-                wobble = 1.5 * math.sin(phase * 1.6) if not self.c.reduced_motion else 0
-                if self.mode_id == "fisheye_visual":
-                    p.setPen(Qt.PenStyle.NoPen)
-                    p.setBrush(tint(self.c.secondary, 65))
-                    p.drawRoundedRect(QRectF(center.x() - 33, center.y() - 10, 66, 22), 1, 1)
-                p.setPen(self.c.primary)
-                f = font(17 if self.mode_id == "visual" else 14)
-                f.setItalic(True)
-                f.setBold(True)
-                p.setFont(f)
-                p.drawText(QRectF(preview.x(), center.y() - 15 + wobble, preview.width(), 32), Qt.AlignmentFlag.AlignCenter,
-                           "alive" if self.mode_id == "visual" else "every")
-                if self.mode_id != "visual":
-                    p.setFont(font(7))
-                    p.setPen(tint(self.c.secondary, 160))
-                    p.drawText(QRectF(preview.x(), preview.top(), preview.width(), 12), Qt.AlignmentFlag.AlignCenter, "feel")
-                    p.drawText(QRectF(preview.x(), preview.bottom() - 12, preview.width(), 12), Qt.AlignmentFlag.AlignCenter, "word")
-            p.restore()
         else:
-            p.setPen(Qt.PenStyle.NoPen)
-            g = QLinearGradient(preview.topLeft(), preview.bottomRight())
-            g.setColorAt(0, tint(self.c.primary, 32))
-            g.setColorAt(1, tint(self.c.secondary, 4))
-            p.setBrush(g)
-            p.drawRoundedRect(preview, 6, 6)
-            if self.mode_id in ("studio", "orbit"):
-                cover = QRectF(preview.left() + 10, preview.top() + 11, 32, 32)
-                p.setBrush(tint(self.c.primary, 110))
-                if self.mode_id == "orbit":
-                    cover.moveCenter(preview.center())
-                    p.drawEllipse(cover)
-                    p.setBrush(Qt.BrushStyle.NoBrush)
-                    p.setPen(QPen(tint(self.c.secondary, 100), 1))
-                    p.drawEllipse(cover.adjusted(-7, -7, 7, 7))
-                    p.drawEllipse(cover.adjusted(-11, -4, 11, 4))
-                else:
-                    p.drawRoundedRect(cover, 5, 5)
-            if self.mode_id != "orbit":
-                start = preview.left() + (55 if self.mode_id == "studio" else 24)
-                end = preview.right() - 17
-                p.setPen(QPen(tint(self.c.primary, 180), 3, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
-                p.drawLine(QPointF(start, preview.center().y()), QPointF(end, preview.center().y()))
-                p.setPen(QPen(tint(self.c.secondary, 65), 2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
-                p.drawLine(QPointF(start + 5, preview.center().y() - 12), QPointF(end - 8, preview.center().y() - 12))
-                p.drawLine(QPointF(start + 5, preview.center().y() + 12), QPointF(end - 8, preview.center().y() + 12))
+            dpr = self.devicePixelRatioF()
+            cache_key = (preview.width(), preview.height(), dpr, self.c.primary.rgba(), self.c.secondary.rgba(),
+                         self.c.lyric_style, self.c.reduced_motion)
+            # All of a page's cards share 30 Hz, and reduced motion redraws only when the look changes.
+            if cache_key != self.preview_cache_key or (not self.c.reduced_motion and now - self.preview_cache_at >= 1 / 30):
+                self.preview_cache_key, self.preview_cache_at = cache_key, now
+                self.preview_cache = QPixmap(max(1, round(preview.width() * dpr)), max(1, round(preview.height() * dpr)))
+                self.preview_cache.setDevicePixelRatio(dpr)
+                self.preview_cache.fill(Qt.GlobalColor.transparent)
+                cached = QPainter(self.preview_cache)
+                cached.setRenderHint(QPainter.RenderHint.Antialiasing)
+                cached.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+                if self.live_card is None:
+                    card = SceneCard if self.setting == "immersive_mode" else StyleCard
+                    self.live_card = card(self.c, self.mode_id, self)
+                self.live_card.paint(cached, QRectF(0, 0, preview.width(), preview.height()))
+                cached.end()
+            p.drawPixmap(preview.topLeft(), self.preview_cache)
         p.setPen(QColor("#f0eef6" if selected else "#bec3d3"))
         title_width = max(20, self.width() - (31 if selected else 20))
         face = font(9)
@@ -319,11 +278,11 @@ class ModeTile(QAbstractButton):
             face = font(8)
         p.setFont(face)
         fitted_title = QFontMetrics(face).elidedText(self.title, Qt.TextElideMode.ElideRight, title_width)
-        p.drawText(QRectF(10, 55, title_width, 21), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, fitted_title)
+        p.drawText(QRectF(10, preview.bottom() + 3, title_width, 21), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, fitted_title)
         if selected:
             p.setPen(Qt.PenStyle.NoPen)
             p.setBrush(self.c.primary)
-            p.drawEllipse(QPointF(self.width() - 12, 65), 2.5, 2.5)
+            p.drawEllipse(QPointF(self.width() - 12, preview.bottom() + 13), 2.5, 2.5)
         if self.hasFocus():
             p.setPen(QPen(QColor("#e3dafa"), 1, Qt.PenStyle.DashLine))
             p.setBrush(Qt.BrushStyle.NoBrush)

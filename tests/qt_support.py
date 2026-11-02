@@ -1,8 +1,17 @@
 """Shared Qt test environment helpers."""
 from pathlib import Path
 
+import numpy as np
 from PySide6.QtCore import QStandardPaths
-from PySide6.QtGui import QFontDatabase
+from PySide6.QtGui import QFontDatabase, QImage
+
+
+def channels_over_alpha(image):
+    """How many pixels break premultiplied alpha by having a colour channel above it."""
+    image = image.convertToFormat(QImage.Format.Format_ARGB32_Premultiplied)
+    rows = np.frombuffer(image.constBits(), np.uint8).reshape(image.height(), image.bytesPerLine() // 4, 4)
+    pixels = rows[:, :image.width()]
+    return int((pixels[..., :3].max(axis=2) > pixels[..., 3]).sum())
 
 
 def ensure_system_fonts():

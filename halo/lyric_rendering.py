@@ -7,6 +7,7 @@ Ordinary LRC supplies line timestamps only; estimates remain a fallback.
 """
 from bisect import bisect_right
 from collections import OrderedDict
+from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import lru_cache
 import math
@@ -16,6 +17,8 @@ from PySide6.QtCore import QPointF, QRectF
 from PySide6.QtGui import QColor, QFont, QPainterPath, QTextLayout, QTextOption, QTransform
 from .models import lyric_word_matches, validate_lyric_lines
 from .extra_lyrics import EXTRA_LYRIC_STYLES
+from .svg_path import icon_path
+from .symbol_lexicon import KINDS, WEAK_WORDS, WORD_KINDS
 
 
 LYRIC_STYLES = (
@@ -23,6 +26,7 @@ LYRIC_STYLES = (
     ("fisheye_visual", "Fisheye", "The flowing word lens with expressive illustrated symbols."),
     ("visual", "Visual", "One bold word at a time, paired with a floating symbol."),
 ) + EXTRA_LYRIC_STYLES
+FLOW_SECONDS = .35
 LYRIC_STYLE_ALIASES = {"ship": "ship_visual", "fisheye": "fisheye_visual"}
 
 
@@ -135,6 +139,20 @@ class WordTimeline:
             progress = (position - word.begin) / max(.04, span)
         return index, clamp(progress)
 
+    def flowing(self, word_index, position):
+        """A position that moves towards the next word just before it is sung, for timing known in advance."""
+        words = self.display_words
+        following = words[word_index + 1] if word_index + 1 < len(words) else None
+        if following is None or following.line != words[word_index].line or following.text == "♪":
+            return float(word_index)
+        reach = min(following.begin - words[word_index].begin, FLOW_SECONDS)
+        return word_index + smooth((position - following.begin + reach) / reach) if reach > 0 else float(word_index)
+
+    def display_word(self, line, ordinal):
+        """The display index of a line's word, by its place in the line."""
+        start, end = self.ranges[line]
+        return self._display_indexes[min(start + ordinal, end - 1)]
+
     def display_at(self, line, position):
         """Focus a blank slot during breaks, retaining the surrounding lyrics."""
         if line < 0 or not self.ranges:
@@ -244,27 +262,37 @@ def alpha(color, opacity):
     return value
 
 
+# Endings tried in turn on a word that is not listed, each with what the stem may have lost
+# before it: a final e (danc-ing, lov-in, di-ed), a y (sk-ies), or nothing, as in a plain plural.
+# The e comes back first, and -s is tried before -es, so "caring" and "cares" find care rather
+# than car. -ing and -ed can also double the stem's last consonant (swimm-ing, dropp-ed).
+_ENDINGS = (("'s", ("",)), ("’s", ("",)), ("ing", ("e", "")), ("in", ("e", "")), ("ed", ("e", "")),
+            ("s", ("",)), ("es", ("",)), ("ies", ("y",)))
+_DOUBLING_ENDINGS = ("ing", "ed")
+
+
+def _lexicon_word(word):
+    """The listed word a lyric word stands for, exactly or with an ending removed, else None."""
+    value = word.lower().strip(".,!?;:'\"’()“”…—")
+    if value in WORD_KINDS:
+        return value
+    for ending, restored in _ENDINGS:
+        if value.endswith(ending):
+            stem = value[:-len(ending)]
+            candidates = [stem + letter for letter in restored]
+            if ending in _DOUBLING_ENDINGS and stem[-2:-1] == stem[-1:] and stem[-1:] not in "aeiou":
+                candidates.append(stem[:-1])
+            for candidate in candidates:
+                if len(candidate) >= 3 and candidate in WORD_KINDS:
+                    return candidate
+    return None
+
+
+@lru_cache(maxsize=1024)
 def symbol_kind(word):
-    value = word.lower().strip(".,!?;:'\"’")
-    if value in {"see", "seen", "eyes", "eye", "look", "watch", "vision"}:
-        return "eye"
-    if value in {"chance", "chances", "luck", "lucky", "roll", "game"}:
-        return "dice"
-    if value in {"wind", "blew", "blow", "air", "breath", "breathe", "away"}:
-        return "wind"
-    if value in {"name", "names", "write", "written", "words", "story"}:
-        return "signature"
-    if value in {"love", "heart", "loved", "loving", "you", "us"}:
-        return "heart"
-    if value in {"moon", "night", "dream", "dreams", "sleep", "dark"}:
-        return "moon"
-    if value in {"sun", "light", "shine", "glow", "gold", "day", "alive"}:
-        return "sun"
-    if value in {"rain", "ocean", "sea", "water", "river", "flow", "waves", "sound", "music", "song"}:
-        return "wave"
-    if value in {"home", "world", "earth", "grow", "life", "green", "colours", "colors"}:
-        return "leaf"
-    return "star"
+    """The illustration kind for a lyric word, or the star fallback."""
+    base = _lexicon_word(word)
+    return WORD_KINDS[base] if base else "star"
 
 
 @lru_cache(maxsize=256)
@@ -279,68 +307,40 @@ def line_symbol_kind(text):
         word = match.group()
         kind = symbol_kind(word)
         if kind != "star":
-            priority = 0 if word in {"you", "us", "away", "day", "world", "words"} else 1
+            priority = 0 if _lexicon_word(word) in WEAK_WORDS else 1
             candidates.append((priority, kind))
     return max(candidates, key=lambda candidate: candidate[0])[1] if candidates else "star"
 
 
 def symbol_path(kind):
-    """Original vector symbols, expressed in a unit box around the origin."""
-    path = QPainterPath()
-    if kind == "eye":
-        path.moveTo(-1, 0)
-        path.cubicTo(-.4, -.85, .4, -.85, 1, 0)
-        path.cubicTo(.4, .85, -.4, .85, -1, 0)
-        path.addEllipse(QRectF(-.25, -.25, .5, .5))
-    elif kind == "dice":
-        path.addRoundedRect(QRectF(-.78, -.78, 1.56, 1.56), .22, .22)
-        for x, y in ((-.4, -.4), (.4, -.4), (0, 0), (-.4, .4), (.4, .4)):
-            path.addEllipse(QRectF(x - .075, y - .075, .15, .15))
-    elif kind == "wind":
-        for row, ending in ((-.38, .15), (0, .7), (.4, -.05)):
-            path.moveTo(-1, row)
-            path.cubicTo(-.5, row - .14, .2, row + .12, ending, row)
-            path.cubicTo(ending + .5, row, ending + .5, row - .58, ending + .15, row - .4)
-    elif kind == "signature":
-        path.moveTo(-1, .4)
-        path.cubicTo(.8, -.75, -.8, -1.2, -.45, .5)
-        path.cubicTo(-.2, .9, .5, -.55, .1, .2)
-        path.cubicTo(.1, .65, .6, -.5, .5, .2)
-        path.cubicTo(.55, .4, .8, .35, 1, .2)
-        path.moveTo(-.85, .65)
-        path.lineTo(.85, .5)
-    elif kind == "heart":
-        path.moveTo(0, .82)
-        path.cubicTo(-1.7, -.3, -.8, -1.4, 0, -.52)
-        path.cubicTo(.8, -1.4, 1.7, -.3, 0, .82)
-    elif kind == "moon":
-        path.moveTo(.7, -.75)
-        path.cubicTo(-.9, -1.2, -1.4, .8, .2, .95)
-        path.cubicTo(.55, 1, .85, .75, .95, .42)
-        path.cubicTo(-.3, .66, -.4, -.58, .7, -.75)
-    elif kind == "leaf":
-        path.moveTo(-.8, .8)
-        path.cubicTo(-1, -.45, .1, -1, .9, -.85)
-        path.cubicTo(1.05, .35, .2, 1.15, -.8, .8)
-        path.moveTo(-.7, .65)
-        path.lineTo(.45, -.45)
-    elif kind == "wave":
-        for row in (-.5, 0, .5):
-            path.moveTo(-1, row)
-            path.cubicTo(-.6, row - .5, -.4, row + .5, 0, row)
-            path.cubicTo(.4, row - .5, .6, row + .5, 1, row)
-    elif kind == "sun":
-        path.addEllipse(QRectF(-.46, -.46, .92, .92))
-        for i in range(8):
-            angle = i * math.pi / 4
-            path.moveTo(math.cos(angle) * .7, math.sin(angle) * .7)
-            path.lineTo(math.cos(angle), math.sin(angle))
-    else:
-        path.moveTo(0, -1)
-        for x, y in ((.23, -.23), (1, 0), (.23, .23), (0, 1), (-.23, .23), (-1, 0), (-.23, -.23)):
-            path.lineTo(x, y)
-        path.closeSubpath()
-    return path
+    """The Lucide outline for a kind, in a unit box around the origin; unknown kinds raise KeyError."""
+    from .lucide_data import ICONS
+    return icon_path(ICONS[KINDS[kind]])
 
 
-SYMBOLS = {name: symbol_path(name) for name in ("heart", "moon", "sun", "wave", "leaf", "star", "eye", "dice", "wind", "signature")}
+class SymbolPaths(Mapping[str, QPainterPath]):
+    """Symbol outlines by kind, each built the first time it is asked for."""
+    def __init__(self):
+        self._paths = {}
+
+    @property
+    def built(self):
+        return len(self._paths)
+
+    def __getitem__(self, kind):
+        path = self._paths.get(kind)
+        if path is None:
+            path = self._paths[kind] = symbol_path(kind)
+        return path
+
+    def __contains__(self, kind):
+        return kind in KINDS
+
+    def __iter__(self):
+        return iter(KINDS)
+
+    def __len__(self):
+        return len(KINDS)
+
+
+SYMBOLS = SymbolPaths()

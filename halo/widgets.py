@@ -3,7 +3,7 @@ from collections import OrderedDict
 import math
 import time
 from PySide6.QtCore import Qt, QEvent, QRectF, QRect, QPointF
-from PySide6.QtGui import (QColor, QFont, QPainter, QPen, QLinearGradient,
+from PySide6.QtGui import (QColor, QFont, QImage, QPainter, QPen, QLinearGradient,
                           QRadialGradient, QPainterPath, QPixmap)
 from PySide6.QtWidgets import QWidget
 from .models import floating_geometry
@@ -11,6 +11,8 @@ from .glow import paint_edge_glow
 from .palette import artwork_colours
 from .taskbar import allow_taskbar_reveal
 from .extra_lyrics import LINE_BASED_STYLES, paint_lyric_mode
+from .lens import (COLUMN_SHARE, LENS_STRENGTH, MIN_CANVAS, lens_disabled, lens_geometry, magnification,
+                   output_y, shared_lens, warp_source)
 from .lyric_rendering import (LYRIC_STYLES, WordTimeline, TypeCache, clamp, smooth,
                               spring, alpha, SYMBOLS, symbol_kind, line_symbol_kind, canonical_lyric_style)
 
@@ -76,6 +78,9 @@ class Artwork(QWidget):
                 p.drawText(box.adjusted(13, 10, -10, -12), Qt.AlignmentFlag.AlignBottom, "SOUND IN COLOUR")
 
 
+FLOW_LEAD = .08
+
+
 class LyricCanvas(QWidget):
     """Native lyric choreographies sharing one playback-aware animation clock."""
     def __init__(self, controller, mode="preview"):
@@ -95,12 +100,15 @@ class LyricCanvas(QWidget):
         self._word_velocity = self._line_velocity = 0.0
         self._active_word = -1
         self._previous_word = -1
+        self._followed = None
         self._transition_at = 0.0
         self._line_art_clock = None
         self._line_art_motion = 0.0
         self._line_art_key = None
         self._line_text_rasters = OrderedDict()
         self._line_text_pixels = 0
+        self._lens_key = None
+        self._lens_image = None
         self._hit_rows = []
         self.setMinimumHeight(110)
         self.setAccessibleName("Animated lyrics")
@@ -140,12 +148,15 @@ class LyricCanvas(QWidget):
             self._word_velocity = self._line_velocity = 0.0
         elif c.track.playing:
             self.visual_index, self._line_velocity = spring(self.visual_index, self._line_velocity, index, elapsed, 10)
-            frequency = 15
+            frequency, target = 15, word_index
             if not whole_line:
                 span = self._timed_word_span(index, word_index)
-                if span is not None and span < .26:
+                if span is not None and getattr(c.lyrics, "timing_source", "") == "learned":
+                    # A softer spring takes the edge off bursts, and leading it keeps words on time.
+                    frequency, target = 10, self.timeline.flowing(word_index, position + FLOW_LEAD)
+                elif span is not None and span < .26:
                     frequency = min(240, 6 / max(.001, span))
-            self._word_visual, self._word_velocity = spring(self._word_visual, self._word_velocity, word_index, elapsed, frequency)
+            self._word_visual, self._word_velocity = spring(self._word_visual, self._word_velocity, target, elapsed, frequency)
         if word_index != self._active_word:
             self._previous_word = self._active_word if not reset else -1
             self._active_word = word_index
@@ -163,6 +174,24 @@ class LyricCanvas(QWidget):
                 return 1.0
             return smooth((position - word.begin) / min(.26, span / 2))
         return 1.0 if reduced or reset else smooth((motion - self._transition_at) / .26)
+
+    def _followed_word(self, index, word_index, position):
+        """The word playback is following, for a line with no word timing of its own."""
+        live_word = getattr(self.controller, "live_word", None)
+        ordinal = live_word(index) if live_word is not None and index >= 0 else None
+        if ordinal is None or index in self.timeline.timed_lines:
+            self._followed = None
+            return word_index
+        shown = self.timeline.display_word(index, ordinal)
+        if self._followed is None or self._followed[0] != shown:
+            self._followed = (shown, position)
+        return shown
+
+    def word_elapsed(self, display_index, position):
+        """Seconds since a word began, counted from when playback reached it if it is being followed."""
+        if self._followed is not None and self._followed[0] == display_index:
+            return position - self._followed[1]
+        return position - self.timeline.display_words[display_index].begin
 
     def _timed_word_span(self, index, word_index):
         if self.timeline is None or index not in self.timeline.timed_lines or word_index < 0:
@@ -270,7 +299,7 @@ class LyricCanvas(QWidget):
         p.restore()
         return True
 
-    def _symbol(self, p, word, x, y, radius, opacity, motion, subdued=False):
+    def _symbol(self, p, word, x, y, radius, opacity, motion):
         c = self.controller
         reduced = bool(getattr(c, "reduced_motion", False))
         p.save()
@@ -278,12 +307,12 @@ class LyricCanvas(QWidget):
         if not reduced:
             p.rotate(math.sin(motion * .62) * 7)
         p.scale(radius, radius)
+        p.setBrush(Qt.BrushStyle.NoBrush)
         if self.mode == "floating":
             p.setPen(QPen(alpha(QColor("#000000"), opacity * .85), 4 / radius))
             p.drawPath(SYMBOLS[symbol_kind(word)])
         p.setPen(QPen(alpha(c.primary, opacity), 1.7 / radius,
                       Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
-        p.setBrush(alpha(c.primary, opacity * (.055 if subdued else .11)))
         p.drawPath(SYMBOLS[symbol_kind(word)])
         p.restore()
 
@@ -320,6 +349,7 @@ class LyricCanvas(QWidget):
         style = canonical_lyric_style(getattr(c, "lyric_style", "fisheye_visual"))
         index, word_index, fraction = self.timeline.display_at(
             c.lyrics.index_at(position), position)
+        word_index = self._followed_word(index, word_index, position)
         motion = self._clock()
         transition = self._advance(index, word_index, position, motion)
         if paint_lyric_mode(self, p, style, index, word_index, fraction, motion, transition):
@@ -329,7 +359,7 @@ class LyricCanvas(QWidget):
         elif style == "visual":
             if word_index >= 0 and self.timeline.display_words[word_index].text != "♪":
                 self._visual(p, index, word_index, fraction, motion, transition)
-        else:
+        elif not self._fisheye_lens(p, index, word_index, motion):
             # Empty cues occupy a real scroll position; only their ink is
             # omitted, so context stays above/below an empty centre.
             self._fisheye(p, index, word_index, fraction, motion, True)
@@ -364,11 +394,11 @@ class LyricCanvas(QWidget):
         p.scale(1 + breathe * focus, 1 + breathe * focus)
         p.save()
         p.scale(radius, radius)
+        p.setBrush(Qt.BrushStyle.NoBrush)
         if self.mode != "floating":
             # Light follows the glyph itself, with no enclosing rings or pins.
             p.setPen(QPen(alpha(c.primary, opacity * focus * .09), 5.5 / radius,
                           Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
-            p.setBrush(Qt.BrushStyle.NoBrush)
             p.drawPath(SYMBOLS[kind])
         if self.mode == "floating":
             p.setPen(QPen(alpha(QColor("#000000"), opacity * .8), 3.4 / radius,
@@ -376,7 +406,6 @@ class LyricCanvas(QWidget):
             p.drawPath(SYMBOLS[kind])
         p.setPen(QPen(alpha(c.primary, opacity), max(1.15, radius * .06) / radius,
                       Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
-        p.setBrush(alpha(c.primary, opacity * .035))
         p.drawPath(SYMBOLS[kind])
         p.restore()
         p.restore()
@@ -476,12 +505,96 @@ class LyricCanvas(QWidget):
                                  opacity, motion)
                 if symbol_kind(word.text) != "star" or i == word_index:
                     self._symbol(p, word.text, x - shape.bounds.width() * scale / 2 - size * .58,
-                                 y, size * .22 * scale, opacity * (.9 if i == word_index else .45), motion, True)
+                                 y, size * .22 * scale, opacity * (.9 if i == word_index else .45), motion)
             color = WHITE if i == word_index and illustrated else c.primary
             self._text(p, shape, x, y, color, opacity, scale,
                        0 if getattr(c, "reduced_motion", False) else clamp(delta * -.7, -2, 2))
             self._hit_rows.append((QRectF(x - shape.bounds.width() * scale / 2 - 12, y - spacing * .35,
                                          shape.bounds.width() * scale + 24, spacing * .7), word.line))
+
+    def _lens_ready(self):
+        """The shared lens for a visible canvas that can use it, otherwise None."""
+        if (not self.isVisible() or lens_disabled()
+                or self.width() < MIN_CANVAS[0] or self.height() < MIN_CANVAS[1]):
+            return None
+        renderer = shared_lens()
+        return renderer if renderer.available and renderer.budget.enabled else None
+
+    def _lens_source(self, p, rows, hero, size, motion):
+        """The flat word stack the lens bends. The hero leaves its strip and symbol but not its letters."""
+        x, h = self.width() / 2, self.height()
+        flat = 1 - LENS_STRENGTH
+        reach = self.width() * COLUMN_SHARE / 2
+        for i, word, delta, shape in rows:
+            opacity = max(.2, 1 - abs(delta) * .2)
+            half, height = shape.bounds.width() / 2, shape.bounds.height()
+            if i == hero:
+                # The lens narrows wide words but the painted hero stays flat, so aim for its true edge.
+                ny = output_y(delta * .25)
+                half = warp_source(half * magnification(ny) * flat / reach, ny)[0] * reach / flat
+            p.save()
+            # Words and strokes shrink together, so the lens returns both to their usual size.
+            p.translate(x, h / 2 + h * .125 * delta)
+            p.scale(flat, flat)
+            if i == hero:
+                self._cutout(p, -half * .16, height * .04, half * 1.84, height * .9, opacity, motion)
+            if symbol_kind(word.text) != "star" or i == hero:
+                self._symbol(p, word.text, -half - size * .58, 0, size * .22,
+                             opacity * (.9 if i == hero else .45), motion)
+            if i != hero:
+                self._text(p, shape, 0, 0, self.controller.primary, opacity)
+            p.restore()
+
+    def _fisheye_lens(self, p, index, word_index, motion):
+        """Fisheye through the GPU lens with the hero crisp on top. False means use _fisheye."""
+        renderer = self._lens_ready() if word_index >= 0 else None
+        if renderer is None:
+            return False
+        c = self.controller
+        w, h = self.width(), self.height()
+        dpr = self.devicePixelRatioF()
+        budget = renderer.budget
+        geometry = lens_geometry(w, h, dpr, budget.scale)
+        size = self._base_size()
+        flat = 1 - LENS_STRENGTH
+        width, height = geometry.column.width() * .46 / flat, h * .125 * 1.16 / flat
+        words = self.timeline.display_words
+        rows = [(i, words[i], i - self._word_visual, self._word_shape(words[i].text, width, height, size * 1.30))
+                for i in range(max(0, word_index - 4), min(len(words), word_index + 5))
+                if words[i].text != "♪"]
+        hero = round(self._word_visual)
+        key = (round(self._word_visual, 3), word_index, motion, w, h, dpr, budget.scale, size,
+               c.primary.rgba(), c.secondary.rgba(), id(c.lyrics.lines), c.generation)
+        if key != self._lens_key:
+            started = time.perf_counter()
+            source = QImage(geometry.source, QImage.Format.Format_RGBA8888_Premultiplied)
+            source.fill(Qt.GlobalColor.transparent)
+            ink = QPainter(source)
+            ink.setRenderHint(QPainter.RenderHint.Antialiasing)
+            ink.scale(geometry.source_per_logical, geometry.source_per_logical)
+            ink.translate(-geometry.column.x(), 0)
+            self._lens_source(ink, rows, hero, size, motion)
+            ink.end()
+            result = renderer.apply(source, geometry.output)
+            if result is None:
+                return False
+            budget.record((time.perf_counter() - started) * 1000)
+            if not budget.enabled:
+                renderer.release()
+            self._lens_key, self._lens_image = key, result
+        p.save()
+        p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        p.drawImage(geometry.column, self._lens_image)
+        p.restore()
+        for i, word, delta, shape in rows:
+            ny = output_y(delta * .25)
+            top, bottom = (h / 2 + h / 2 * output_y((delta + edge) * .25) for edge in (-.35, .35))
+            wide = shape.bounds.width() * flat / (flat + LENS_STRENGTH * ny * ny)
+            self._hit_rows.append((QRectF(w / 2 - wide / 2 - 12, top, wide + 24, bottom - top), word.line))
+            if i == hero:
+                self._text(p, shape, w / 2, h / 2 + h / 2 * ny, WHITE, max(.2, 1 - abs(delta) * .2),
+                           magnification(ny) * flat)
+        return True
 
     def _visual(self, p, index, word_index, fraction, motion, transition):
         c = self.controller

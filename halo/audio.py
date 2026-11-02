@@ -77,9 +77,10 @@ class AudioDynamics:
 
 
 class AudioMeter:
-    """Optional WASAPI output loopback. No microphone, storage or transmission."""
+    """Optional WASAPI output loopback. No microphone, storage or transmission; a listener sees blocks in memory only."""
     def __init__(self):
         self.enabled = False
+        self.listener = None
         self.level = 0.0
         self.raw_level = 0.0
         self.error = ""
@@ -108,6 +109,8 @@ class AudioMeter:
                             samples = recorder.record(numframes=1024)
                             self.level = dynamics.process(samples)
                             self.raw_level = dynamics.rms
+                            if self.listener is not None:
+                                self.listener(samples, 48000)
                             if time.monotonic() > check_at:
                                 check_at = time.monotonic() + 3
                                 if sc.default_speaker().id != speaker.id:

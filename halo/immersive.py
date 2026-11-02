@@ -298,8 +298,9 @@ class Immersive(QWidget):
         for label in (self.title, self.artist, self.album):
             label.setToolTip(label.text())
         timed = [bool(line.words) for line in c.lyrics.lines if line.text.strip()]
-        timing_label = ("WORD SYNCED" if timed and all(timed) else "WORD + LINE SYNCED" if any(timed)
-                        else "LINE SYNCED" if c.lyrics.lines else "")
+        timing_label = (getattr(c, "timing_label", str)().upper() or
+                        ("WORD SYNCED" if timed and all(timed) else "WORD + LINE SYNCED" if any(timed)
+                         else "LINE SYNCED" if c.lyrics.lines else ""))
         self.lyrics_status.setText("ORIGINAL DEMO · LINE SYNCED" if getattr(c, "demo", False) else timing_label)
         self.play.setText("Ⅱ" if c.track.playing else "▶")
         for control in (self.play, self.previous, self.next, self.progress):

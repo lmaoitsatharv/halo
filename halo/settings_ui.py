@@ -9,9 +9,10 @@ from PySide6.QtGui import (QColor, QPainter, QPen, QPainterPath, QPixmap, QIcon,
                           QLinearGradient, QRadialGradient, QFont, QFontMetrics)
 from PySide6.QtWidgets import (QDialog, QWidget, QFrame, QLabel,
     QPushButton, QCheckBox, QVBoxLayout, QHBoxLayout, QGridLayout, QStackedWidget,
-    QScrollArea, QFileDialog, QSlider, QSizePolicy)
+    QScrollArea, QFileDialog, QSlider, QSizePolicy, QMessageBox)
 from .models import Lyrics, parse_lrc, DEMO_LRC, floating_geometry
 from .widgets import LyricCanvas, tint
+from .lens import lens_status_text
 from .glow import HALO_MODES, paint_edge_glow
 from .lyric_rendering import LYRIC_STYLES
 from .immersive import IMMERSIVE_SCENES
@@ -71,6 +72,14 @@ QSlider::handle:horizontal { background: #eee8ff; width: 11px; margin: -5px 0; b
 QScrollArea, QWidget#studioPage, QWidget#studioViewport { background: transparent; border: 0; }
 QScrollBar::handle:vertical { background: rgba(196,180,248,55); }
 """
+
+
+LEARN_FIRST_LISTEN_NOTICE = ("On a first listen, words can move abruptly, because Halo can't see the next word coming. "
+                             "Replays use saved timing, so words glide smoothly once a song has played through.")
+LEARN_WORD_TIMING_HINT = ("Halo analyses all sound on this PC's output with a small model that runs here, to place each lyric word. "
+                          "It keeps only word times, which do show which songs you played, and never saves or sends audio. "
+                          "Timing is estimated, and can be wrong. "
+                          "Spotify's rules restrict this kind of processing, so turn this on only if you accept that.")
 
 
 class StudioNavButton(QPushButton):
@@ -160,6 +169,19 @@ def studio_icon(kind="general"):
         p.drawLine(QPointF(12, 18), QPointF(12, 21))
     p.end()
     return QIcon(pixmap)
+
+
+def show_learn_notice(parent):
+    """Explain the first listen. Returns True if the listener asked not to see this again."""
+    box = QMessageBox(parent)
+    box.setWindowTitle("Learn word timing")
+    box.setIcon(QMessageBox.Icon.Information)
+    box.setText(LEARN_FIRST_LISTEN_NOTICE)
+    # The dialog does not take ownership, so an inline checkbox is freed while it is still on screen.
+    remember = QCheckBox("Don't show this again")
+    box.setCheckBox(remember)
+    box.exec()
+    return remember.isChecked()
 
 
 class StudioSwitch(QCheckBox):
@@ -1051,6 +1073,9 @@ class SettingsStudio(QDialog):
         lyrics.addWidget(text_label("Lyric style", "studioSectionTitle"))
         self.modes(lyrics, "lyric_style", LYRIC_STYLES)
         lyrics.addWidget(action("Explore lyric styles   →", lambda: self.owner.open_modes("lyrics"), "ghost"))
+        self.lens_status = text_label("", "studioHint")
+        self.lens_status.setWordWrap(True)
+        lyrics.addWidget(self.lens_status)
         desktop = self.group(lyrics, "On your desktop")
         self.owner.floating = self.switch(desktop, "floating", "Floating lyrics", "Keep words above your desktop while Halo is minimized.")
         self.row(desktop, "Position", "Choose a monitor and place your words.", action("Adjust…", self.owner.open_position_settings, "ghost"))
@@ -1085,6 +1110,16 @@ class SettingsStudio(QDialog):
         timing.addWidget(self.choose_lyrics_button)
         self.automatic_lyrics_button = action("Use automatic lyrics again", self.c.use_automatic_lyrics, "ghost")
         timing.addWidget(self.automatic_lyrics_button)
+        timing.addSpacing(12)
+        self.switch(timing, "learn_word_timing", "Learn word timing from playback", "Follow each word by listening to this PC's sound.")
+        self.switches["learn_word_timing"].clicked.connect(self.learn_timing_clicked)
+        hint = text_label(LEARN_WORD_TIMING_HINT, "studioHint")
+        hint.setWordWrap(True)
+        timing.addWidget(hint)
+        self.forget_timing_button = action("Forget learned timing", lambda checked=False: self.c.forget_learned_timing(), "ghost")
+        timing.addWidget(self.forget_timing_button)
+        self.forget_all_timing_button = action("Forget all", lambda checked=False: self.c.forget_learned_timing(True), "ghost")
+        timing.addWidget(self.forget_all_timing_button)
         timing.addSpacing(10)
         lyrics.addStretch()
 
@@ -1100,6 +1135,10 @@ class SettingsStudio(QDialog):
         scenes.addStretch()
         self.sync_lyrics()
 
+    def learn_timing_clicked(self, checked):
+        if checked and not self.c.hide_learn_word_timing_notice and show_learn_notice(self):
+            self.c.set("hide_learn_word_timing_notice", True)
+
     def sync_lyrics(self):
         if not hasattr(self, "lyric_song_label"):
             return
@@ -1112,13 +1151,20 @@ class SettingsStudio(QDialog):
         self.automatic_lyrics_button.setEnabled(enabled and bool(c.saved_lyric_kind))
         populated = [line for line in c.lyrics.lines if line.text.strip()]
         true_words = sum(bool(getattr(line, "words", ())) for line in populated)
-        timing = ("Word timestamps supplied by the lyric source." if true_words and true_words == len(populated)
+        timing = ("Word timing learned on this PC; other words follow playback or are estimated." if c.lyrics.timing_source == "learned"
+                  else "Word timestamps supplied by the lyric source." if true_words and true_words == len(populated)
                   else "Some lines have word timestamps; other words are estimated." if true_words
                   else "Line timestamps only; word animation is estimated." if populated
                   else "No timed lyrics loaded.")
         source = "Saved import. " if c.saved_lyric_kind == "imported" else "Your saved lyric choice. " if c.saved_lyric_kind else ""
         calibration = f" All-song calibration: {c.global_offset:+d} ms." if c.global_offset else ""
         self.lyric_timing_status.setText(c.lyric_save_error or source + timing + calibration)
+        self.sync_lens_status()
+
+    def sync_lens_status(self):
+        lens_text = lens_status_text()
+        self.lens_status.setText(lens_text)
+        self.lens_status.setVisible(bool(lens_text))
 
     def enter_immersive(self):
         self.close()
@@ -1246,6 +1292,7 @@ class SettingsStudio(QDialog):
 
     def showEvent(self, event):
         super().showEvent(event)
+        self.sync_lens_status()
         QTimer.singleShot(0, self, self.sync_visibility)
 
     def hideEvent(self, event):

@@ -16,9 +16,11 @@ The curated collection is bundled with Halo and needs no account. Your choices s
 
 ## Lyrics
 
-**Monument** makes each verse an asymmetric editorial poster, with a numbered cue rail and ascending whole-line movement. **Marquee** sends a ribbon of words horizontally through an open focal slit. **Afterimage** gives the current word layered outline echoes, with nearby verses framing the composition.
+**Monument** makes each verse an asymmetric editorial poster, with a numbered cue rail and ascending whole-line movement. **Marquee** sends a ribbon of words horizontally through an open focal slit. **Afterimage** gives the current word layered outline echoes, with nearby verses framing the composition. **Strata** sets the nearby words on one tilted plane that sways in 3D and swings to a new angle at each line. The current word stays bright and readable, and Reduce motion holds the plane at a fixed angle.
 
-The included Ship, Fisheye and Visual styles remain available. Ship's symbol follows the first visual line when lyrics wrap. Source-marked singing breaks keep an empty position in the lyric flow.
+**Cascade** stacks words as they are sung, with the newest large and lit on a bold block, its symbol beside it, and older words climbing away. **Starline** lands each word as a star at the end of a bright thread, drawing the verse into a map that clears for the next one; a repeated chorus draws the same map. **Neon** shows the whole line as unlit glass tubes that strike on word by word in the album's colour. **Impact** throws one huge word at a time at the screen, with a shockwave in the shape of the word and a brief colour split. Under Reduce motion these four hold still: no flicker, thread animation, shockwave or shake. Cascade, Neon and Impact respond to loudness when audio reaction is on, and look complete without it. Songs without word-level timing use estimated word timing, so these word-by-word modes are less exact on them, unless **Learn word timing from playback** is on in **Lyrics → Timing & lyrics**.
+
+The included Ship, Fisheye and Visual styles remain available. Their line symbols are Lucide icons drawn as outlines, matched to words by Halo's own English word list, with a sparkle standing in for words it does not know. Ship's symbol follows the first visual line when lyrics wrap. Source-marked singing breaks keep an empty position in the lyric flow.
 
 ## Immersive rooms
 
@@ -36,4 +38,4 @@ When a song has timed lyrics, previews follow its actual lyrics, playback positi
 
 **Pause previews** freezes this page while your song keeps playing; resuming catches up to the song. Pausing the song holds the words and decorative motion, while seeking still updates the preview. Reduce motion keeps decorations still while live lyrics continue to update. Hidden or minimized pages stop their preview work, and only cards inside the visible scrolling area receive animation updates. Browsing never changes your song, lyric data, correction or playback position.
 
-The selected preview updates at up to 30 times per second and cards at up to 15. Actual responsiveness depends on the computer, window size and display. These previews demonstrate the bundled renderers; generated visual motion does not claim to measure the song's actual beats or singing alignment.
+The selected preview updates at up to 30 times per second and cards at up to 15. Actual responsiveness depends on the computer, window size and display. These previews demonstrate the bundled renderers, except that Fisheye here uses standard drawing rather than the GPU lens that the main window, immersive view and floating lyrics use when it is available. Generated visual motion does not claim to measure the song's actual beats or singing alignment.

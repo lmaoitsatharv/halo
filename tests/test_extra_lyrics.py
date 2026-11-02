@@ -1,4 +1,4 @@
-"""Original text exercises the optional library's three distinct lyric stages."""
+"""Original text exercises the optional library's distinct lyric stages."""
 import hashlib
 from types import SimpleNamespace
 import unittest
@@ -12,7 +12,7 @@ from PySide6.QtWidgets import QApplication
 from qt_support import ensure_system_fonts
 from halo.extra_lyrics import EXTRA_LYRIC_STYLES, LINE_BASED_STYLES, paint_lyric_mode
 from halo.lyric_rendering import WordTimeline
-from halo.models import Lyrics, LyricLine, Track
+from halo.models import Lyrics, LyricLine, LyricWord, Track
 from halo.widgets import LyricCanvas
 
 
@@ -58,9 +58,10 @@ class ExtraLyricTests(unittest.TestCase):
         self.addCleanup(canvas.close)
         return canvas
 
-    def test_catalogue_has_three_original_compositions_and_line_based_metadata(self):
-        self.assertEqual([row[1] for row in EXTRA_LYRIC_STYLES], ["Monument", "Marquee", "Afterimage"])
-        self.assertEqual(len({row[0] for row in EXTRA_LYRIC_STYLES}), 3)
+    def test_catalogue_has_original_compositions_and_line_based_metadata(self):
+        self.assertEqual([row[1] for row in EXTRA_LYRIC_STYLES],
+                         ["Monument", "Marquee", "Afterimage", "Strata", "Cascade", "Starline", "Neon", "Impact"])
+        self.assertEqual(len({row[0] for row in EXTRA_LYRIC_STYLES}), 8)
         self.assertEqual(LINE_BASED_STYLES, {"lyric_monument"})
 
     def test_unknown_style_does_not_touch_the_painter(self):
@@ -69,7 +70,7 @@ class ExtraLyricTests(unittest.TestCase):
         self.assertFalse(paint_lyric_mode(canvas, painter, "unknown", 0, 0, 0, 0, 0))
         self.assertEqual(painter.mock_calls, [])
 
-    def test_all_three_compositions_render_distinctly_on_each_surface(self):
+    def test_all_compositions_render_distinctly_on_each_surface(self):
         for surface, size in (("preview", (420, 220)), ("floating", (350, 140)),
                               ("immersive", (1000, 620))):
             with self.subTest(surface=surface):
@@ -80,7 +81,7 @@ class ExtraLyricTests(unittest.TestCase):
                     self.assertTrue(any(image.pixelColor(x, y).alpha() for x in range(0, image.width(), 4)
                                         for y in range(0, image.height(), 4)))
                     hashes.add(hashlib.sha256(image.constBits()).hexdigest())
-                self.assertEqual(len(hashes), 3)
+                self.assertEqual(len(hashes), len(EXTRA_LYRIC_STYLES))
 
     def test_blank_break_keeps_context_and_never_shapes_a_music_note(self):
         for style, _, _ in EXTRA_LYRIC_STYLES:
@@ -166,7 +167,9 @@ class ExtraLyricTests(unittest.TestCase):
                     with patch.object(canvas, "_shape", wraps=canvas._shape) as lines, \
                          patch.object(canvas, "_word_shape", wraps=canvas._word_shape) as words:
                         canvas.grab()
-                        self.assertLessEqual(len(lines.call_args_list) + len(words.call_args_list), 20)
+                        # Strata is a wall of up to 48 words, so it gets its own bound.
+                        limit = 48 if style == "lyric_strata" else 20
+                        self.assertLessEqual(len(lines.call_args_list) + len(words.call_args_list), limit)
                     self.assertLessEqual(len(canvas.type_cache.items), canvas.type_cache.limit)
 
     def test_visible_text_clicks_use_the_existing_seek_contract(self):

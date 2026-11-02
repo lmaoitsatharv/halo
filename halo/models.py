@@ -70,6 +70,7 @@ class Lyrics:
     source_id: str = ""
     candidates: list[dict] = field(default_factory=list)
     selected_record: dict = field(default_factory=dict)
+    timing_source: str = ""
 
     @property
     def has_word_timing(self):

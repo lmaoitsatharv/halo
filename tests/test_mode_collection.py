@@ -55,12 +55,13 @@ class ModeCollectionTests(unittest.TestCase):
         self.windows.append(window)
         return window
 
-    def test_catalogue_contains_nine_optional_modes_across_three_categories(self):
+    def test_catalogue_contains_fourteen_optional_modes_across_three_categories(self):
         modes = all_modes()
         self.assertEqual(len({spec.identity for spec in modes}), len(modes))
-        self.assertEqual(len([spec for spec in modes if not spec.included]), 9)
+        self.assertEqual(len([spec for spec in modes if not spec.included]), 14)
         for kind in MODE_FIELDS:
-            self.assertEqual(len([spec for spec in modes if spec.kind == kind and not spec.included]), 3)
+            self.assertEqual(len([spec for spec in modes if spec.kind == kind and not spec.included]),
+                             8 if kind == "lyrics" else 3)
 
     def test_default_selectors_keep_the_familiar_included_modes(self):
         c = self.controller()

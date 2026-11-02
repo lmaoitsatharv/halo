@@ -1,5 +1,6 @@
 import argparse
 import json
+import hashlib
 import logging
 import math
 import os
@@ -17,6 +18,9 @@ from .models import Track, Lyrics, parse_lrc, load_lrc, DEMO_LRC
 from .spotify import SpotifyWorker
 from .lyrics import LyricsWorker
 from .lyric_store import LyricStore, recording_key, MAX_OFFSET_MS
+from .learned_timing import LearnedStore, merge
+from .word_timer import WordTimer
+from .word_timing import line_plan
 from .audio import AudioMeter
 from .artwork import ArtworkWorker
 from .widgets import EdgeOverlay, FloatingLyrics, AmbientBackdrop, artwork_palette
@@ -27,6 +31,7 @@ from .positioning import PositionDialog
 from .frontend import STYLE, build_main
 from .immersive import Immersive, IMMERSIVE_SCENES
 from .glow import HALO_MODES
+from .lens import shutdown_lens
 from .lyric_rendering import LYRIC_STYLES, LYRIC_STYLE_ALIASES, canonical_lyric_style
 from .mode_catalog import MODE_FIELDS, all_modes, find_mode, read_collection
 from .palette import PaletteTransition, valid_colour, readable_accent, envelope
@@ -138,6 +143,12 @@ class Controller(QObject):
         self.song_offset = 0
         self.offset = self.global_offset
         self.lyric_store = LyricStore(Path(settings.fileName()).parent / "saved-lyrics")
+        self.learned_store = LearnedStore(Path(settings.fileName()).parent / "learned-timing")
+        self.learn_word_timing = settings.value("learn_word_timing", False, type=bool)
+        self.hide_learn_word_timing_notice = settings.value("hide_learn_word_timing_notice", False, type=bool)
+        self.word_timer = None
+        self.timing_session = None
+        self.unlearned_lyrics = None
         self.saved_lyric_kind = ""
         self.lyric_save_error = ""
         self.lyric_choices = []
@@ -170,6 +181,7 @@ class Controller(QObject):
         self.pulse = 0.0
         self.error = ""
         self.audio = AudioMeter()
+        self.audio.listener = self._hear_output
         self.lyrics_thread = QThread()
         self.lyrics_worker = LyricsWorker()
         self.lyrics_worker.moveToThread(self.lyrics_thread)
@@ -268,8 +280,9 @@ class Controller(QObject):
             self.update_palette()
             self.generation += 1
             self.lookup_signature = None
-            self.lyrics = saved.get("lyrics") or Lyrics(message="Finding timed lyrics…" if track.connected else
-                                 "Play a song in Spotify, or try the demo below.")
+            self.lyrics = self._with_learned(saved.get("lyrics") or Lyrics(message="Finding timed lyrics…" if track.connected else
+                                 "Play a song in Spotify, or try the demo below."))
+            self._restart_word_timing()
             self.trackChanged.emit()
             self.lyricsChanged.emit()
             self.settingChanged.emit()
@@ -382,7 +395,8 @@ class Controller(QObject):
                 self.lyric_save_error = ""
                 self.lyric_choices_status = "Saved for this recording."
                 self.lyricChoicesChanged.emit()
-            self.lyrics = lyrics
+            self.lyrics = self._with_learned(lyrics)
+            self._restart_word_timing()
             self.lyricsChanged.emit()
 
     def can_correct_lyrics(self):
@@ -455,7 +469,8 @@ class Controller(QObject):
         self.selection_generation = self.choice_generation = None
         self.saved_lyric_kind = "imported"
         self.lyric_save_error = ""
-        self.lyrics = lyrics
+        self.lyrics = self._with_learned(lyrics)
+        self._restart_word_timing()
         self.lyricsChanged.emit()
 
     def use_automatic_lyrics(self):
@@ -482,7 +497,8 @@ class Controller(QObject):
         self.lyrics_worker.latest_generation = self.generation
         self.selection_generation = self.choice_generation = None
         self.lyric_choices_status = ""
-        self.lyrics = Lyrics(message="Finding timed lyrics…")
+        self.lyrics = self._with_learned(Lyrics(message="Finding timed lyrics…"))
+        self._restart_word_timing()
         self.lyricsChanged.emit()
         self.lyricChoicesChanged.emit()
         self.requestLyrics.emit(self.track, self.generation)
@@ -539,9 +555,97 @@ class Controller(QObject):
             self.settings.setValue("halo_animation", self.halo_animation)
         elif name == "artwork_online":
             self._background_lookup_changed()
+        elif name == "learn_word_timing":
+            self._relearn_lyrics()
         if name in {"palette", "custom_primary", "custom_secondary"}:
             self.update_palette()
         self.settingChanged.emit()
+
+    def _can_learn(self, lyrics):
+        """Imports have no stable source to tie timing to, so they are left as the listener made them."""
+        return (self.learn_word_timing and not self.demo and self.saved_lyric_kind != "imported"
+                and recording_key(self.track) is not None and bool(lyrics.lines))
+
+    def _with_learned(self, lyrics):
+        self.unlearned_lyrics = lyrics
+        if not self._can_learn(lyrics):
+            return lyrics
+        placed = self.learned_store.load(self.track, self.learned_source(lyrics))
+        return merge(lyrics, placed) if placed else lyrics
+
+    @staticmethod
+    def learned_source(lyrics):
+        """Line numbers only mean something for these exact lines, so the text is part of the identity."""
+        text = "\n".join(line.text for line in lyrics.lines)
+        return lyrics.source_id + ":" + hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+
+    def _relearn_lyrics(self):
+        """Apply a change to learning to the song in progress."""
+        if self.unlearned_lyrics is not None:
+            self.lyrics = self._with_learned(self.unlearned_lyrics)
+        self._restart_word_timing()
+        if not self.learn_word_timing and self.word_timer is not None:
+            self.word_timer.close()
+            self.word_timer = None
+        self.lyricsChanged.emit()
+
+    def _restart_word_timing(self):
+        if self.timing_session is not None:
+            self.timing_session = None
+            self.word_timer.finish_song()
+        lyrics = self.lyrics
+        if not self._can_learn(lyrics) or not any(not line.words and line.text.strip() and line_plan(line.text)
+                                                  for line in lyrics.lines):
+            return
+        if self.word_timer is None:
+            self.word_timer = WordTimer()
+        self.timing_session = (self.track, self.learned_source(lyrics))
+        self.word_timer.start_song(self.timing_session, lyrics.lines, self._save_learned)
+
+    def _close_word_timing(self):
+        if self.timing_session is not None:
+            self.timing_session = None
+            self.word_timer.finish_song()
+        self.word_timer.close()
+
+    def _save_learned(self, session, placed):
+        """Runs on the timer's thread."""
+        try:
+            self.learned_store.save(session[0], session[1], placed)
+        except (OSError, ValueError, TypeError):
+            logging.warning("Could not save learned word timing", exc_info=True)
+
+    def _hear_output(self, samples, rate):
+        """Runs on the capture thread. The block ended now, and lyrics run on the corrected clock."""
+        timer = self.word_timer
+        if timer is not None and self.timing_session is not None:
+            timer.feed(samples, rate, self.position + self.offset / 1000 - len(samples) / rate, self.track.playing)
+
+    def timing_label(self):
+        """What learning is doing for this song, or nothing when it is not involved."""
+        if self.lyrics.timing_source == "learned":
+            return "Word timing learned on this PC"
+        following = self.timing_session is not None and not self.audio.error
+        return "Line synced · words following playback" if following else ""
+
+    def live_word(self, line):
+        return self.word_timer.live_word(line) if self.timing_session is not None else None
+
+    def forget_learned_timing(self, all_songs=False):
+        # This listen must not save itself again.
+        if self.timing_session is not None:
+            self.timing_session = None
+            self.word_timer.abandon_song()
+        try:
+            if all_songs:
+                self.learned_store.forget_all()
+            else:
+                self.learned_store.forget(self.track)
+        except OSError as error:
+            self.lyric_save_error = self.error = f"Could not forget word timing: {error}"
+            self.settingChanged.emit()
+            return
+        self._relearn_lyrics()
 
     def set_demo(self, enabled):
         self.demo = enabled
@@ -558,7 +662,8 @@ class Controller(QObject):
             self.demo_playing = True
             self.track = Track("In the light we made", "Halo Studio · visual demo", "Sound in colour",
                                60, 8, True, True, observed_at=time.monotonic())
-            self.lyrics = Lyrics(parse_lrc(DEMO_LRC), "Original demo text · line-synced")
+            self.lyrics = self._with_learned(Lyrics(parse_lrc(DEMO_LRC), "Original demo text · line-synced"))
+            self._restart_word_timing()
         else:
             self.lookup_signature = None
             self.track = Track()
@@ -610,9 +715,13 @@ class Controller(QObject):
             if self.track.duration:
                 self.position = min(self.position, self.track.duration)
         # Stop capturing output when Spotify is paused, absent, or demo is active.
-        self.audio.enabled = (self.reactive and self.track.playing and not self.demo
-                              and not self.reduced_motion and self.halo_animation != "still")
-        target = self.audio.level if self.audio.enabled and not self.audio.error else 0.
+        if self.timing_session is not None and self.word_timer.failed:
+            self.timing_session = None
+            self.lyricsChanged.emit()
+        reacting = (self.reactive and self.track.playing and not self.demo
+                    and not self.reduced_motion and self.halo_animation != "still")
+        self.audio.enabled = reacting or (self.timing_session is not None and self.track.playing)
+        target = self.audio.level if reacting and not self.audio.error else 0.
         if self.demo and self.demo_playing:
             target = .25 + .65 * max(0, math.sin(now * 3.6)) ** 6
         if not self.reduced_motion:
@@ -625,6 +734,8 @@ class Controller(QObject):
     def close(self):
         self.timer.stop()
         self.audio.close()
+        if self.word_timer is not None:
+            self._close_word_timing()
         self.spotify.stop()
         self.spotify.wait(5500)
         self.artwork_worker.closing = True
@@ -634,6 +745,7 @@ class Controller(QObject):
         self.lyrics_thread.quit()
         self.lyrics_thread.wait(18000)
         self.settings.sync()
+        shutdown_lens()
 
 
 class LyricChoiceDialog(QDialog):
@@ -983,7 +1095,8 @@ class MainWindow(DesktopBackdrop):
         elif self.c.lyrics.lines:
             word_lines = sum(bool(getattr(line, "words", ())) for line in self.c.lyrics.lines if line.text.strip())
             line_count = sum(bool(line.text.strip()) for line in self.c.lyrics.lines)
-            status = "Word synced" if word_lines and word_lines == line_count else "Mixed timing" if word_lines else "Line synced · words estimated"
+            status = (self.c.timing_label() or ("Word synced" if word_lines and word_lines == line_count
+                      else "Mixed timing" if word_lines else "Line synced · words estimated"))
         elif not self.c.track.connected:
             status = "Waiting for a song"
         elif message.startswith("Finding"):

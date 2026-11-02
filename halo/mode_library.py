@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (QAbstractButton, QDialog, QFrame, QGridLayout,
 
 from .glow import paint_halo_preview
 from .lyric_rendering import canonical_lyric_style
-from .mode_catalog import all_modes, MODE_TITLES
+from .mode_catalog import all_modes, find_mode, MODE_TITLES
 from .models import Lyrics, LyricLine, Track
 from .scene_extras import extra_scene_layout, paint_extra_scene, _artwork_image
 from .widgets import LyricCanvas
@@ -84,6 +84,8 @@ _SAMPLE = Lyrics([
     LyricLine(29, "Leave the day behind"), LyricLine(34, "We find our way back home"),
     LyricLine(40, ""),
 ], "Original Halo visual preview")
+CARD_LOOP = 20.  # The sample's first verse, which ends where its first pause begins.
+CARD_SCALE = 2
 
 
 def _alpha(value, amount):
@@ -232,12 +234,51 @@ class _PreviewProxy:
         pass
 
 
+class _CardProxy(_PreviewProxy):
+    """A style card always plays the sample verse, whatever the listener has on."""
+    uses_live = False
+
+    @property
+    def position(self):
+        return self.clock.elapsed % CARD_LOOP
+
+    @property
+    def track(self):
+        self._track.position, self._track.playing = self.position, self.clock.running
+        return self._track
+
+
+CARD_CLOCK = _PreviewClock()
+
+
+class StyleCard:
+    """One lyric style's real renderer at card size, drawn large and scaled down so small type stays clean."""
+    def __init__(self, controller, style, parent):
+        self.proxy = _CardProxy(controller, CARD_CLOCK, SimpleNamespace(kind="lyrics", key=style))
+        self.words = LyricCanvas(self.proxy, "immersive")
+        self.words.setParent(parent)
+        self.words.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen)
+        self.words.hide()
+        self.words.setMinimumHeight(0)
+        self.words.scene_mode = "lyrics"
+        self.words.set_alignment("center")
+
+    def paint(self, p, rect):
+        CARD_CLOCK.tick(advance=not self.proxy.reduced_motion)
+        self.words.resize(round(rect.width() * CARD_SCALE), round(rect.height() * CARD_SCALE))
+        p.save()
+        p.translate(rect.topLeft())
+        p.scale(1 / CARD_SCALE, 1 / CARD_SCALE)
+        self.words.render(p, QPoint(), renderFlags=QWidget.RenderFlag.DrawChildren)
+        p.restore()
+
+
 class ModePreview(QWidget):
     """The real native mode renderer on a lightweight original demo stage."""
-    def __init__(self, controller, clock, spec, parent=None):
+    def __init__(self, controller, clock, spec, parent=None, proxy=None):
         super().__init__(parent)
         self.c, self.clock, self.spec = controller, clock, spec
-        self.proxy = _PreviewProxy(controller, clock, spec)
+        self.proxy = proxy or _PreviewProxy(controller, clock, spec)
         self.words = LyricCanvas(self.proxy, "immersive")
         self.words.setParent(self)
         self.words.hide()
@@ -416,6 +457,24 @@ class ModePreview(QWidget):
             p.setPen(tone)
             p.drawText(badge, Qt.AlignmentFlag.AlignCenter, self.badge)
         p.end()
+
+
+class SceneCard:
+    """One room's real renderer at card size, with the listener's lyric style inside it."""
+    def __init__(self, controller, scene, parent):
+        spec = find_mode("scenes", scene)
+        self.preview = ModePreview(controller, CARD_CLOCK, spec, parent, _CardProxy(controller, CARD_CLOCK, spec))
+        self.preview.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen)
+        self.preview.hide()
+        self.preview.setMinimumHeight(0)
+
+    def paint(self, p, rect):
+        CARD_CLOCK.tick(advance=not self.preview.proxy.reduced_motion)
+        self.preview.resize(round(rect.width()), round(rect.height()))
+        p.save()
+        p.translate(rect.topLeft())
+        self.preview.render(p, QPoint(), renderFlags=QWidget.RenderFlag.DrawChildren)
+        p.restore()
 
 
 class ModeCard(QAbstractButton):
