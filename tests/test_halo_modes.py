@@ -40,6 +40,14 @@ class HaloModeTests(unittest.TestCase):
             with self.subTest(mode=mode):
                 initial, later = render(mode), render(mode, seconds=4.)
                 self.assertNotEqual(fingerprint(initial), fingerprint(later))
+                if mode == "neon":
+                    # Neon's tubes hold their colours like a real sign; its gas
+                    # striations travel along the tube instead, so light moves
+                    # unevenly, not as one change of the whole rim's opacity.
+                    changes = {initial.pixelColor(x, 6).alpha() - later.pixelColor(x, 6).alpha()
+                               for x in range(100, 540, 9)}
+                    self.assertGreater(max(changes) - min(changes), 8)
+                    continue
                 # Flow moves actual colour, not just the entire rim's opacity.
                 colours = [(320, 8), (631, 210), (320, 411), (8, 210)]
                 self.assertTrue(any(initial.pixelColor(x, y).rgb()

@@ -8,7 +8,6 @@ from PySide6.QtGui import (QColor, QFont, QImage, QPainter, QPen, QLinearGradien
 from PySide6.QtWidgets import QWidget
 from .models import floating_geometry
 from .glow import paint_edge_glow
-from .palette import artwork_colours
 from .taskbar import allow_taskbar_reveal
 from .extra_lyrics import LINE_BASED_STYLES, paint_lyric_mode
 from .lens import (COLUMN_SHARE, LENS_STRENGTH, MIN_CANVAS, lens_disabled, lens_geometry, magnification,
@@ -29,10 +28,6 @@ def tint(color, alpha):
     result = QColor(color)
     result.setAlpha(max(0, min(255, round(alpha))))
     return result
-
-
-def artwork_palette(data):
-    return artwork_colours(data)
 
 
 class Artwork(QWidget):

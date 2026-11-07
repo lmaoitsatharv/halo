@@ -23,7 +23,7 @@ from .word_timer import WordTimer
 from .word_timing import line_plan
 from .audio import AudioMeter
 from .artwork import ArtworkWorker
-from .widgets import EdgeOverlay, FloatingLyrics, AmbientBackdrop, artwork_palette
+from .widgets import EdgeOverlay, FloatingLyrics, AmbientBackdrop
 from .glass import DesktopBackdrop, GlassButton, GlassSlider
 from .taskbar import allow_taskbar_reveal
 from .positioning import PositionDialog
@@ -32,13 +32,18 @@ from .frontend import STYLE, build_main
 from .immersive import Immersive, IMMERSIVE_SCENES
 from .glow import HALO_MODES
 from .lens import shutdown_lens
+from .glow_field_gpu import shutdown_field_renderer
 from .lyric_rendering import LYRIC_STYLES, LYRIC_STYLE_ALIASES, canonical_lyric_style
 from .mode_catalog import MODE_FIELDS, all_modes, find_mode, read_collection
-from .palette import PaletteTransition, valid_colour, readable_accent, envelope
+from .palette import PaletteTransition, valid_colour, readable_accent, envelope, artwork_light_colours
+from .momentum import Momentum
 from .backgrounds import (BACKGROUND_DEFAULTS, BACKGROUND_PRESETS, BACKGROUND_RANGES,
                           validate_background_file)
 
-HALO_ANIMATIONS = (("flow", "Flow"), ("music", "Music sync"), ("idle", "Idle"), ("still", "Still"))
+HALO_ANIMATIONS = (("flow", "Flow"), ("music", "Music sync"), ("momentum", "Momentum"),
+                   ("idle", "Idle"), ("still", "Still"))
+# Animations that listen to the output audio; the "React to audio" switch mirrors them.
+AUDIO_ANIMATIONS = {"music", "momentum"}
 
 BACKGROUND_CHOICES = {
     "background_source": {"ambient", "artwork", "image", "video"},
@@ -173,12 +178,19 @@ class Controller(QObject):
             self._save_mode_collection()
         self.motion_speed = max(0, min(100, settings.value("motion_speed", 45, type=int)))
         self.halo_animation = self.choice("halo_animation", HALO_ANIMATIONS, "music" if self.reactive else "flow")
-        self.reactive = self.halo_animation == "music"
+        self.reactive = self.halo_animation in AUDIO_ANIMATIONS
         self.reduced_motion = settings.value("reduced_motion", False, type=bool)
         self.motion_time = 0.0
         self.motion_phase = 0.0
+        # The same animation clock, never wrapped, for effects that should not repeat each loop.
+        self.motion_cycles = 0.0
+        # When the halo last struck on (song change or a new light): Neon's tubes flicker on from here.
+        self.halo_struck_at = None
         self.last_tick_at = time.monotonic()
         self.pulse = 0.0
+        # Momentum's push, 0 at rest and 1 at the crest of a beat.
+        self.momentum = Momentum()
+        self.surge = 0.0
         self.error = ""
         self.audio = AudioMeter()
         self.audio.listener = self._hear_output
@@ -266,6 +278,8 @@ class Controller(QObject):
         self.track = track
         self.error = ""
         if changed:
+            if track.connected:
+                self.halo_struck_at = time.monotonic()
             self.background_artwork = b""
             saved = self.lyric_store.load(track)
             self.song_offset = saved.get("offset", 0)
@@ -513,7 +527,8 @@ class Controller(QObject):
             a, b = palettes[self.palette]
             a, b = QColor(a), QColor(b)
         else:
-            a, b = artwork_palette(self.track.artwork)
+            # Album covers light the rim with their vivid tones, and lyrics tint from the same pair.
+            a, b = artwork_light_colours(self.track.artwork)
         now = time.monotonic()
         self.palette_transition.retarget(a, b, now, immediate=not self.palette_initialized)
         self.palette_initialized = True
@@ -524,6 +539,8 @@ class Controller(QObject):
     def set(self, name, value):
         if name == "lyric_style":
             value = canonical_lyric_style(value)
+        if name == "halo_mode":
+            self.halo_struck_at = time.monotonic()
         kind = next((kind for kind, field in MODE_FIELDS.items() if field == name), None)
         if kind is not None:
             if find_mode(kind, value) is None:
@@ -548,10 +565,15 @@ class Controller(QObject):
         setattr(self, name, value)
         self.settings.setValue("width" if name == "glow_width" else name, value)
         if name == "halo_animation":
-            self.reactive = value == "music"
+            self.reactive = value in AUDIO_ANIMATIONS
             self.settings.setValue("reactive", self.reactive)
+            self.momentum.reset()
+            self.surge = 0.
         elif name == "reactive":
-            self.halo_animation = "music" if value else "flow"
+            if not value:
+                self.halo_animation = "flow"
+            elif self.halo_animation not in AUDIO_ANIMATIONS:
+                self.halo_animation = "music"
             self.settings.setValue("halo_animation", self.halo_animation)
         elif name == "artwork_online":
             self._background_lookup_changed()
@@ -660,6 +682,7 @@ class Controller(QObject):
             self.demo_position = 8.0
             self.demo_anchor = time.monotonic()
             self.demo_playing = True
+            self.halo_struck_at = time.monotonic()
             self.track = Track("In the light we made", "Halo Studio · visual demo", "Sound in colour",
                                60, 8, True, True, observed_at=time.monotonic())
             self.lyrics = self._with_learned(Lyrics(parse_lrc(DEMO_LRC), "Original demo text · line-synced"))
@@ -700,13 +723,17 @@ class Controller(QObject):
         self.last_tick_at = now
         if self.track.connected and self.track.playing and not self.reduced_motion:
             self.motion_time += elapsed
-            if self.halo_animation != "still":
+            if self.halo_animation == "momentum":
+                rate = self.momentum.rate(self.motion_speed)
+            elif self.halo_animation != "still":
                 rate = self.motion_speed / 45 / 26.28
                 if self.halo_animation == "idle":
                     rate *= .18
                 elif self.halo_animation == "music":
                     rate *= .4 + 1.4 * self.pulse
+            if self.halo_animation != "still":
                 self.motion_phase = (self.motion_phase + elapsed * rate) % 1.
+                self.motion_cycles += elapsed * rate
         self.halo_primary, self.halo_secondary = self.palette_transition.at(now)
         if self.demo:
             self.position = (self.demo_position + (now - self.demo_anchor if self.demo_playing else 0)) % 60
@@ -722,14 +749,17 @@ class Controller(QObject):
                     and not self.reduced_motion and self.halo_animation != "still")
         self.audio.enabled = reacting or (self.timing_session is not None and self.track.playing)
         target = self.audio.level if reacting and not self.audio.error else 0.
+        accent = self.audio.accent if reacting and not self.audio.error else 0.
         if self.demo and self.demo_playing:
-            target = .25 + .65 * max(0, math.sin(now * 3.6)) ** 6
+            target = accent = .25 + .65 * max(0, math.sin(now * 3.6)) ** 6
         if not self.reduced_motion:
             if self.halo_animation == "music":
                 # Round each accent into a swell, with a lingering light trail.
                 self.pulse = envelope(self.pulse, target, elapsed, attack=.045, release=.22)
             else:
                 self.pulse = envelope(self.pulse, target, elapsed)
+            if self.halo_animation == "momentum":
+                self.surge = self.momentum.step(elapsed, accent)
 
     def close(self):
         self.timer.stop()
@@ -746,6 +776,7 @@ class Controller(QObject):
         self.lyrics_thread.wait(18000)
         self.settings.sync()
         shutdown_lens()
+        shutdown_field_renderer()
 
 
 class LyricChoiceDialog(QDialog):

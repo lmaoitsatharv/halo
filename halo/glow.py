@@ -7,6 +7,8 @@ from PySide6.QtCore import Qt, QRectF, QPointF
 from PySide6.QtGui import (QColor, QImage, QLinearGradient, QConicalGradient,
                           QPainter)
 from .glow_extras import EXTRA_HALO_MODES, extra_colour_function, extra_spill, paint_extra_details
+from .glow_field import FIELD_HALO_IDS, FIELD_HALO_MODES, paint_field_glow
+from .momentum import light_share, light_surge, momentum_strength
 
 
 HALO_MODES = (
@@ -15,7 +17,7 @@ HALO_MODES = (
     ("wave", "Wave", "Silky ribbons of colour travel around the screen."),
     ("pulse", "Pulse", "Breathing light with strong music-driven blooms."),
     ("prism", "Prism", "A flowing spectrum inspired by your album palette."),
-) + EXTRA_HALO_MODES
+) + FIELD_HALO_MODES + EXTRA_HALO_MODES
 
 
 def balanced_glow_colour(colour):
@@ -65,7 +67,7 @@ def _colour_function(c, mode, phase):
     bb = _unit(getattr(c, "secondary_brightness", 100) / 100)
     a = tuple(channel * ba * a[3] for channel in a[:3])
     b = tuple(channel * bb * b[3] for channel in b[:3])
-    proportion = _unit(getattr(c, "color_mix", 60) / 100)
+    proportion = light_share(c, max(a), max(b))
     extra = extra_colour_function(mode, phase, a, b, proportion)
     if extra is not None:
         return extra
@@ -270,6 +272,14 @@ def paint_edge_glow(p, w, h, c):
     level = _unit(c.pulse) if music else 0.
     # The meter already normalizes accents; keep the quiet-to-hit contrast.
     beat = level
+    if animation == "momentum":
+        # Momentum carries the beat in motion; each push lifts the light the last few percent.
+        strength = intensity * momentum_strength(light_surge(c))
+    else:
+        strength = intensity * (.30 + .70 * beat if music else .78 if animation == "music" else 1.)
+    if mode in FIELD_HALO_IDS:
+        paint_field_glow(p, w, h, c, mode, phase, beat, music, strength)
+        return
     sample = _colour_function(c, mode, phase)
     top, right, bottom, left, corners = _perimeter_brushes(w, h, sample)
     dpr = max(1., p.device().devicePixelRatioF())
@@ -277,7 +287,6 @@ def paint_edge_glow(p, w, h, c):
     rim_width = max(1., min(12., float(getattr(c, "rim_width", 3)))) * dpr
     band = max(1, min(round(max(c.glow_width * dpr, rim_width + 1)), min(pixel_w, pixel_h) // 2))
     opacity = _unit(getattr(c, "glow_opacity", 65) / 100)
-    strength = intensity * (.30 + .70 * beat if music else .78 if animation == "music" else 1.)
     breath = .5 - .5 * math.cos(phase * math.pi * 4)
     width_mix = .32 + .68 * max(breath, beat) if mode == "pulse" else 1.
     tight_spread = .58
@@ -358,6 +367,7 @@ def paint_halo_preview(p, rect, c, mode=None, motion_time=None, *, motion_phase=
         glow_opacity=getattr(c, "glow_opacity", 65),
         halo_mode=mode or getattr(c, "halo_mode", "orbit"),
         halo_animation=getattr(c, "halo_animation", "flow"),
+        surge=getattr(c, "surge", 0.),
         motion_speed=getattr(c, "motion_speed", 45),
         motion_time=getattr(c, "motion_time", 0.) if motion_time is None else motion_time,
         reduced_motion=getattr(c, "reduced_motion", False),

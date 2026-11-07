@@ -9,11 +9,16 @@ def valid_colour(value, fallback):
     return colour if colour.isValid() else QColor(fallback)
 
 
-def artwork_colours(data):
-    """Select two distinct colours present in the artwork; preserve dark pixels."""
+FALLBACK = ("#b7e4ad", "#54ad9f")
+# The dimmest an album colour may light the rim; brighter colours are kept as they are.
+LIGHT_FLOOR = .85
+
+
+def _artwork_samples(data):
+    """The cover's average colours per RGB bucket, most common first; empty if unreadable."""
     image = QImage()
     if not data or not image.loadFromData(data):
-        return QColor("#b7e4ad"), QColor("#54ad9f")
+        return []
     image = image.scaled(32, 32, Qt.AspectRatioMode.IgnoreAspectRatio,
                          Qt.TransformationMode.SmoothTransformation)
     buckets = {}
@@ -26,22 +31,50 @@ def artwork_colours(data):
             key = tuple(min(7, int(channel * 8)) for channel in (r, g, b))
             total, red, green, blue = buckets.get(key, (0., 0., 0., 0.))
             buckets[key] = (total + weight, red + r * weight, green + g * weight, blue + b * weight)
-    if not buckets:
-        return QColor("#b7e4ad"), QColor("#54ad9f")
     samples = [(count, QColor.fromRgbF(r / count, g / count, b / count))
                for count, r, g, b in buckets.values()]
     samples.sort(key=lambda item: item[0], reverse=True)
-    primary = samples[0][1]
-    minimum = sum(item[0] for item in samples) * .025
+    return samples
+
+
+def _lift(colour):
+    """Raise a dark colour to the light floor, keeping its hue and saturation."""
+    hue, saturation, value, _ = colour.getHsvF()
+    if value >= LIGHT_FLOOR:
+        return QColor(colour)
+    return QColor.fromHsvF(max(0., hue), saturation, LIGHT_FLOOR)
+
+
+def artwork_light_colours(data):
+    """Two colours for the halo light: the cover's most vivid tones, lifted so a dark cover still glows.
+
+    The most common colour is often a dark background, which lights the rim
+    dimly at any intensity. Here a colour counts by its coverage and its
+    vividness (saturation times brightness); the second is the most vivid
+    colour that differs from the first. Lyrics and interface accents tint
+    from the same pair through readable_accent; Custom colours bypass this.
+    """
+    samples = _artwork_samples(data)
+    if not samples:
+        return _lift(QColor(FALLBACK[0])), _lift(QColor(FALLBACK[1]))
+    minimum = sum(count for count, _ in samples) * .015
+    candidates = [item for item in samples if item[0] >= minimum] or samples[:1]
+
+    def vivid(item):
+        count, colour = item
+        return math.sqrt(count) * (.08 + colour.hsvSaturationF() * colour.valueF())
+
+    first = max(candidates, key=vivid)
+    primary = _lift(first[1])
     pr, pg, pb, _ = primary.getRgbF()
-    def score(sample):
-        count, colour = sample
-        r, g, b, _ = colour.getRgbF()
-        difference = (r - pr) ** 2 + (g - pg) ** 2 + (b - pb) ** 2
-        return math.sqrt(count) * difference * (.25 + .75 * colour.hsvSaturationF())
-    candidates = [item for item in samples[1:] if item[0] >= minimum]
-    secondary = max(candidates, key=score)[1] if candidates else QColor(primary)
-    return primary, secondary
+
+    def contrast(item):
+        r, g, b, _ = _lift(item[1]).getRgbF()
+        return vivid(item) * ((r - pr) ** 2 + (g - pg) ** 2 + (b - pb) ** 2)
+
+    others = [item for item in candidates if item is not first]
+    second = max(others, key=contrast) if others else first
+    return primary, _lift(second[1])
 
 
 def readable_accent(colour, counterpart=None):

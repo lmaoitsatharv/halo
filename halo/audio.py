@@ -82,6 +82,8 @@ class AudioMeter:
         self.enabled = False
         self.listener = None
         self.level = 0.0
+        # The detector's raw hits, without the level's quiet bed (Momentum pushes on these).
+        self.accent = 0.0
         self.raw_level = 0.0
         self.error = ""
         self.stop_event = threading.Event()
@@ -92,6 +94,7 @@ class AudioMeter:
         while not self.stop_event.is_set():
             if not self.enabled:
                 self.level = 0.0
+                self.accent = 0.0
                 self.raw_level = 0.0
                 self.stop_event.wait(.2)
                 continue
@@ -108,6 +111,7 @@ class AudioMeter:
                         while self.enabled and not self.stop_event.is_set():
                             samples = recorder.record(numframes=1024)
                             self.level = dynamics.process(samples)
+                            self.accent = dynamics.accent
                             self.raw_level = dynamics.rms
                             if self.listener is not None:
                                 self.listener(samples, 48000)
@@ -118,6 +122,7 @@ class AudioMeter:
             except Exception:
                 log.debug("Audio-reactive mode unavailable", exc_info=True)
                 self.level = 0
+                self.accent = 0
                 self.raw_level = 0
                 self.error = "Audio output unavailable; using gentle motion."
                 self.stop_event.wait(3)

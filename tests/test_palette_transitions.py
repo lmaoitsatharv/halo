@@ -1,33 +1,9 @@
 import unittest
-from PySide6.QtCore import QBuffer, QIODevice
-from PySide6.QtGui import QColor, QImage
-from halo.palette import artwork_colours, PaletteTransition, readable_accent, envelope, valid_colour
+from PySide6.QtGui import QColor
+from halo.palette import PaletteTransition, readable_accent, envelope, valid_colour
 
 
 class PaletteTests(unittest.TestCase):
-    def image_data(self, primary, secondary=None):
-        image = QImage(32, 32, QImage.Format.Format_RGB32)
-        image.fill(QColor(primary))
-        if secondary:
-            for y in range(32):
-                for x in range(20, 32):
-                    image.setPixelColor(x, y, QColor(secondary))
-        data = QBuffer()
-        data.open(QIODevice.OpenModeFlag.WriteOnly)
-        image.save(data, "PNG")
-        return bytes(data.data())
-
-    def test_artwork_preserves_real_dark_and_saturated_colours(self):
-        primary, secondary = artwork_colours(self.image_data("#0a0d14", "#005dff"))
-        self.assertEqual(primary.name(), "#0a0d14")
-        self.assertEqual(secondary.name(), "#005dff")
-
-    def test_monochrome_and_transparent_artwork_do_not_invent_a_hue(self):
-        primary, secondary = artwork_colours(self.image_data("#343434"))
-        self.assertEqual(primary.name(), "#343434")
-        self.assertEqual(secondary.name(), "#343434")
-        self.assertTrue(all(colour.isValid() for colour in artwork_colours(b"not an image")))
-
     def test_readable_ui_accent_does_not_mutate_raw_halo_colour(self):
         raw = QColor("#000000")
         accent = readable_accent(raw, QColor("#005dff"))

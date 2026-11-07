@@ -9,7 +9,7 @@ MODE_TITLES = {"lyrics": "Lyrics", "scenes": "Immersive", "halo": "Halo light"}
 BASE_MODE_KEYS = {
     "lyrics": ("ship_visual", "fisheye_visual", "visual"),
     "scenes": ("studio", "lyrics", "cinema", "orbit"),
-    "halo": ("aura", "orbit", "wave", "pulse", "prism"),
+    "halo": ("aura", "orbit", "wave", "pulse", "prism", "neon", "liquid"),
 }
 
 

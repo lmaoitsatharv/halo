@@ -14,6 +14,7 @@ from .models import Lyrics, parse_lrc, DEMO_LRC, floating_geometry
 from .widgets import LyricCanvas, tint
 from .lens import lens_status_text
 from .glow import HALO_MODES, paint_edge_glow
+from .momentum import Momentum, momentum_rate
 from .lyric_rendering import LYRIC_STYLES
 from .immersive import IMMERSIVE_SCENES
 from .color_controls import LightControls
@@ -301,6 +302,7 @@ class PreviewController:
         self.sample = Lyrics(parse_lrc(DEMO_LRC))
         self.motion_time = 0.
         self.motion_phase = 0.
+        self.momentum = Momentum()
         self.position = 8.
         self.last = time.monotonic()
 
@@ -329,6 +331,14 @@ class PreviewController:
             return self.c.pulse
         return .22 + .55 * max(0., math.sin(self.motion_time * 2.4)) ** 4
 
+    @property
+    def live(self):
+        return self.c.track.connected and self.c.track.playing
+
+    @property
+    def surge(self):
+        return self.c.surge if self.live else self.momentum.surge
+
     def advance(self):
         now = time.monotonic()
         elapsed = min(.08, max(0., now - self.last))
@@ -336,12 +346,18 @@ class PreviewController:
         moving = self.uses_sample or not self.c.track.connected or self.c.track.playing
         if not self.c.reduced_motion and moving:
             self.motion_time += elapsed
-            if self.c.halo_animation != "still":
+            if self.c.halo_animation == "momentum":
+                if not self.live:
+                    # Without music, a sample beat every half second, fading like the detector's hits.
+                    self.momentum.step(elapsed, math.exp(-(self.motion_time % .5) / .08))
+                rate = momentum_rate(self.c.motion_speed, self.surge)
+            elif self.c.halo_animation != "still":
                 rate = self.c.motion_speed / 45 / 26.28
                 if self.c.halo_animation == "idle":
                     rate *= .18
                 elif self.c.halo_animation == "music":
                     rate *= .4 + 1.4 * self.pulse
+            if self.c.halo_animation != "still":
                 self.motion_phase = (self.motion_phase + elapsed * rate) % 1.
             if self.uses_sample:
                 self.position = (self.position + elapsed) % 60
@@ -1049,7 +1065,7 @@ class SettingsStudio(QDialog):
         halo = self.page()
         light = self.group(halo, "Lighting")
         self.owner.glow = self.switch(light, "glow", "Screen-edge halo", "Soft, click-through light around every monitor.")
-        self.owner.reactive = self.switch(light, "reactive", "React to audio", "Let bass and accents bloom into light. Audio stays on this PC.")
+        self.owner.reactive = self.switch(light, "reactive", "React to audio", "Let bass and accents drive the light. Audio stays on this PC.")
         style = QHBoxLayout()
         style.addWidget(text_label("Halo style", "studioSectionTitle"))
         style.addStretch()

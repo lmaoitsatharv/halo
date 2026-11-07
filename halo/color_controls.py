@@ -10,6 +10,7 @@ from .glass import GlassSlider
 HALO_ANIMATIONS = (
     ("flow", "Flow", "Keep the halo moving smoothly."),
     ("music", "Music sync", "Let the halo move with the sound."),
+    ("momentum", "Momentum", "Let each beat push the colours around the screen, then coast."),
     ("idle", "Idle", "Use a slow resting animation."),
     ("still", "Still", "Hold the halo steady. Your motion speed is saved for later."),
 )
