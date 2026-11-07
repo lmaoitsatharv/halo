@@ -4,6 +4,8 @@ A Windows companion for the **Spotify desktop app**, inspired by ambient music l
 
 > **Version:** this guide describes **Halo 0.4.0**, the single-window dark-glass redesign. Earlier releases (v0.3.0 and before) look different: Settings opened in its own window from a gear at the top-right (with General, Halo, Lyrics and Immersive sections), and Modes opened from the top bar.
 
+> **Not in the download yet:** the source on `main` also has the **Neon** and **Liquid** halo lights, the **Momentum** animation and brighter, vivid **Album colours**, all described below. They will arrive in the next release; the 0.4.0 download does not include them.
+
 ## Download for Windows
 
 ### [Download Halo for Windows (.zip)](https://github.com/lmaoitsatharv/halo/releases/latest/download/Halo-Windows-x64.zip)
