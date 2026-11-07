@@ -2,9 +2,7 @@
 
 A Windows companion for the **Spotify desktop app**, inspired by ambient music lighting and desktop lyrics. Independent software; not affiliated with Spotify, Lumn or Verci.
 
-> **Version:** this guide describes **Halo 0.4.0**, the single-window dark-glass redesign. Earlier releases (v0.3.0 and before) look different: Settings opened in its own window from a gear at the top-right (with General, Halo, Lyrics and Immersive sections), and Modes opened from the top bar.
-
-> **Not in the download yet:** the source on `main` also has the **Neon** and **Liquid** halo lights, the **Momentum** animation and brighter, vivid **Album colours**, all described below. They will arrive in the next release; the 0.4.0 download does not include them.
+> **Version:** this guide describes **Halo 0.5.0**, which keeps the single-window dark-glass design introduced in 0.4.0. Earlier releases (v0.3.0 and before) look different: Settings opened in its own window from a gear at the top-right (with General, Halo, Lyrics and Immersive sections), and Modes opened from the top bar.
 
 ## Download for Windows
 
@@ -25,7 +23,13 @@ Keep **Halo.exe**, **_internal** and **licenses** together in the extracted fold
 
 ![Halo desktop app showing its original visual demo](docs/images/halo-desktop.png)
 
-## What's new in 0.4.0
+## What's new in 0.5.0
+
+- **Momentum:** a new halo animation in **Lighting → Animation**. Each beat pushes the halo's colours around the screen and they coast between beats, while the light lifts slightly on each beat. Like Music sync, it listens to your PC's sound output, so **React to audio** turns on with it.
+- **Vivid album colours:** with **Album colours**, the halo now lights with the most vivid colours in the cover and raises dark ones while keeping their hue, so dark covers still glow at full intensity. Lyrics and interface accents tint from the same two colours, so they match the halo. Custom colours are used exactly as chosen.
+- **Neon and Liquid halo lights:** Neon is a glass tube with a white-hot filament whose tubes strike on like tubelights; Liquid is a film of light with glossy drops along the edges. Both are in the **Halo style** list.
+
+Already in 0.4.0:
 
 - **A new dark glass workspace:** a persistent sidebar, spacious listening view, smooth hover effects and a player that remains available across pages. The window keeps the standard Windows title bar and controls.
 - **Everything in one app window:** Settings, Modes and immersive listening share the same window instead of opening separate windows. Lyric placement, lyric matching and colour pickers appear in inset sheets.
