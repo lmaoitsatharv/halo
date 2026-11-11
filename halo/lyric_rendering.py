@@ -16,6 +16,7 @@ import re
 from PySide6.QtCore import QPointF, QRectF
 from PySide6.QtGui import QColor, QFont, QPainterPath, QTextLayout, QTextOption, QTransform
 from .models import lyric_word_matches, validate_lyric_lines
+from .word_pace import estimated_words
 from .extra_lyrics import EXTRA_LYRIC_STYLES
 from .svg_path import icon_path
 from .symbol_lexicon import KINDS, WEAK_WORDS, WORD_KINDS
@@ -68,15 +69,15 @@ class Word:
 
 
 class WordTimeline:
-    """Honor supplied word boundaries; otherwise reanchor estimates per line."""
+    """Honor supplied word boundaries; otherwise estimate each line's words at the song's own pace."""
     def __init__(self, lines, duration=0):
         validate_lyric_lines(lines)
         self.words = []
         self.ranges = []
         self.timed_lines = set()
+        estimates = estimated_words(lines, duration)
         for i, line in enumerate(lines):
-            # A language without spaces still gets expressive, legible word flow.
-            matches = lyric_word_matches(line.text)
+            matches, spans = estimates[i]
             end_time = (line.end if line.end is not None else
                         lines[i + 1].time if i + 1 < len(lines) else max(line.time + 4, duration))
             start = len(self.words)
@@ -98,14 +99,8 @@ class WordTimeline:
                     self.words.append(Word("♪", i, 0, 0, line.time, end_time))
                 self.ranges.append((start, len(self.words)))
                 continue
-            span = max(.04, end_time - line.time)
-            weights = [max(1, len(m.group()) ** .64) + (.6 if m.group()[-1:] in ",;.!?" else 0) for m in matches]
-            total = sum(weights) or 1
-            cursor = line.time
-            for match, weight in zip(matches, weights):
-                finish = cursor + span * weight / total
-                self.words.append(Word(match.group(), i, match.start(), match.end(), cursor, finish))
-                cursor = finish
+            for match, (begin, finish) in zip(matches, spans):
+                self.words.append(Word(match.group(), i, match.start(), match.end(), begin, finish))
             if not matches:
                 self.words.append(Word("♪", i, 0, 0, line.time, end_time))
             self.ranges.append((start, len(self.words)))

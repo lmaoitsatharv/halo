@@ -1,4 +1,4 @@
-"""Place known lyric words on model output, with hindsight for saved timing or live on a first listen.
+"""Place known lyric words on model output, with hindsight, once a line has ended.
 
 Standard CTC: each token is held on "ink" (it is being emitted) or "gap" (a blank followed it), so the
 same letter twice in a row, as in "falling", needs a blank between its two copies.
@@ -14,26 +14,27 @@ from .word_model import BLANK, HOP_SECONDS, STRIDE, encode, spell
 KEPT, FROM_GAP, FROM_INK = 0, 1, 2
 STEP_SECONDS = HOP_SECONDS * STRIDE
 # Hindsight places words this many seconds late, measured on songs kept apart from the scoring songs.
-SAVED_CORRECTION = .097
+# The singing-trained model reports words about 12 ms later than the speech-trained one did.
+SAVED_CORRECTION = .109
 SPELLABLE_SHARE = .6
 FEWEST_FRAMES_PER_TOKEN, MOST_FRAMES_PER_TOKEN = 1.5, 30.
 # A line beats scrambled copies of its own letters by this much per token, as a median over three
-# neighbouring lines, in 62% of real lines and 10% of wrong ones on the tuning songs.
-TRUSTED_EVIDENCE = .55
+# neighbouring lines. Chosen where a single line with another line's words is rejected 80% of the
+# time, the level the speech-trained model's 0.55 gave; the singing-trained model scores every line
+# higher, wrong words included, so its threshold is higher, and it still keeps 73% of true lines
+# where the old model kept 60%.
+TRUSTED_EVIDENCE = .67
 # A line that fits no better than scrambled letters is never kept, however good its neighbours are.
 LEAST_LINE_EVIDENCE = 0.
 EVIDENCE_LINES = 3
 SCRAMBLES = 2
-
-
-@dataclass(frozen=True)
-class Live:
-    """Live tracking choices, tuned on songs that are never used to report its score."""
-    sharpness: float = .4
-    threshold: float = .1
-    late: float = 1.1
-    eager: float = .5
-    skip: float = .02
+# How hard a word's estimated time steers its placement: the price per second away, and the most it
+# can cost. Tuned on half of the Jamendo songs with the singing-trained model, scored as a replay
+# (learned timing for trusted lines, the estimate for the rest): the mean error on the other half
+# fell from 226 ms to about 200 ms, and the typical error from 67 ms to 63 ms. Steering three times
+# as hard pulled well-heard lines off their true times and was worse than none.
+STEER_PER_SECOND = 3.
+STEER_LIMIT = 12.
 
 
 def _distinct(tokens):
@@ -47,10 +48,13 @@ def _start(count):
     return ink, gap
 
 
-def _step(ink, gap, frame, tokens, distinct):
-    """One frame's move. Returns the new states and where each new state's score came from."""
-    kept, gapped = ink[1:], gap[:-1]
-    direct = np.where(distinct, ink[:-1], -np.inf)
+def _step(ink, gap, frame, tokens, distinct, entry=0.):
+    """One frame's move. Returns the new states and where each new state's score came from.
+
+    entry is added to a token's score only on the frame it is first entered.
+    """
+    kept, gapped = ink[1:], gap[:-1] + entry
+    direct = np.where(distinct, ink[:-1], -np.inf) + entry
     best = np.maximum(np.maximum(kept, gapped), direct)
     source = np.where(best == kept, KEPT, np.where(best == gapped, FROM_GAP, FROM_INK))
     next_ink = np.concatenate(([-np.inf], frame[tokens] + best))
@@ -58,7 +62,24 @@ def _step(ink, gap, frame, tokens, distinct):
     return next_ink, next_gap, source, ink > gap
 
 
-def viterbi(log_probs, tokens):
+def steering(away_frames):
+    """The price, in log probability, of starting a word this many frames from where it is expected."""
+    return -np.minimum(STEER_LIMIT, STEER_PER_SECOND * STEP_SECONDS * np.abs(away_frames))
+
+
+def expected_entry(frames, count, starts, expected_frames):
+    """Entry prices for a whole clip: each word's first token is steered towards its expected frame.
+
+    Where the model hears the words, a few frames of clear letters outweigh the price and the
+    word goes where it was heard. Where it hears nothing, the word stays at its estimate
+    instead of landing wherever the noise happens to fit.
+    """
+    entry = np.zeros((frames, count))
+    entry[:, list(starts)] = steering(np.arange(frames)[:, None] - np.asarray(expected_frames, float)[None])
+    return entry
+
+
+def viterbi(log_probs, tokens, entry=None):
     """The frame each token first appears, using the whole clip. Tokens must fit, at one frame each."""
     tokens = np.asarray(tokens)
     frames, count = len(log_probs), len(tokens)
@@ -69,7 +90,8 @@ def viterbi(log_probs, tokens):
     ink_source = np.zeros((frames, count), np.int8)
     gap_source = np.zeros((frames, count + 1), bool)
     for t in range(frames):
-        ink, gap, ink_source[t], gap_source[t] = _step(ink, gap, log_probs[t], tokens, distinct)
+        ink, gap, ink_source[t], gap_source[t] = _step(ink, gap, log_probs[t], tokens, distinct,
+                                                       0. if entry is None else entry[t])
     first = np.zeros(count, int)
     state, on_ink = count, bool(ink[count] > gap[count])
     for t in range(frames - 1, -1, -1):
@@ -82,56 +104,6 @@ def viterbi(log_probs, tokens):
         else:
             on_ink = bool(gap_source[t, state])
     return first
-
-
-class PaceFollower:
-    """A running belief over which token is being sung, for the first listen.
-
-    Entering a token takes hearing that token, so a word opens when its first sound arrives. A
-    deadline counted from the last word opened, at the song's pace, moves on if a start is
-    missed, so nothing can stall, and each new line starts fresh.
-    """
-    def __init__(self, tokens, starts, frames_per_token, wait_frames, settings=Live()):
-        self.tokens = np.asarray(tokens)
-        self.starts = np.asarray(starts) + 1
-        self.settings = settings
-        self.pace, self.wait = max(1., frames_per_token), max(1., wait_frames)
-        count = len(tokens)
-        self.leave = np.full(count + 1, settings.eager)
-        self.leave[count] = 0.
-        self.belief = np.zeros(count + 1)
-        self.belief[0] = 1.
-        self.opened = 0
-        self.frames = 0
-        self.anchor_frame, self.anchor_state = self.wait, 0
-
-    def _open(self, state):
-        self.opened += 1
-        self.anchor_frame, self.anchor_state = self.frames, state
-
-    def step(self, frame):
-        """Take one frame of log probabilities. Returns how many words have started."""
-        probs = np.exp(frame) ** self.settings.sharpness
-        blank = np.exp(frame[BLANK]) ** self.settings.sharpness
-        entering = probs[self.tokens]
-        staying = blank + np.concatenate(([0.], entering))
-        moved = self.belief * self.leave
-        belief = (self.belief - moved) * staying
-        belief[1:] += moved[:-1] * entering * (1 - self.settings.skip)
-        belief[2:] += moved[:-2] * entering[1:] * self.settings.skip
-        self.belief = belief / belief.sum()
-        self.frames += 1
-        reached = np.cumsum(self.belief[::-1])[::-1]
-        while self.opened < len(self.starts) and reached[self.starts[self.opened]] >= self.settings.threshold:
-            self._open(self.starts[self.opened])
-        while self.opened < len(self.starts):
-            state = self.starts[self.opened]
-            if self.frames < self.anchor_frame + (state - self.anchor_state) * self.pace * self.settings.late:
-                break
-            self.belief[state] += self.belief[:state].sum()
-            self.belief[:state] = 0.
-            self._open(state)
-        return self.opened
 
 
 @dataclass(frozen=True)
@@ -195,11 +167,20 @@ def trusted_lines(evidence):
     return trusted
 
 
-def place_line(log_probs, plan, first_frame_time):
-    """Word starts with hindsight, or None if the spacing could not be singing."""
+def place_line(log_probs, plan, first_frame_time, expected=None):
+    """Word starts with hindsight, or None if the spacing could not be singing.
+
+    expected, when given, is the estimated start in seconds of every word of the line. It steers
+    the placement, but the line's evidence is still measured on the audio alone.
+    """
     if len(log_probs) < len(plan.tokens):
         return None
-    first = viterbi(log_probs, plan.tokens)
+    entry = None
+    if expected is not None:
+        # The model reports a word a moment after it starts, so that is where its letters are expected.
+        heard = [(expected[index] + SAVED_CORRECTION - first_frame_time) / STEP_SECONDS for index in plan.word_indexes]
+        entry = expected_entry(len(log_probs), len(plan.tokens), plan.starts, heard)
+    first = viterbi(log_probs, plan.tokens, entry)
     spacing = float(np.median(np.diff(first)))
     if not FEWEST_FRAMES_PER_TOKEN <= spacing <= MOST_FRAMES_PER_TOKEN:
         return None

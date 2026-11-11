@@ -1,10 +1,11 @@
-from PySide6.QtCore import Qt, QRectF, Signal, QSignalBlocker
+from PySide6.QtCore import QSize, Qt, QRectF, Signal, QSignalBlocker
 from PySide6.QtGui import QPainter, QColor, QPen, QFont
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel,
                               QSlider, QPushButton, QComboBox, QCheckBox, QWidget, QApplication)
 from .models import floating_geometry
 from .widgets import font, tint
-from .glass import GlassSlider
+from .glass import GlassSlider, icon
+from .theme import style
 
 
 class PositionPreview(QWidget):
@@ -80,7 +81,7 @@ class PositionDialog(QDialog):
         title.setWordWrap(True)
         layout.addWidget(title)
         hint = QLabel("Drag the preview or use the position sliders.")
-        hint.setStyleSheet("color: #9daa9e;")
+        style(hint, "color: #55625e;")
         layout.addWidget(hint)
         self.monitor = QComboBox()
         self.monitor.setAccessibleName("Floating lyrics monitor")
@@ -96,12 +97,15 @@ class PositionDialog(QDialog):
         for row, y in enumerate((0, 50, 90)):
             for column, x in enumerate((0, 50, 100)):
                 name = ("Top", "Middle", "Bottom")[row] + " " + ("left", "center", "right")[column]
-                preset = QPushButton(("↖", "↑", "↗", "←", "●", "→", "↙", "↓", "↘")[row * 3 + column])
+                preset = QPushButton()
+                glyph = ("toward-315", "toward-0", "toward-45", "toward-270", "centre",
+                         "toward-90", "toward-225", "toward-180", "toward-135")[row * 3 + column]
+                preset.setIcon(icon(glyph, "#1c2a26", 18))
+                preset.setIconSize(QSize(18, 18))
                 preset.setToolTip(name)
                 preset.setAccessibleName("Position " + name)
                 preset.setAutoDefault(False)
-                preset.setFixedHeight(34)
-                preset.setStyleSheet("padding: 4px; font-size: 16px;")
+                preset.setFixedHeight(40)
                 preset.clicked.connect(lambda checked=False, x=x, y=y: self.set_position(x, y))
                 grid.addWidget(preset, row, column)
         layout.addLayout(grid)

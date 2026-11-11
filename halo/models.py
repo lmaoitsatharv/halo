@@ -33,8 +33,8 @@ class TimelineClock:
 
 @dataclass
 class Track:
-    title: str = "Waiting for Spotify"
-    artist: str = "Open Spotify and play something you love."
+    title: str = "Waiting for music"
+    artist: str = "Play something in Spotify, a browser or any music app."
     album: str = ""
     duration: float = 0
     position: float = 0
@@ -42,6 +42,8 @@ class Track:
     connected: bool = False
     artwork: bytes = b""
     observed_at: float = 0
+    source: str = ""      # the player's everyday name, such as "Spotify" or "Brave"
+    browser: bool = False  # a web player, whose reported length may not be the recording's
 
     @property
     def key(self):

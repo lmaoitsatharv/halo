@@ -86,8 +86,10 @@ def _context(lines, index, direction):
     return None
 
 
-def _neighbours(canvas, p, index):
+def _neighbours(canvas, p, index, opacity=1.):
     """Quiet verses above and below, framing the word or the break between them."""
+    if opacity < .012:
+        return
     c = canvas.controller
     w, h = canvas.width(), canvas.height()
     for context, y in ((_context(c.lyrics.lines, index - 1, -1), h * .14),
@@ -96,8 +98,9 @@ def _neighbours(canvas, p, index):
             continue
         shape = canvas._shape(c.lyrics.lines[context].text, max(1, w * .82), max(1, h * .12),
                               max(10, canvas._base_size() * .34), "center")
-        canvas._text(p, shape, w / 2, y, c.primary, .27)
-        _hit(canvas, shape, w / 2, y, 1, context)
+        canvas._text(p, shape, w / 2, y, c.primary, .27 * _clamp(opacity))
+        if opacity > .4:
+            _hit(canvas, shape, w / 2, y, 1, context)
 
 
 def _monument(canvas, p, index, phase):

@@ -48,7 +48,7 @@ class _ArtworkRedirect(HTTPRedirectHandler):
 def read_public(url, limit, accept):
     if not _allowed_url(url):
         raise ValueError("Unexpected artwork service")
-    request = Request(url, headers={"User-Agent": "Halo/0.1 (Windows Spotify companion)", "Accept": accept})
+    request = Request(url, headers={"User-Agent": "Halo/0.1 (Windows music companion)", "Accept": accept})
     with build_opener(_ArtworkRedirect()).open(request, timeout=5) as response:
         data = response.read(limit + 1)
     if len(data) > limit:

@@ -1,7 +1,9 @@
 """Four spacious listening scenes sharing a single lyric surface and transport."""
 import math
 
-from PySide6.QtCore import Qt, Signal, QEvent, QTimer, QRect, QRectF, QPointF, QPropertyAnimation
+import time
+
+from PySide6.QtCore import Qt, Signal, QEvent, QTimer, QRect, QRectF, QPoint, QPointF, QPropertyAnimation
 from PySide6.QtGui import (QColor, QFont, QFontMetrics, QPainter, QPen, QPixmap,
                           QRadialGradient, QLinearGradient, QPainterPath, QShortcut,
                           QKeySequence)
@@ -10,13 +12,15 @@ from PySide6.QtWidgets import (QWidget, QLabel, QPushButton, QFrame, QSlider,
                               QGraphicsDropShadowEffect)
 
 from .widgets import Artwork, LyricCanvas, tint
-from .glow import paint_edge_glow
+from .glow import HALO_MODES, paint_edge_glow
 from .taskbar import allow_taskbar_reveal
 from .backgrounds import BackgroundRenderer
 from .lyric_rendering import LYRIC_STYLES, canonical_lyric_style
 from .mode_catalog import available_specs
-from .glass import GlassSlider
+from .glass import GlassPanel, GlassSlider, SeekSlider
+from .gallery import HandsetButton, mix, song_light
 from .scene_extras import EXTRA_SCENES, SCENE_CAPTIONS, extra_scene_layout, paint_extra_scene
+from .room_menu import RoomMenu, MenuButton, MenuEntry, separator
 
 
 IMMERSIVE_SCENES = (
@@ -36,22 +40,17 @@ QLabel#roomSong { color: #f5f3fa; font-weight: 600; }
 QLabel#roomArtist { color: #c9c2d4; font-size: 15px; }
 QLabel#roomAlbum { color: #9892a5; font-size: 11px; }
 QLabel#roomStatus { color: #9892a5; font-size: 10px; }
-QFrame#roomPlayer { background: rgba(24, 24, 32, 214); border: 1px solid rgba(240, 232, 255, 38); border-radius: 28px; }
-QPushButton#roomExit { background: rgba(28, 27, 37, 165); color: #ded7eb; border: 1px solid rgba(240, 232, 255, 36); border-radius: 14px; padding: 7px 13px; font-size: 11px; }
-QPushButton#roomExit:hover { background: rgba(205, 187, 240, 28); border-color: rgba(229, 214, 255, 90); }
-QPushButton#roomControl { background: transparent; border: none; border-radius: 22px; padding: 0; color: #d9d1e4; font-size: 27px; }
-QPushButton#roomControl:hover { background: rgba(229, 214, 255, 22); }
-QPushButton#roomPlay { background: #d9cdfa; color: #241b35; border: none; border-radius: 23px; padding: 0; font-size: 17px; }
-QPushButton#roomPlay:hover { background: #eee5ff; }
-QPushButton:focus { border: 1px solid #c4b4f8; }
+QPushButton#roomExit { background: rgba(20, 30, 27, 175); color: #ded7eb; border: 1px solid rgba(240, 232, 255, 36); border-radius: 14px; padding: 7px 13px; font-size: 11px; }
+QPushButton#roomExit:hover { background: rgba(183, 228, 173, 30); border-color: rgba(229, 214, 255, 90); }
+QPushButton:focus { border: 1px solid #b7e4ad; }
 QPushButton:disabled { color: #716b7d; }
-QComboBox#roomSelect { color: #d3cbdf; background: rgba(26, 25, 35, 190); border: 1px solid rgba(240, 232, 255, 34); border-radius: 12px; padding: 7px 12px; font-size: 11px; }
-QComboBox#roomSelect:hover { background: rgba(57, 49, 72, 190); border-color: rgba(229, 214, 255, 72); }
+QComboBox#roomSelect { color: #d3cbdf; background: rgba(20, 30, 27, 200); border: 1px solid rgba(240, 232, 255, 34); border-radius: 12px; padding: 7px 12px; font-size: 11px; }
+QComboBox#roomSelect:hover { background: rgba(43, 59, 54, 210); border-color: rgba(229, 214, 255, 72); }
 QComboBox#roomSelect::drop-down { border: none; width: 24px; }
-QComboBox QAbstractItemView { background: #1b1923; color: #f0eaf8; border: 1px solid #494053; selection-background-color: #433550; padding: 4px; }
-QSlider::groove:horizontal { height: 3px; background: rgba(222, 209, 241, 34); border-radius: 1px; }
-QSlider::sub-page:horizontal { background: #c7b7f0; border-radius: 1px; }
-QSlider::handle:horizontal { width: 9px; margin: -4px 0; border-radius: 4px; background: #eee5ff; }
+QComboBox QAbstractItemView { background: #1c2a26; color: #f0eaf8; border: 1px solid #3a4c46; selection-background-color: #2f4a42; padding: 4px; }
+QSlider::groove:horizontal { height: 3px; background: rgba(242, 244, 239, 46); border-radius: 1px; }
+QSlider::sub-page:horizontal { background: #b7e4ad; border-radius: 1px; }
+QSlider::handle:horizontal { width: 9px; margin: -4px 0; border-radius: 4px; background: #d3f1cb; }
 """
 
 
@@ -66,6 +65,7 @@ class Immersive(QWidget):
     exited = Signal()
     backgroundRequested = Signal()
     modesRequested = Signal()
+    miniRequested = Signal()
     IDLE_INTERVAL = 1500
 
     def __init__(self, controller, parent=None, embedded=False):
@@ -90,13 +90,21 @@ class Immersive(QWidget):
         header = QHBoxLayout(self.header)
         header.setContentsMargins(0, 0, 0, 0)
         header.setSpacing(12)
+        # Every room control lives behind one menu key at the top left; the room itself stays clear.
+        self.menu_button = MenuButton(self.header, controller)
+        self.menu_button.clicked.connect(self.open_menu)
+        header.addWidget(self.menu_button)
+        header.addSpacing(4)
+        self.menu = None
+        self._menu_closed_at = 0.
         self.brand = _label(self.header, "H A L O", "roomBrand")
         header.addWidget(self.brand)
         header.addSpacing(14)
         self.scene_caption = _label(self.header, "THE LISTENING ROOM", "roomCaption")
         header.addWidget(self.scene_caption)
         header.addStretch(1)
-        self.scene_select = QComboBox(self.header)
+        # The room and lyric-style lists stay as models for the menu and the rest of the app.
+        self.scene_select = QComboBox(self)
         self.scene_select.setObjectName("roomSelect")
         self.scene_select.setAccessibleName("Immersive scene")
         for scene, name, description in available_specs(controller, "immersive_mode", IMMERSIVE_SCENES):
@@ -104,31 +112,15 @@ class Immersive(QWidget):
             self.scene_select.setItemData(self.scene_select.count() - 1, description, Qt.ItemDataRole.ToolTipRole)
         self.scene_select.setFixedWidth(144)
         self.scene_select.currentIndexChanged.connect(self._select_scene)
-        header.addWidget(self.scene_select)
-        self.style_select = QComboBox(self.header)
+        self.scene_select.hide()
+        self.style_select = QComboBox(self)
         self.style_select.setObjectName("roomSelect")
         self.style_select.setAccessibleName("Lyric animation style")
         self.style_select.setFixedWidth(146)
         self._populate_styles()
         self.style_select.currentIndexChanged.connect(self._select_style)
-        header.addWidget(self.style_select)
-        self.background_button = QPushButton("Background…", self.header)
-        self.background_button.setObjectName("roomExit")
-        self.background_button.setAccessibleName("Customize immersive background")
-        self.background_button.setToolTip("Choose a wallpaper, video or album artwork")
-        self.background_button.clicked.connect(self._open_background)
-        header.addWidget(self.background_button)
-        self.modes_button = QPushButton("Modes", self.header)
-        self.modes_button.setObjectName("roomExit")
-        self.modes_button.setAccessibleName("Browse immersive modes")
-        self.modes_button.clicked.connect(self.modesRequested.emit)
-        header.addWidget(self.modes_button)
-        self.exit = QPushButton("Return   Esc", self.header)
-        self.exit.setObjectName("roomExit")
-        self.exit.setAccessibleName("Return to Halo")
-        self.exit.clicked.connect(self.leave)
-        header.addWidget(self.exit)
-        self.back_button = self.exit
+        self.style_select.hide()
+        self.background_status = ""
 
         self.left_column = QWidget(self)
         self.cover = Artwork(controller, 280)
@@ -152,28 +144,38 @@ class Immersive(QWidget):
         self.canvas.setMinimumHeight(100)
         self.lyrics_status = _label(self, "", "roomStatus")
 
-        self.player = QFrame(self)
+        # The same audio-guide handset as the main window: raised keys, the song-lit timeline,
+        # and on the right the mini player and the way back out (where the main window has the way in).
+        self.player = GlassPanel(self, radius=26, variant="player")
         self.player.setObjectName("roomPlayer")
         player_layout = QHBoxLayout(self.player)
-        player_layout.setContentsMargins(17, 11, 23, 11)
-        player_layout.setSpacing(12)
-        self.previous = self._control("‹", "Previous track", "previous")
-        self.play = self._control("Ⅱ", "Play or pause", "toggle", True)
-        self.next = self._control("›", "Next track", "next")
+        player_layout.setContentsMargins(16, 8, 16, 14)
+        player_layout.setSpacing(10)
+        self.previous = HandsetButton("previous", lambda: self._transport("previous"), controller, "Ctrl+Left")
+        self.play = HandsetButton("play", lambda: self._transport("toggle"), controller, "Space")
+        self.next = HandsetButton("next", lambda: self._transport("next"), controller, "Ctrl+Right")
         for control in (self.previous, self.play, self.next):
-            player_layout.addWidget(control)
-        player_layout.addSpacing(12)
-        self.elapsed = _label(self.player, "0:00", "roomAlbum")
-        self.total = _label(self.player, "0:00", "roomAlbum")
-        self.elapsed.setMinimumWidth(32)
-        self.total.setMinimumWidth(32)
+            player_layout.addWidget(control, 0, Qt.AlignmentFlag.AlignVCenter)
+        player_layout.addSpacing(8)
+        self.elapsed = QLabel("0:00", self.player)
+        self.total = QLabel("0:00", self.player)
+        for label in (self.elapsed, self.total):
+            label.setStyleSheet("font-size: 12px; color: #aab7b1; background: transparent;")
+            label.setMinimumWidth(38)
+        self.elapsed.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         player_layout.addWidget(self.elapsed)
-        self.progress = GlassSlider(Qt.Orientation.Horizontal, self.player)
+        self.progress = SeekSlider(self.player)
         self.progress.setRange(0, 1000)
         self.progress.setAccessibleName("Track position")
+        self.progress.setToolTip("Track position  ·  drag, or use the arrow keys")
         self.progress.sliderReleased.connect(self._seek)
         player_layout.addWidget(self.progress, 1)
         player_layout.addWidget(self.total)
+        player_layout.addSpacing(6)
+        self.mini_button = HandsetButton("mini", self._open_mini, controller, "Ctrl+Shift+M")
+        self.leave_button = HandsetButton("exit-fullscreen", self.leave, controller, "Esc or F11")
+        for control in (self.mini_button, self.leave_button):
+            player_layout.addWidget(control, 0, Qt.AlignmentFlag.AlignVCenter)
         self.chrome_effects = []
         self.chrome_animations = []
         for widget in (self.header, self.player):
@@ -241,13 +243,9 @@ class Immersive(QWidget):
             combo.blockSignals(False)
         self.changed()
 
-    def _control(self, text, accessible, action, primary=False):
-        widget = QPushButton(text, self.player)
-        widget.setObjectName("roomPlay" if primary else "roomControl")
-        widget.setFixedSize(46, 46)
-        widget.setAccessibleName(accessible)
-        widget.clicked.connect(lambda: self._transport(action))
-        return widget
+    def _open_mini(self):
+        self._wake_chrome()
+        self.miniRequested.emit()
 
     def _transport(self, action):
         self._wake_chrome()
@@ -267,11 +265,114 @@ class Immersive(QWidget):
         self._wake_chrome()
         self.backgroundRequested.emit()
 
+    # --- the room menu ----------------------------------------------------------------
+
+    def background_on(self):
+        return getattr(self.controller, "background_source", "ambient") != "ambient"
+
+    def toggle_background(self):
+        """Switch between your background (artwork, image or video) and Halo's own ambient light."""
+        c = self.controller
+        settings = getattr(c, "settings", None)
+        if self.background_on():
+            if settings is not None:
+                settings.setValue("background_last_source", c.background_source)
+            c.set("background_source", "ambient")
+            return
+        last = settings.value("background_last_source", "artwork", type=str) if settings is not None else "artwork"
+        if last not in ("artwork", "image", "video") or (last in ("image", "video") and not getattr(c, "background_path", "")):
+            last = "artwork"
+        c.set("background_source", last)
+
+    def _choices(self, combo, setting):
+        def current():
+            value = getattr(self.controller, setting, None)
+            return canonical_lyric_style(value or "ship") if setting == "lyric_style" else value
+
+        def build():
+            entries = []
+            for index in range(combo.count()):
+                key = combo.itemData(index)
+                entries.append(MenuEntry("radio", combo.itemText(index),
+                                         run=lambda key=key: self.controller.set(setting, key),
+                                         checked=lambda key=key: current() == key,
+                                         tip=str(combo.itemData(index, Qt.ItemDataRole.ToolTipRole) or "")))
+            return entries
+        return build
+
+    def lighting_on(self):
+        return bool(getattr(self.controller, "glow", False))
+
+    def toggle_lighting(self):
+        self.controller.set("glow", not self.lighting_on())
+
+    def _lighting_name(self):
+        if not self.lighting_on():
+            return "Off"
+        key = getattr(self.controller, "halo_mode", None)
+        return next((spec[1] for spec in HALO_MODES if spec[0] == key), "")
+
+    def _lighting_choices(self):
+        """The light around the screen: a switch for it, then every light mode you have."""
+        entries = [MenuEntry("toggle", "Screen-edge light", run=self.toggle_lighting, checked=self.lighting_on,
+                             tip="The light around the edges of your screen"),
+                   separator()]
+        for spec in available_specs(self.controller, "halo_mode", HALO_MODES):
+            key = spec[0]
+            entries.append(MenuEntry("radio", spec[1],
+                                     run=lambda key=key: self.controller.set("halo_mode", key),
+                                     checked=lambda key=key: getattr(self.controller, "halo_mode", None) == key,
+                                     tip=spec[2] if len(spec) > 2 else ""))
+        return entries
+
+    def menu_entries(self):
+        return [
+            MenuEntry("submenu", "Room", "listening", submenu=self._choices(self.scene_select, "immersive_mode"),
+                      detail=lambda: self.scene_select.currentText()),
+            MenuEntry("submenu", "Lyric style", "lyrics", submenu=self._choices(self.style_select, "lyric_style"),
+                      detail=lambda: self.style_select.currentText()),
+            MenuEntry("submenu", "Lighting", "halo", submenu=self._lighting_choices, detail=self._lighting_name),
+            separator(),
+            MenuEntry("toggle", "Background", "image", run=self.toggle_background, checked=self.background_on,
+                      tip="Your background, or Halo's own light"),
+            MenuEntry("action", "Background settings…", "settings", run=self._open_background),
+            MenuEntry("action", "Browse modes", "modes", run=self.modesRequested.emit),
+            separator(),
+            MenuEntry("action", "Return to Halo", "back", run=self.leave, shortcut="Esc"),
+        ]
+
+    def open_menu(self):
+        if self.menu_open():
+            self.menu.close()
+            return
+        if time.monotonic() - self._menu_closed_at < .25:
+            # The click that closed the menu should not open it again.
+            return
+        self._wake_chrome()
+        self.menu = RoomMenu(self.menu_entries, self, title="Room menu")
+        self.menu.closed.connect(self._menu_closed)
+        self.menu_button.open = True
+        self.menu_button.update()
+        self.menu.open_at(self.menu_button.mapToGlobal(QPoint(0, self.menu_button.height() + 8)))
+
+    def _menu_closed(self):
+        self._menu_closed_at = time.monotonic()
+        self.menu_button.open = False
+        self.menu_button.update()
+        menu, self.menu = self.menu, None
+        if menu is not None:
+            menu.deleteLater()
+        if self.isVisible():
+            self._wake_chrome()
+
+    def menu_open(self):
+        return self.menu is not None and self.menu.isVisible()
+
     def _sync_background(self):
         host = self.window()
         self.media_background.sync(self.controller, active=(
             self.isVisible() and host.isActiveWindow() and not host.isMinimized()))
-        self.background_button.setToolTip(self.media_background.status or "Choose a wallpaper, video or album artwork")
+        self.background_status = self.media_background.status or ""
         self.update()
 
     def changed(self, *_):
@@ -358,10 +459,11 @@ class Immersive(QWidget):
         w, h = self.width(), self.height()
         margin = max(28, min(64, w // 25))
         compact = h < 720
-        self.header.setGeometry(margin, 22 if compact else 30, w - 2 * margin, 38)
+        self.header.setGeometry(margin, 19 if compact else 27, w - 2 * margin, 44)
         self.scene_caption.setVisible(w >= 1100)
         footer_width = min(940, w - 2 * margin)
-        self.player.setGeometry((w - footer_width) // 2, h - 112 if compact else h - 128, footer_width, 72)
+        # 84px tall like the main window's handset; it keeps the old bar's distance from the bottom edge.
+        self.player.setGeometry((w - footer_width) // 2, h - 124 if compact else h - 140, footer_width, 84)
         top, bottom = (88 if compact else 108), self.player.y() - (22 if compact else 32)
         body_height = max(200, bottom - top)
         lyrics_only = self.scene == "lyrics"
@@ -469,6 +571,8 @@ class Immersive(QWidget):
         self._wake_chrome()
 
     def hideEvent(self, event):
+        if self.menu_open():
+            self.menu.close()
         self.media_background.set_active(False)
         self._set_cursor_hidden(False)
         self.idle.stop()
@@ -560,7 +664,7 @@ class Immersive(QWidget):
 
     def _interaction_active(self):
         return (self._pointer_pressed or bool(self._pressed_keys) or self.progress.isSliderDown()
-                or self.scene_select.view().isVisible() or self.style_select.view().isVisible()
+                or self.scene_select.view().isVisible() or self.style_select.view().isVisible() or self.menu_open()
                 or (self._keyboard_navigation and self._is_chrome_widget(self.focusWidget())))
 
     def _wake_chrome(self):
@@ -628,6 +732,8 @@ class Immersive(QWidget):
             return f"{value // 60}:{value % 60:02}"
         self.elapsed.setText(stamp(c.position))
         self.total.setText(stamp(c.track.duration))
+        # What has played takes the song's light, as on the main window's timeline.
+        self.progress.fill_colour = mix(song_light(c), QColor("#ffffff"), .22)
         if not self.progress.isSliderDown():
             self.progress.setValue(max(0, min(1000, int(1000 * c.position / c.track.duration))) if c.track.duration else 0)
         self.canvas.update()

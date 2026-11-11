@@ -56,10 +56,11 @@ class UnifiedShellTests(unittest.TestCase):
         self.app.processEvents()
 
     def test_settings_modes_and_immersive_share_one_native_window(self):
-        self.assertEqual(self.window.windowTitle(), "Halo · Your listening space")
+        self.assertEqual(self.window.windowTitle(), "Halo")
         flags = self.window.windowFlags()
         self.assertFalse(flags & Qt.WindowType.FramelessWindowHint)
-        for flag in (Qt.WindowType.WindowTitleHint, Qt.WindowType.WindowSystemMenuHint,
+        # The title strip shows only Windows' keys (see test_header_and_mode_filter); the frame stays native.
+        for flag in (Qt.WindowType.WindowSystemMenuHint,
                      Qt.WindowType.WindowMinimizeButtonHint,
                      Qt.WindowType.WindowMaximizeButtonHint,
                      Qt.WindowType.WindowCloseButtonHint):

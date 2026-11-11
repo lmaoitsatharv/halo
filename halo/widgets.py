@@ -95,7 +95,6 @@ class LyricCanvas(QWidget):
         self._word_velocity = self._line_velocity = 0.0
         self._active_word = -1
         self._previous_word = -1
-        self._followed = None
         self._transition_at = 0.0
         self._line_art_clock = None
         self._line_art_motion = 0.0
@@ -170,22 +169,8 @@ class LyricCanvas(QWidget):
             return smooth((position - word.begin) / min(.26, span / 2))
         return 1.0 if reduced or reset else smooth((motion - self._transition_at) / .26)
 
-    def _followed_word(self, index, word_index, position):
-        """The word playback is following, for a line with no word timing of its own."""
-        live_word = getattr(self.controller, "live_word", None)
-        ordinal = live_word(index) if live_word is not None and index >= 0 else None
-        if ordinal is None or index in self.timeline.timed_lines:
-            self._followed = None
-            return word_index
-        shown = self.timeline.display_word(index, ordinal)
-        if self._followed is None or self._followed[0] != shown:
-            self._followed = (shown, position)
-        return shown
-
     def word_elapsed(self, display_index, position):
-        """Seconds since a word began, counted from when playback reached it if it is being followed."""
-        if self._followed is not None and self._followed[0] == display_index:
-            return position - self._followed[1]
+        """Seconds since a word began."""
         return position - self.timeline.display_words[display_index].begin
 
     def _timed_word_span(self, index, word_index):
@@ -344,7 +329,6 @@ class LyricCanvas(QWidget):
         style = canonical_lyric_style(getattr(c, "lyric_style", "fisheye_visual"))
         index, word_index, fraction = self.timeline.display_at(
             c.lyrics.index_at(position), position)
-        word_index = self._followed_word(index, word_index, position)
         motion = self._clock()
         transition = self._advance(index, word_index, position, motion)
         if paint_lyric_mode(self, p, style, index, word_index, fraction, motion, transition):

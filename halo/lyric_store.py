@@ -120,7 +120,7 @@ class LyricStore:
     def save(self, track, offset, lyrics=None, kind="selected"):
         key = recording_key(track)
         if key is None:
-            raise ValueError("Wait for Spotify to provide the song and its duration before saving lyrics.")
+            raise ValueError("Wait for your player to provide the song and its length before saving lyrics.")
         offset = int(offset)
         if abs(offset) > MAX_OFFSET_MS:
             raise ValueError("Keep the song correction within 10 seconds.")

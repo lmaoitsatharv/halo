@@ -8,7 +8,7 @@ from pathlib import Path
 import sys
 import time
 from dataclasses import replace
-from PySide6.QtCore import QObject, Signal, QTimer, Qt, QSettings, QLockFile, QThread, QEvent, QSize
+from PySide6.QtCore import QObject, Signal, QTimer, Qt, QSettings, QLockFile, QThread, QEvent, QSize, QPoint, QPointF
 from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap, QCursor, QShortcut, QKeySequence
 from PySide6.QtWidgets import (QApplication, QHBoxLayout, QLabel, QCheckBox, QSlider,
     QFileDialog, QSystemTrayIcon, QMenu, QMessageBox, QDialog, QVBoxLayout,
@@ -26,7 +26,13 @@ from .artwork import ArtworkWorker
 from .widgets import EdgeOverlay, FloatingLyrics, AmbientBackdrop
 from .glass import DesktopBackdrop, GlassButton, GlassSlider
 from .taskbar import allow_taskbar_reveal
+from .titlebar import (EXPANDED, TITLE_STRIP, WORKSPACE_FLAGS, strip_height, handle_message,
+                       redraw as redraw_title_strip)
 from .positioning import PositionDialog
+from .mini_player import MiniPlayer
+from .gallery import song_light, mix
+from . import theme
+from .share_card import ShareCardDialog
 
 from .frontend import STYLE, build_main
 from .immersive import Immersive, IMMERSIVE_SCENES
@@ -180,6 +186,7 @@ class Controller(QObject):
         self.halo_animation = self.choice("halo_animation", HALO_ANIMATIONS, "music" if self.reactive else "flow")
         self.reactive = self.halo_animation in AUDIO_ANIMATIONS
         self.reduced_motion = settings.value("reduced_motion", False, type=bool)
+        self.appearance = self.choice("appearance", theme.APPEARANCES, "system")
         self.motion_time = 0.0
         self.motion_phase = 0.0
         # The same animation clock, never wrapped, for effects that should not repeat each loop.
@@ -295,7 +302,7 @@ class Controller(QObject):
             self.generation += 1
             self.lookup_signature = None
             self.lyrics = self._with_learned(saved.get("lyrics") or Lyrics(message="Finding timed lyrics…" if track.connected else
-                                 "Play a song in Spotify, or try the demo below."))
+                                 "Play a song in Spotify, a browser or any player, or try the demo below."))
             self._restart_word_timing()
             self.trackChanged.emit()
             self.lyricsChanged.emit()
@@ -473,7 +480,7 @@ class Controller(QObject):
     def import_lyrics(self, filename):
         from .word_lyrics import load_lyrics_file
         if not self.can_correct_lyrics():
-            raise ValueError("Play a song in Spotify and wait for its duration before importing lyrics.")
+            raise ValueError("Play a song and wait for its length to show before importing lyrics.")
         lyrics = load_lyrics_file(filename)
         if not lyrics.lines:
             raise ValueError("This file has no valid timed lyrics.")
@@ -622,7 +629,7 @@ class Controller(QObject):
         if self.word_timer is None:
             self.word_timer = WordTimer()
         self.timing_session = (self.track, self.learned_source(lyrics))
-        self.word_timer.start_song(self.timing_session, lyrics.lines, self._save_learned)
+        self.word_timer.start_song(self.timing_session, lyrics.lines, self._save_learned, self.track.duration)
 
     def _close_word_timing(self):
         if self.timing_session is not None:
@@ -648,10 +655,7 @@ class Controller(QObject):
         if self.lyrics.timing_source == "learned":
             return "Word timing learned on this PC"
         following = self.timing_session is not None and not self.audio.error
-        return "Line synced · words following playback" if following else ""
-
-    def live_word(self, line):
-        return self.word_timer.live_word(line) if self.timing_session is not None else None
+        return "Line synced · learning word timing" if following else ""
 
     def forget_learned_timing(self, all_songs=False):
         # This listen must not save itself again.
@@ -741,7 +745,7 @@ class Controller(QObject):
             self.position = self.track.position + (max(0, now - self.track.observed_at) if self.track.playing else 0)
             if self.track.duration:
                 self.position = min(self.position, self.track.duration)
-        # Stop capturing output when Spotify is paused, absent, or demo is active.
+        # Stop capturing output when the player is paused, absent, or demo is active.
         if self.timing_session is not None and self.word_timer.failed:
             self.timing_session = None
             self.lyricsChanged.emit()
@@ -866,11 +870,35 @@ class MainWindow(DesktopBackdrop):
         self._initial_placed = False
         self._placing_initial = False
         self._return_maximized = controller.settings.value("window_maximized", False, type=bool)
-        self.setWindowTitle("Halo · Your listening space")
+        self.mini_player = None
+        self.share_dialog = None
+        self._light_key = None
+        self._light_at = 0.
+        self._light_rect = None
+        # The taskbar and Alt+Tab say "Halo"; the window itself shows no title (see titlebar.py).
+        self.setWindowTitle("Halo")
         self.setWindowIcon(make_icon())
         build_main(self, controller)
+        # Windows' ordinary frame, kept for the fullscreen room; the workspace lets the wall run to the top.
+        self._framed_flags = self.windowFlags()
+        # Qt's safe-area margin uses 96-DPI metrics; Halo measures the strip itself (_fit_title_strip).
+        self.setAttribute(Qt.WidgetAttribute.WA_ContentsMarginsRespectsSafeArea, False)
+        self._title_strip(True)
         self.settings_shortcut = QShortcut(QKeySequence("Ctrl+,"), self)
         self.settings_shortcut.activated.connect(self.open_settings)
+        # Every place and action has a key; tooltips show them.
+        self.place_shortcuts = []
+        for number, key in enumerate(("listening", "modes", "halo", "lyrics", "scenes"), start=1):
+            shortcut = QShortcut(QKeySequence(f"Ctrl+{number}"), self)
+            shortcut.activated.connect(lambda key=key: self.nav_buttons[key].click())
+            self.place_shortcuts.append(shortcut)
+        for sequence, callback in (("F11", self.toggle_immersive), ("Ctrl+Shift+M", self.open_mini_player),
+                                   ("Ctrl+Shift+S", self.open_share_card),
+                                   ("Ctrl+Left", lambda: self.c.transport("previous") if self.c.track.connected else None),
+                                   ("Ctrl+Right", lambda: self.c.transport("next") if self.c.track.connected else None)):
+            shortcut = QShortcut(QKeySequence(sequence), self)
+            shortcut.activated.connect(callback)
+            self.place_shortcuts.append(shortcut)
 
         self.immersive = Immersive(controller, parent=self, embedded=True)
         self.app_stack.addWidget(self.immersive)
@@ -878,6 +906,7 @@ class MainWindow(DesktopBackdrop):
         self.immersive.exited.connect(self._leave_immersive)
         self.immersive.backgroundRequested.connect(self.open_background_settings)
         self.immersive.modesRequested.connect(lambda: self.open_modes("scenes"))
+        self.immersive.miniRequested.connect(self.open_mini_player)
         self.settings_dialog.finished.connect(self._restore_immersive_after_settings)
         self.settings_dialog.pages.currentChanged.connect(lambda _index: self.sync_navigation())
         self.overlay = FloatingLyrics(controller)
@@ -886,12 +915,13 @@ class MainWindow(DesktopBackdrop):
         QApplication.instance().screenAdded.connect(lambda _: self.rebuild_edges())
         QApplication.instance().screenRemoved.connect(lambda _: self.rebuild_edges())
         self.tray = QSystemTrayIcon(make_icon(), self)
-        self.tray.setToolTip("Halo · Spotify companion")
+        self.tray.setToolTip("Halo · music companion")
         menu = QMenu()
         menu.addAction("Open Halo", self.reopen)
         menu.addAction("Settings", self.open_settings)
         menu.addAction("Modes", self.open_modes)
         menu.addAction("Immersive view", self.fullscreen)
+        menu.addAction("Mini player", self.open_mini_player)
         menu.addSeparator()
         self.tray_glow = menu.addAction("Screen-edge glow")
         self.tray_glow.setCheckable(True)
@@ -908,6 +938,10 @@ class MainWindow(DesktopBackdrop):
         controller.settingChanged.connect(self.place_overlay)
         controller.settingChanged.connect(self.sync_navigation)
         controller.paletteChanged.connect(self.update)
+        # The wall's light: set once at launch, then changed by the Appearance setting or by Windows.
+        self._appearance = getattr(controller, "appearance", "system")
+        controller.settingChanged.connect(self.sync_theme)
+        QApplication.styleHints().colorSchemeChanged.connect(lambda *_: self.sync_theme(force=True))
         self.draw_timer = QTimer(self)
         self.draw_timer.timeout.connect(self.draw)
         self.draw_timer.start(16)
@@ -920,6 +954,46 @@ class MainWindow(DesktopBackdrop):
         self.player_shortcut = QShortcut(QKeySequence("Space"), self.player)
         self.player_shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
         self.player_shortcut.activated.connect(lambda: self.c.transport("toggle") if self.c.track.connected else None)
+        self.listening_space = QShortcut(QKeySequence("Space"), self.listening_page)
+        self.listening_space.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        self.listening_space.activated.connect(lambda: self.c.transport("toggle") if self.c.track.connected else None)
+
+    def _title_strip(self, on):
+        """The wall runs up under Windows' own keys; the fullscreen room has no strip at all."""
+        if TITLE_STRIP:
+            flags = WORKSPACE_FLAGS if on else self._framed_flags
+            if self.windowFlags() != flags:
+                # Windows reports the window's state again after its frame changes. That late report can
+                # say "not maximised" (always, for a window that isn't on screen); changeEvent undoes it.
+                self._strip_echo = True
+                QTimer.singleShot(400, self, self._strip_settled)
+                # overrideWindowFlags keeps the window (no re-creation, no hide) and lets the title hint stay off.
+                self.overrideWindowFlags(flags)
+                if self.windowHandle() is not None:
+                    self.windowHandle().setFlags(flags)
+        self._fit_title_strip()
+
+    def _strip_settled(self):
+        self._strip_echo = False
+
+    def title_strip_height(self):
+        return strip_height(self) if TITLE_STRIP and self.windowFlags() & EXPANDED else 0
+
+    def _fit_title_strip(self):
+        # The header sits just under the keys; without the strip it keeps its old breathing room.
+        strip = self.title_strip_height()
+        self.shell_layout.setContentsMargins(22, strip + 4 if strip else 14, 22, 6)
+
+    def sync_theme(self, force=False):
+        appearance = getattr(self.c, "appearance", "system")
+        if appearance == self._appearance and not force:
+            return
+        if appearance != self._appearance:
+            self._appearance = appearance
+            theme.follow(appearance)
+        theme.apply(theme.resolve(appearance))
+        # Windows' keys sit on the wall: dark keys on the light wall, light keys after hours.
+        redraw_title_strip(self)
 
     def _immersive_active(self):
         return hasattr(self, "immersive") and self.app_stack.currentWidget() is self.immersive
@@ -947,6 +1021,7 @@ class MainWindow(DesktopBackdrop):
             finally:
                 self._return_maximized = maximized
                 self._placing_initial = placing
+        self._title_strip(True)
 
     def navigate(self, page):
         """Change the visible page; no dialog or second native window is opened."""
@@ -971,6 +1046,9 @@ class MainWindow(DesktopBackdrop):
         selected = (section if section != "general" else "settings") if self.current_page == "settings" else self.current_page
         for key, button in self.nav_buttons.items():
             button.setChecked(key == selected)
+        if hasattr(self, "now_playing"):
+            # The museum label already names the song on the Listening wall.
+            self.now_playing.setVisible(self.current_page != "listening")
         for button in self.findChildren(GlassButton):
             if button.c is None:
                 button.c = self.c
@@ -1106,18 +1184,28 @@ class MainWindow(DesktopBackdrop):
             self.navigate("listening")
 
     def refresh(self):
+        song = (self.c.track.key, self.c.track.connected, self.c.demo)
+        if getattr(self, "_label_song", None) not in (None, song):
+            self.museum_label.turn()
+        self._label_song = song
         self.title.setText(self.c.track.title)
         self.artist.setText(self.c.track.artist)
         self.player_title.setText(self.c.track.title)
         self.player_artist.setText(self.c.track.artist)
-        self.album_label.setText(self.c.track.album or "Spotify desktop · music in colour")
-        self.badge.setText("◉  Visual demo" if self.c.demo else
-                           ("●  Spotify connected" if self.c.track.connected else "○  Waiting for Spotify"))
+        source = self.c.track.source or "Your player"
+        self.album_label.setText(self.c.track.album or (f"{source} · music in colour" if self.c.track.connected else "Music in colour"))
+        self.badge.setText("Visual demo" if self.c.demo else
+                           (f"{source} connected" if self.c.track.connected else "Waiting for music"))
+        self.status_dot.set_state("demo" if self.c.demo else "connected" if self.c.track.connected else "waiting")
         self.play.setText("Ⅱ" if self.c.track.playing else "▶")
         for item in [self.play, self.previous, self.next, self.progress]:
             item.setEnabled(self.c.track.connected)
-        self.demo_button.setText("Return to Spotify" if self.c.demo else "Try the visual demo")
+        self.share_button.setEnabled(self.c.track.connected)
+        self.demo_button.setText("Back to your music" if self.c.demo else "Try the visual demo")
+        self.demo_button.setVisible(self.c.demo or not self.c.track.connected)
         self.immersive.refresh()
+        if self.mini_player is not None:
+            self.mini_player.refresh()
 
     def refresh_lyrics(self):
         message = self.c.lyrics.message
@@ -1159,15 +1247,18 @@ class MainWindow(DesktopBackdrop):
         preview = bool(self.position_dialog and self.position_dialog.isVisible()
                        and self.position_dialog.desktop_preview.isChecked())
         self.overlay.previewing = preview
-        should_float = not immersive_visible and not modes_visible and (preview or
+        mini_visible = self.mini_player is not None and self.mini_player.isVisible()
+        # The mini player already shows the line being sung; never letter it twice.
+        should_float = not immersive_visible and not modes_visible and not mini_visible and (preview or
                        (c.floating and visible and bool(c.lyrics.lines) and not main_visible))
         if should_float != self.overlay.isVisible():
             self.overlay.setVisible(should_float)
         if should_float:
             self.overlay.update()
+        if mini_visible:
+            self.mini_player.tick()
         if main_visible:
             self.mark.update()
-            self.playback_signal.update()
             for tile in self.mode_tiles:
                 if tile.isVisible():
                     tile.update()
@@ -1177,11 +1268,97 @@ class MainWindow(DesktopBackdrop):
             def stamp(seconds):
                 value = max(0, int(seconds))
                 return f"{value // 60}:{value % 60:02}"
-            self.time_label.setText(stamp(c.position) + " / " + stamp(c.track.duration))
+            self.progress.fill_colour = mix(song_light(c), QColor("#ffffff"), .22)
+            self.time_label.setText(stamp(c.position))
+            self.duration_label.setText(stamp(c.track.duration))
             message = c.error or (c.audio.error if c.reactive and not c.demo else "")
-            self.footer.setText(message or "No Spotify login needed · close to keep Halo in the tray")
+            self.footer.setText(message or "No login needed · close to keep Halo in the tray")
+            if not immersive_visible:
+                self._refresh_light()
         if immersive_visible:
             self.immersive.tick()
+
+    def spotlight(self):
+        """The song's light on the wall: behind the print on Listening, a quiet wash elsewhere."""
+        page = getattr(self, "listening_page", None)
+        if page is None or not hasattr(self, "app_stack") or self.app_stack.currentWidget() is not self.shell:
+            return None
+        c = self.c
+        if self.page_stack.currentWidget() is page:
+            centre, radius = page.spotlight()
+            origin = page.mapTo(self, QPoint(0, 0))
+            breath = .5 + .5 * math.sin(c.motion_time * .55)
+            strength = .82 + .09 * breath + .14 * min(1., c.pulse)
+            return centre + QPointF(origin), radius, strength, c.motion_time
+        return QPointF(self.width() / 2, -self.height() * .12), self.width() * .36, .42, 0.
+
+    def _refresh_light(self):
+        """Repaint only the spotlight's square, at most 30 times a second, and only when it changed."""
+        light = self.spotlight()
+        if light is None:
+            return
+        centre, radius, strength, drift = light
+        key = (round(centre.x()), round(centre.y()), round(radius), round(strength * 96), round(drift * 20),
+               self.c.halo_primary.rgba(), self.c.halo_secondary.rgba())
+        now = time.monotonic()
+        if key == self._light_key or now - self._light_at < 1 / 30:
+            return
+        self._light_key, self._light_at = key, now
+        rect = self.spotlight_bounds(centre, radius).toAlignedRect().adjusted(-2, -2, 2, 2)
+        self.update(rect if self._light_rect is None else rect.united(self._light_rect))
+        self._light_rect = rect
+
+    def open_mini_player(self):
+        """Rest the window and keep playback at hand in a small always-on-top card."""
+        if self.exiting:
+            return
+        if self.mini_player is None:
+            self.mini_player = MiniPlayer(self.c)
+            self.mini_player.setWindowIcon(self.windowIcon())
+            self.mini_player.restoreRequested.connect(self.restore_from_mini)
+            self.mini_player.closeRequested.connect(self.close_mini_player)
+        self._remember_window_state()
+        if self.sheet.isVisible():
+            self.sheet.dismiss()
+        if self._immersive_active():
+            self._show_workspace()
+            self.navigate(self._immersive_return_page)
+        self.hide()
+        self.mini_player.refresh()
+        self.mini_player.place()
+        self.mini_player.show()
+        self.mini_player.raise_()
+        self._sync_preview_activity()
+
+    def restore_from_mini(self):
+        self.close_mini_player()
+        self.reopen()
+
+    def close_mini_player(self):
+        if self.mini_player is not None and self.mini_player.isVisible():
+            self.mini_player.remember()
+            self.mini_player.hide()
+
+    def open_share_card(self):
+        """Make a picture of a lyric line, in the gallery's style, to copy or save."""
+        if self.exiting or not self.c.track.connected:
+            return
+        if self.share_dialog is None:
+            self.share_dialog = ShareCardDialog(self, self.c)
+        if self._immersive_active():
+            self._show_workspace()
+            self.navigate(self._immersive_return_page)
+        if not self.isVisible() or self.isMinimized():
+            self.reopen()
+        self.share_dialog.start()
+        self.show_sheet(self.share_dialog, "Share a lyric card")
+
+    def toggle_immersive(self):
+        """F11 goes into Immersive and, from inside the room, back out again."""
+        if self._immersive_active() and self.isFullScreen():
+            self.immersive.leave()
+        else:
+            self.fullscreen()
 
     def fullscreen(self):
         if self._immersive_active() and self.isFullScreen():
@@ -1196,6 +1373,7 @@ class MainWindow(DesktopBackdrop):
         self.app_stack.setCurrentWidget(self.immersive)
         self.page_escape.setEnabled(False)
         self.immersive.show()
+        self._title_strip(False)
         self.showFullScreen()
         self.activateWindow()
         self._sync_preview_activity()
@@ -1218,7 +1396,10 @@ class MainWindow(DesktopBackdrop):
         self.c.find_lyric_choices()
 
     def reopen(self):
+        if self.mini_player is not None and self.mini_player.isVisible():
+            self.close_mini_player()
         if self._immersive_active():
+            self._title_strip(False)
             self.showFullScreen()
         else:
             self.showMaximized() if self._return_maximized else self.showNormal()
@@ -1235,6 +1416,7 @@ class MainWindow(DesktopBackdrop):
 
     def showEvent(self, event):
         super().showEvent(event)
+        self._fit_title_strip()
         if not self._initial_placed:
             self._initial_placed = True
             requested_maximized = self._return_maximized or self.isMaximized()
@@ -1258,6 +1440,15 @@ class MainWindow(DesktopBackdrop):
         QTimer.singleShot(0, self, self._sync_preview_activity)
 
     def changeEvent(self, event):
+        if (event.type() == QEvent.Type.WindowStateChange and getattr(self, "_strip_echo", False)
+                and not event.oldState() & Qt.WindowState.WindowFullScreen
+                and not self._immersive_active() and self._return_maximized
+                and not self.isMaximized() and not self.isMinimized() and not self.isFullScreen()):
+            # The late report after a title-strip switch: keep the workspace maximised.
+            self._strip_echo = False
+            super().changeEvent(event)
+            self.showMaximized()
+            return
         if (event.type() == QEvent.Type.WindowStateChange and hasattr(self, "_return_maximized")
                 and event.oldState() & Qt.WindowState.WindowFullScreen):
             # Windows can deliver its final fullscreen-exit event after Qt has
@@ -1276,6 +1467,9 @@ class MainWindow(DesktopBackdrop):
             QTimer.singleShot(0, self, self._sync_preview_activity)
             return
         super().changeEvent(event)
+        if event.type() in (QEvent.Type.ActivationChange, QEvent.Type.WindowStateChange):
+            # A safety net: repaint the whole wall, so nothing Windows drew at the top can linger.
+            self.update()
         if (event.type() == QEvent.Type.WindowStateChange and hasattr(self, "_return_maximized")
                 and not self._placing_initial):
             self._remember_window_state()
@@ -1290,9 +1484,21 @@ class MainWindow(DesktopBackdrop):
         if hasattr(self, "sheet"):
             self.sheet.setGeometry(self.rect())
 
+    def nativeEvent(self, event_type, message):
+        # Keep Windows' old fallback caption from ever being painted over the wall (titlebar.handle_message).
+        if self.windowFlags() & EXPANDED and bytes(event_type) == b"windows_generic_MSG":
+            handled, result = handle_message(message)
+            if handled:
+                return True, result
+        # QWidget's own nativeEvent only answers "not handled" on Windows.
+        return False, 0
+
     def event(self, event):
         if event.type() == QEvent.Type.WinIdChange:
             allow_taskbar_reveal(self.effectiveWinId())
+        elif event.type() == QEvent.Type.DevicePixelRatioChange:
+            # Another monitor, another scale: the strip's height changes with it.
+            QTimer.singleShot(0, self, self._fit_title_strip)
         return super().event(event)
 
     def quit(self):
@@ -1309,6 +1515,8 @@ class MainWindow(DesktopBackdrop):
         self.immersive.hide()
         self.immersive.media_background.close()
         self.overlay.hide()
+        if self.mini_player is not None:
+            self.mini_player.hide()
         for edge in self.edges:
             edge.hide()
         QApplication.quit()
@@ -1326,14 +1534,14 @@ class MainWindow(DesktopBackdrop):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Halo · Windows Spotify companion")
+    parser = argparse.ArgumentParser(description="Halo · Windows music companion")
     parser.add_argument("--demo", action="store_true")
     parser.add_argument("--offline", action="store_true", help="Disable the Windows media bridge")
     parser.add_argument("--settings", action="store_true", help="Open Halo settings on launch")
     parser.add_argument("--modes", action="store_true", help="Open the Modes library on launch")
     parser.add_argument("--mode-category", choices=("all", "lyrics", "scenes", "halo", "mine"), default="all")
     parser.add_argument("--snapshot", help="Save a UI preview and quit (for development)")
-    parser.add_argument("--snapshot-view", choices=("main", "immersive", "position", "settings", "modes"), default="main",
+    parser.add_argument("--snapshot-view", choices=("main", "immersive", "position", "settings", "modes", "share", "mini"), default="main",
                         help="Choose the view for a development snapshot")
     parser.add_argument("--settings-section", choices=("general", "halo", "lyrics", "scenes"), default="general",
                         help="Choose a settings section for a development snapshot")
@@ -1342,6 +1550,7 @@ def main():
     parser.add_argument("--lyric-style", type=lambda value: LYRIC_STYLE_ALIASES.get(value, value),
                         choices=[item[0] for item in LYRIC_STYLES], help="Choose a lyric animation")
     parser.add_argument("--immersive-mode", choices=[item[0] for item in IMMERSIVE_SCENES], help="Choose an immersive scene")
+    parser.add_argument("--appearance", choices=[item[0] for item in theme.APPEARANCES], help="Light wall, dark wall, or match Windows")
     args = parser.parse_args()
     source_root = Path(__file__).resolve().parent.parent
     default_data = Path(os.getenv("LOCALAPPDATA", str(source_root))) / "Halo" if getattr(sys, "frozen", False) else source_root / ".data"
@@ -1354,16 +1563,17 @@ def main():
     app.setOrganizationName("Halo")
     app.setApplicationVersion(__version__)
     app.setQuitOnLastWindowClosed(False)
-    app.setStyleSheet(STYLE)
     lock = QLockFile(str(data_dir / "instance.lock"))
     if not lock.tryLock(100):
         QMessageBox.information(None, "Halo is already running", "Open Halo from the system tray next to the clock.")
         return 0
     settings = QSettings(str(data_dir / "settings.ini"), QSettings.Format.IniFormat)
     c = Controller(settings, offline=args.offline)
-    for setting in ("halo_mode", "lyric_style", "immersive_mode"):
+    for setting in ("halo_mode", "lyric_style", "immersive_mode", "appearance"):
         if getattr(args, setting):
             c.set(setting, getattr(args, setting))
+    theme.follow(c.appearance)
+    theme.apply(theme.resolve(c.appearance))
     window = MainWindow(c)
     app.aboutToQuit.connect(c.close)
     window.show()
@@ -1384,8 +1594,13 @@ def main():
             window.settings_dialog.select(index)
         elif args.snapshot_view == "modes":
             window.open_modes(args.mode_category)
+        elif args.snapshot_view == "share":
+            QTimer.singleShot(300, window.open_share_card)
+        elif args.snapshot_view == "mini":
+            QTimer.singleShot(300, window.open_mini_player)
         def snapshot():
-            window.grab().save(args.snapshot)
+            target = window.mini_player if args.snapshot_view == "mini" and window.mini_player is not None else window
+            target.grab().save(args.snapshot)
             window.quit()
         QTimer.singleShot(2300 if args.snapshot_view == "immersive" else 1600, snapshot)
     if args.report:

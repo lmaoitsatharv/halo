@@ -108,11 +108,11 @@ class ImmersiveIdleTests(unittest.TestCase):
 
     def test_open_dropdown_defers_hide_and_closing_rearms_full_interval(self):
         self.fast_idle()
-        self.window.style_select.showPopup()
+        self.window.open_menu()
         QTest.qWait(260)
-        self.assertTrue(self.window.style_select.view().isVisible())
+        self.assertTrue(self.window.menu_open())
         self.assert_chrome(True)
-        self.window.style_select.hidePopup()
+        self.window.menu.close()
         QTest.qWait(70)
         self.assert_chrome(True)
         QTest.qWait(120)
@@ -198,12 +198,12 @@ class ImmersiveIdleTests(unittest.TestCase):
         other.setCursor(Qt.CursorShape.CrossCursor)
         self.addCleanup(other.close)
         cursors = {widget: (widget.testAttribute(Qt.WidgetAttribute.WA_SetCursor), widget.cursor().shape())
-                   for widget in (self.window, self.window.canvas, self.window.play, self.window.exit)}
+                   for widget in (self.window, self.window.canvas, self.window.play, self.window.menu_button)}
         self.fast_idle()
         self.move(self.window.canvas, 15, 15)
         QTest.qWait(160)
         self.assert_chrome(False)
-        for widget in (self.window, self.window.canvas, self.window.play, self.window.exit):
+        for widget in (self.window, self.window.canvas, self.window.play, self.window.menu_button):
             self.assertEqual(widget.cursor().shape(), Qt.CursorShape.BlankCursor)
         self.assertIsNone(self.app.overrideCursor())
         self.assertEqual(other.cursor().shape(), Qt.CursorShape.CrossCursor)

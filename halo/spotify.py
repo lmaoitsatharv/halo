@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from PySide6.QtCore import QThread, Signal
 from .models import Track, TimelineClock
 from .artwork import valid_artwork
+from .media_sources import SessionChooser, clean_metadata, is_browser, source_name
 
 log = logging.getLogger(__name__)
 
@@ -50,7 +51,8 @@ class SessionArtwork:
         return self.data
 
 
-class SpotifyWorker(QThread):
+class MediaWorker(QThread):
+    """Reads whichever player Windows' media controls report: Spotify, a browser tab or a music app."""
     changed = Signal(object)
     status = Signal(str)
 
@@ -91,12 +93,28 @@ class SpotifyWorker(QThread):
         current_key = None
         covers = SessionArtwork()
         clock = TimelineClock()
+        chooser = SessionChooser()
         while not self.isInterruptionRequested():
             try:
-                # Never control another player's session if Spotify disappears.
-                sessions = [s for s in manager.get_sessions()
-                            if "spotify" in s.source_app_user_model_id.casefold()]
-                session = sessions[0] if sessions else None
+                sessions = {}
+                for candidate in manager.get_sessions():
+                    app = candidate.source_app_user_model_id or ""
+                    if app not in sessions:
+                        sessions[app] = candidate
+                playing = {}
+                for app, candidate in sessions.items():
+                    try:
+                        playing[app] = candidate.get_playback_info().playback_status == Status.PLAYING
+                    except Exception:
+                        playing[app] = False
+                try:
+                    current = manager.get_current_session()
+                    current = current.source_app_user_model_id if current else None
+                except Exception:
+                    current = None
+                app = chooser.choose(playing, current, time.monotonic())
+                session = sessions.get(app) if app is not None else None
+                # Commands only ever reach the player Halo is showing.
                 while not self.commands.empty():
                     name, value = self.commands.get_nowait()
                     if not session:
@@ -118,8 +136,11 @@ class SpotifyWorker(QThread):
                     props = await asyncio.wait_for(session.try_get_media_properties_async(), timeout=4)
                     timeline = session.get_timeline_properties()
                     info = session.get_playback_info()
-                    playing = info.playback_status == Status.PLAYING
-                    key = (props.title, props.artist, props.album_title)
+                    playing_now = info.playback_status == Status.PLAYING
+                    browser = is_browser(app)
+                    name = source_name(app)
+                    title, artist = clean_metadata(props.title, props.artist, props.album_title, browser)
+                    key = (app, title, artist, props.album_title)
                     if key != current_key:
                         current_key = key
                         clock = TimelineClock()
@@ -128,10 +149,13 @@ class SpotifyWorker(QThread):
                     duration = max(0.0, (timeline.end_time - timeline.start_time).total_seconds())
                     raw_position = max(0.0, (timeline.position - timeline.start_time).total_seconds())
                     elapsed = (datetime.now(timezone.utc) - timeline.last_updated_time).total_seconds()
-                    position = clock.update(raw_position, timeline.last_updated_time, playing, duration, now, elapsed)
-                    self.changed.emit(Track(props.title or "Spotify", props.artist or "", props.album_title,
-                                            duration, position, playing, True, artwork, now))
+                    position = clock.update(raw_position, timeline.last_updated_time, playing_now, duration, now, elapsed)
+                    self.changed.emit(Track(title or name, artist, props.album_title or "",
+                                            duration, position, playing_now, True, artwork, now, name, browser))
             except Exception:
-                log.debug("Transient Spotify polling failure", exc_info=True)
-                self.status.emit("Reconnecting to Spotify…")
+                log.debug("Transient media polling failure", exc_info=True)
+                self.status.emit("Reconnecting to your player…")
             await asyncio.sleep(.5)
+
+
+SpotifyWorker = MediaWorker

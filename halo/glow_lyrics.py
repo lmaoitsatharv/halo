@@ -16,7 +16,8 @@ import zlib
 
 import numpy as np
 from PySide6.QtCore import Qt, QPointF
-from PySide6.QtGui import QColor, QImage, QPainter, QPainterPath, QPen, QPixmap, QPolygonF, QRadialGradient
+from PySide6.QtGui import (QColor, QImage, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QPolygonF,
+                           QRadialGradient)
 
 from .extra_lyrics import _alpha, _clamp, _hit, _mix, _neighbours, _smooth
 from .lyric_rendering import symbol_kind
@@ -29,7 +30,14 @@ HOT = QColor("#f4f4ef")
 CASCADE_WORDS = 5
 STAR_WORDS = 16
 STAR_FLOATING_WORDS = 8
-STAR_CLEAR = .38
+STAR_HOLD = .16       # share of a word gap the newly lit star keeps the line before it sets off
+STAR_TRAVEL = 1.7     # the longest stroke, in the verse's typical gaps between words
+STAR_SETTLE = .42     # seconds for a lit star and its word to cool once the next word takes over
+STAR_CATCH = .07      # seconds to finish a stroke when a followed word begins before it was due
+STAR_LINGER = .3      # a finished verse holds its sky this long into a break before fading
+STAR_FADE = .7        # and fades over at most this long, gone before the next verse's first word
+STAR_BLEND = .36      # verses that run straight on hand the sky over across this long
+STAR_QUIET = .35      # the quiet lines of a break give way to the first star over this long
 NEON_WORDS = 12
 NEON_STRIKES = (.16, .9, .3, 1., .55, 1.)
 NEON_STRIKE = .24
@@ -357,90 +365,285 @@ def _star_ink(canvas, p, point, size, colour, opacity):
     p.restore()
 
 
-def _star_map(canvas, p, ids, reach, grow, burst, phase, opacity, live):
-    """One verse's sky up to star number reach, with the thread grown that far towards it."""
+def star_tempo(onsets):
+    """The verse's typical gap between word onsets: the pace its line travels at."""
+    gaps = sorted(b - a for a, b in zip(onsets, onsets[1:]) if b - a > .02)
+    return _clamp(gaps[len(gaps) // 2], .12, 1.2) if gaps else .45
+
+
+def star_travel(lit, arrive, tempo):
+    """(leave, arrive): the line sets off from a star lit at lit and reaches the next exactly at arrive.
+
+    It holds a moment on the new star, and never takes longer than the verse's pace allows, so in
+    a long gap it waits at the star and then travels rather than crawling the whole way.
+    """
+    gap = max(0., arrive - lit)
+    return arrive - min(gap * (1 - STAR_HOLD), max(.16, tempo * STAR_TRAVEL)), arrive
+
+
+def star_reach(position, leave, arrive):
+    """How far along its stroke the line is: 0 as it leaves, and exactly 1 as the next word begins."""
+    if position >= arrive:
+        return 1.
+    if position <= leave or arrive <= leave:
+        return 0.
+    t = (position - leave) / (arrive - leave)
+    # Brisk off the star and easing toward the next, yet still moving as it lands, so the landing
+    # reads as the beat rather than the line coming to rest and then a star appearing.
+    return .35 * t + .35 * (1 - (1 - t) ** 2) + .3 * _smooth(t)
+
+
+class StarIgnition(NamedTuple):
+    """A star landing: its size against its lit size, the flash, the shock ring's progress, and its word."""
+    scale: float
+    flash: float
+    ring: float | None
+    label: float
+
+
+def star_ignition(age, pop):
+    """From a spark to a little over its size and home, with a flash and a ring, its word fading up."""
+    age = max(0., age)
+    t = _clamp(age / pop) - 1
+    over = 1 + 2.7 * t ** 3 + 1.7 * t ** 2
+    ring = age / (pop * 2.6)
+    # The word follows the spark, so its glow never sits over the brightest moment of the flash.
+    return StarIgnition(.3 + .7 * over, math.exp(-age / (pop * .55)), ring if ring < 1 else None,
+                        _smooth((age - pop * .35) / (pop * 1.1)))
+
+
+RESTED = StarIgnition(1., 0., None, 1.)
+
+
+def _star_breaks(canvas, groups):
+    """Map numbers that end at a break in the singing (a blank line), rather than running straight on."""
+    words = canvas.timeline.display_words
+    return {g for g in range(len(groups) - 1) if words[groups[g + 1][0]].line - words[groups[g][-1]].line > 1}
+
+
+def star_presence(words, groups, breaks, number, position):
+    """How much of a verse's sky is showing, from the clock alone, so every path through a frame agrees.
+
+    Into a break it lingers on its last word, then fades, gone before the next verse's first star.
+    A verse that runs straight on hands its sky over around the next verse's first word.
+    """
+    last = words[groups[number][-1]]
+    if number + 1 >= len(groups):
+        start, span = last.finish + STAR_LINGER, STAR_FADE
+    else:
+        following = words[groups[number + 1][0]].begin
+        if number in breaks:
+            end = min(last.finish + STAR_LINGER + STAR_FADE, following)
+            span = min(STAR_FADE, max(.12, end - last.begin - .1))
+            start = end - span
+        else:
+            lead = _clamp(following - last.begin - .25, 0, STAR_BLEND * .6)
+            start, span = following - lead, STAR_BLEND
+    return 1 - _smooth((position - start) / span)
+
+
+def _thread(canvas, p, points, colour, width, opacity):
+    """The verse's finished line: a soft glow under a fine bright core."""
+    if len(points) < 2 or opacity < .012:
+        return
+    trail = QPolygonF(points)
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    if canvas.mode == "floating":
+        p.setPen(QPen(_alpha(QColor("#000000"), .45 * opacity), width + 2.4, Qt.PenStyle.SolidLine,
+                      Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+        p.drawPolyline(trail)
+    p.setPen(QPen(_alpha(colour, .1 * opacity), width * 4.5, Qt.PenStyle.SolidLine,
+                  Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+    p.drawPolyline(trail)
+    p.setPen(QPen(_alpha(colour, .62 * opacity), width, Qt.PenStyle.SolidLine,
+                  Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+    p.drawPolyline(trail)
+
+
+def _stroke(canvas, p, start, tip, colour, width, opacity, level):
+    """The line on its way: it brightens toward its tip, and nothing rides on the end of it."""
+    if opacity < .012 or (tip - start).manhattanLength() < .5:
+        return
+    hot = _mix(colour, HOT, .55 + .25 * level)
+
+    def pen(alpha_tail, alpha_tip, size):
+        gradient = QLinearGradient(start, tip)
+        gradient.setColorAt(0, _alpha(colour, alpha_tail * opacity))
+        gradient.setColorAt(.7, _alpha(colour, (alpha_tail + alpha_tip) * .5 * opacity))
+        gradient.setColorAt(1, _alpha(hot, alpha_tip * opacity))
+        return QPen(gradient, size, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    if canvas.mode == "floating":
+        p.setPen(QPen(_alpha(QColor("#000000"), .45 * opacity), width + 2.4, Qt.PenStyle.SolidLine,
+                      Qt.PenCapStyle.RoundCap))
+        p.drawLine(start, tip)
+    p.setPen(pen(.1, .26, width * 5))
+    p.drawLine(start, tip)
+    p.setPen(pen(.62, 1., width * 1.15))
+    p.drawLine(start, tip)
+
+
+def _glint(p, point, length, colour, opacity):
+    """Four fine rays thrown out by a landing star, fading along their length."""
+    if opacity < .02 or length < 1:
+        return
+    for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+        end = point + QPointF(dx * length, dy * length)
+        gradient = QLinearGradient(point, end)
+        gradient.setColorAt(0, _alpha(colour, opacity))
+        gradient.setColorAt(1, _alpha(colour, 0))
+        p.setPen(QPen(gradient, max(1., length * .045), Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        p.drawLine(point, end)
+
+
+def _lerp(a, b, amount):
+    return a + (b - a) * amount
+
+
+def _star_map(canvas, p, ids, reach, phase, presence, live, age=0., following=None):
+    """One verse's sky, lit up to star number reach.
+
+    A live map also draws the line on its way to the next star, timed to land as that word begins.
+    age is how long the newest word has sounded; following is when the word after this map begins.
+    """
     c, words = canvas.controller, canvas.timeline.display_words
     w, h = canvas.width(), canvas.height()
     base = canvas._base_size()
     reduced = _reduced(canvas)
-    field = star_field(" ".join(words[i].text for i in ids), len(ids))
-    points = [QPointF(w * (.1 + .8 * x), h * (.15 + .58 * y)) for x, y in field[:reach + 1]]
-    head = points[reach] if reach == 0 else points[reach - 1] + (points[reach] - points[reach - 1]) * grow
-    # The sky leans a little towards the thread, with a slow drift under it.
-    centre = QPointF(w / 2, h / 2)
-    pan = QPointF() if reduced else (head - centre) * .1 + QPointF(math.sin(phase * .31) * min(6, w * .008),
-                                                                   math.cos(phase * .23) * min(4, h * .008))
-    points = [point - pan for point in points]
-    head -= pan
-    p.setBrush(Qt.BrushStyle.NoBrush)
-    trail = QPolygonF(points[:reach] + [head])
-    if canvas.mode == "floating":
-        p.setPen(QPen(_alpha(QColor("#000000"), .45 * opacity), 3, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
-        p.drawPolyline(trail)
-    p.setPen(QPen(_alpha(c.primary, .72 * opacity), max(1., base * .028), Qt.PenStyle.SolidLine,
-                  Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
-    p.drawPolyline(trail)
-    arrived = _smooth((grow - .55) / .45)
+    position = _position(canvas)
     level = _level(canvas)
-    for k, point in enumerate(points):
-        word = words[ids[k]]
+    field = star_field(" ".join(words[i].text for i in ids), len(ids))
+    points = [QPointF(w * (.1 + .8 * x), h * (.15 + .58 * y)) for x, y in field]
+    onsets = [words[i].begin for i in ids]
+    tempo = star_tempo(onsets)
+    pop = _clamp(tempo * .7, .16, .34)
+    lit_at = position - age if live else onsets[reach]
+    # The stroke into the newest star is whole, or finishes quickly if its word came early.
+    into = 1.
+    if live and reach and not reduced:
+        due = star_reach(lit_at, *star_travel(onsets[reach - 1], onsets[reach], tempo))
+        into = due + (1 - due) * _smooth(age / STAR_CATCH)
+    out = 0.
+    if live and not reduced and reach + 1 < len(ids):
+        # Held just short until its word begins, so a late word never leaves a line ending in empty sky.
+        out = min(.985, star_reach(position, *star_travel(lit_at, onsets[reach + 1], tempo)))
+    if out > 0:
+        tip = points[reach] + (points[reach + 1] - points[reach]) * out
+    elif into < 1:
+        tip = points[reach - 1] + (points[reach] - points[reach - 1]) * into
+    else:
+        tip = points[reach]
+    # The sky leans a little toward the line, with a slow drift under it.
+    centre = QPointF(w / 2, h / 2)
+    pan = QPointF() if reduced else (tip - centre) * .1 + QPointF(math.sin(phase * .31) * min(6, w * .008),
+                                                                  math.cos(phase * .23) * min(4, h * .008))
+    points = [point - pan for point in points]
+    tip -= pan
+    width = max(1., base * .026)
+    if into < 1:
+        _thread(canvas, p, points[:reach], c.primary, width, presence)
+        _stroke(canvas, p, points[reach - 1], tip, c.primary, width, presence, level)
+    else:
+        _thread(canvas, p, points[:reach + 1], c.primary, width, presence)
+        if out > 0:
+            _stroke(canvas, p, points[reach], tip, c.primary, width, presence, level)
+    for k in range(reach + 1):
+        point, word = points[k], words[ids[k]]
         current = live and k == reach
         hero = symbol_kind(word.text) != "star"
         twinkle = 1. if reduced else .74 + .26 * math.sin(phase * 2.4 + k * 1.7)
-        show = (arrived if k == reach else 1) * opacity
+        # A star cools once the next word takes over: smaller, in the song's colour, its word set back.
         if current:
-            _halo(p, point, base * (.62 + .3 * level), c.primary, .6 * show)
-        if current and 0 < burst < 1:
+            cool = 0.
+        elif reduced:
+            cool = 1. if k < reach or live else 0.
+        elif live and k == reach - 1:
+            cool = _smooth(age / STAR_SETTLE)
+        else:
+            later = onsets[k + 1] if k + 1 < len(ids) else following
+            cool = 0. if later is None else _smooth((position - later) / STAR_SETTLE)
+        land = star_ignition(age, pop) if current and not reduced else RESTED
+        size = _lerp(base * .26, base * (.17 if hero else .11), cool)
+        colour = _mix(HOT, c.primary, cool)
+        if cool < 1:
+            _halo(p, point, base * (.62 + .3 * level), c.primary, .6 * (1 - cool) * (1 - .5 * land.flash) * presence)
+        if land.flash > .02:
+            _halo(p, point, base * (.16 + .26 * land.flash), _mix(c.primary, HOT, .85), .95 * land.flash * presence)
+        if land.ring is not None:
+            ring = base * (.28 + 1.05 * (1 - (1 - land.ring) ** 2))
             p.setBrush(Qt.BrushStyle.NoBrush)
-            p.setPen(QPen(_alpha(c.primary, (1 - burst) ** 2 * .6 * opacity), 1.2))
-            p.drawEllipse(point, base * (.3 + .9 * burst), base * (.3 + .9 * burst))
-        star = base * (.26 if current else .17 if hero else .11)
-        _star_ink(canvas, p, point, star, HOT if current else c.primary, show * (1 if current else .9 * twinkle))
-        size = base * .86
-        shape = canvas._shape(word.text, w * .42, size * 1.5, size, "center")
-        scale = 1 if current else .64 if hero else .46
+            p.setPen(QPen(_alpha(_mix(c.primary, HOT, .4), (1 - land.ring) ** 2 * .5 * presence), 1.))
+            p.drawEllipse(point, ring, ring)
+        _glint(p, point, base * (.3 + .95 * land.flash) * land.scale, _mix(c.primary, HOT, .8),
+               .9 * land.flash * presence)
+        _star_ink(canvas, p, point, size * land.scale, colour, presence * _lerp(1., .9 * twinkle, cool))
+        lettering = base * .86
+        shape = canvas._shape(word.text, w * .42, lettering * 1.5, lettering, "center")
+        scale = _lerp(1., .64 if hero else .46, cool) * (.88 + .12 * land.label)
         half_w, half_h = shape.bounds.width() * scale / 2, shape.bounds.height() * scale / 2
+        side = star_label_side(field, k)
         x = _clamp(point.x(), min(w / 2, half_w + 3), max(w / 2, w - half_w - 3))
-        y = point.y() + star_label_side(field, k) * (star + half_h + 2)
+        # The word rises out from its star as it lands.
+        y = point.y() + side * (size + half_h + 2) - side * (1 - land.label) * base * .16
         y = _clamp(y, half_h + 3, h - half_h - 3)
-        if current:
-            _stamp(canvas, p, shape, "bloom", c.primary, x, y, .7 * show, scale)
-        _stamp(canvas, p, shape, "face", HOT if current else c.primary, x, y,
-               show * (1 if current else .86 if hero else .6), scale)
+        show = presence * land.label
+        if cool < 1:
+            # The glow comes up after the letters, so a word fading in never reads as a grey smudge.
+            _stamp(canvas, p, shape, "bloom", c.primary, x, y, .7 * (1 - cool) * show * land.label ** 2, scale)
+        _stamp(canvas, p, shape, "face", colour, x, y, show * _lerp(1., .86 if hero else .6, cool), scale)
         if live:
             _hit(canvas, shape, x, y, scale, word.line)
-    if live and grow < 1:
-        _halo(p, head, base * .36, c.primary, .9 * opacity)
-        _star_ink(canvas, p, head, base * .09, HOT, opacity)
+
+
+def _latest_group(words, groups, position):
+    """The last map whose first word has begun, or -1 before the first verse."""
+    return bisect_right([words[ids[0]].begin for ids in groups], position) - 1
 
 
 def _starline(canvas, p, index, word_index, phase):
-    """Each word lands as a star at the end of a bright thread, then the verse clears for the next."""
-    active = _sung(canvas, index, word_index)
-    if active < 0:
-        _neighbours(canvas, p, index)
-        return
+    """Each word lands as a star where the line arrives, timed to the singing; a verse clears for the next."""
     words, position = canvas.timeline.display_words, _position(canvas)
     groups, owner = _star_groups(canvas)
-    number = owner[active]
-    ids = groups[number]
-    word = words[active]
-    age = max(0., canvas.word_elapsed(active, position))
-    land = min(.22, max(.07, (word.finish - word.begin) * .7))
+    breaks = _star_breaks(canvas, groups)
     reduced = _reduced(canvas)
-    grow = 1. if reduced else _smooth(age / land)
-    burst = 0. if reduced else _clamp((age - land) / .5)
-    since = position - words[ids[0]].begin
-    if number and not reduced and since < STAR_CLEAR:
-        w, h, away = canvas.width(), canvas.height(), _smooth(since / STAR_CLEAR)
-        previous = groups[number - 1]
+    active = _sung(canvas, index, word_index)
+    w, h = canvas.width(), canvas.height()
+
+    def following(number):
+        return words[groups[number + 1][0]].begin if number + 1 < len(groups) else None
+
+    def leaving(number, presence):
+        """A verse on its way out, lit to its last star and drifting a little toward the viewer."""
+        away = 1 - presence
         p.save()
         p.translate(w / 2, h / 2)
-        p.scale(1 + .16 * away, 1 + .16 * away)
+        p.scale(1 + .12 * away, 1 + .12 * away)
         p.translate(-w / 2, -h / 2)
-        _star_map(canvas, p, previous, len(previous) - 1, 1., 0., phase, 1 - away, False)
+        _star_map(canvas, p, groups[number], len(groups[number]) - 1, phase, presence, False,
+                  following=following(number))
         p.restore()
-    _star_map(canvas, p, ids, bisect_left(ids, active), grow, burst, phase, 1., True)
+    if active < 0:
+        # A break: the last verse's sky lingers, then fades as the quiet lines come up around the gap.
+        number = _latest_group(words, groups, position) if groups else -1
+        presence = 0. if number < 0 or reduced else star_presence(words, groups, breaks, number, position)
+        if presence > .012:
+            leaving(number, presence)
+        _neighbours(canvas, p, index, 1 - presence)
+        return
+    number = owner[active]
+    ids = groups[number]
+    if not reduced:
+        since = position - words[ids[0]].begin
+        if number == 0 or number - 1 in breaks:
+            # The quiet lines of the break give way as the verse's first star lands.
+            _neighbours(canvas, p, words[ids[0]].line - 1, 1 - _smooth(since / STAR_QUIET))
+        else:
+            before = star_presence(words, groups, breaks, number - 1, position)
+            if before > .012:
+                leaving(number - 1, before)
+    presence = 1. if reduced else star_presence(words, groups, breaks, number, position)
+    _star_map(canvas, p, ids, bisect_left(ids, active), phase, presence, True,
+              max(0., canvas.word_elapsed(active, position)), following(number))
 
 
 def neon_flicker(age):

@@ -4,7 +4,7 @@ import math
 import time
 from types import SimpleNamespace
 
-from PySide6.QtCore import (Qt, QEvent, QPoint, QPointF, QRect, QRectF, Property,
+from PySide6.QtCore import (Qt, QEvent, QPoint, QPointF, QRect, QRectF, QSize, Property,
                             QPropertyAnimation, QEasingCurve, QTimer, Signal)
 from PySide6.QtGui import (QColor, QFont, QFontMetrics, QLinearGradient, QPainter,
                           QPainterPath, QPen)
@@ -20,61 +20,61 @@ from .scene_extras import extra_scene_layout, paint_extra_scene, _artwork_image
 from .widgets import LyricCanvas
 
 
+from .gallery import paint_shadow, paint_focus, tint, INK, INK_SOFT, SHADOW
+from .theme import hexc, pick, style
+from .glass import icon as line_icon
+
 LIBRARY_STYLE = """
-QDialog#modeLibrary { background: #0e1016; color: #f5f3fa; }
-QDialog#embeddedModes { background: transparent; color: #f5f3fa; }
-QWidget { font-family: 'Segoe UI'; color: #f5f3fa; }
+QDialog#modeLibrary { background: #e7ece6; color: #1c2a26; }
+QDialog#embeddedModes { background: transparent; color: #1c2a26; }
+QWidget { font-family: 'Segoe UI'; color: #1c2a26; }
 QLabel { background: transparent; }
-QLabel#libraryEyebrow { color: #9a98b2; font-size: 9px; font-weight: 600; letter-spacing: 2px; }
-QLabel#libraryTitle { color: #f5f3fa; font-size: 30px; font-weight: 600; letter-spacing: -1px; }
-QLabel#librarySubtitle { color: #999aaa; font-size: 12px; }
-QLabel#libraryCount { color: #999aaa; font-size: 11px; }
-QLabel#libraryDetailTitle { color: #f5f3fa; font-size: 25px; font-weight: 600; letter-spacing: -0.5px; }
-QLabel#libraryDescription { color: #b0afc0; font-size: 12px; }
-QLabel#libraryState { color: #b8daca; font-size: 11px; }
-QLabel#libraryFooter { color: #868697; font-size: 10px; }
-QFrame#libraryDetail { background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-    stop:0 rgba(39, 39, 52, 206), stop:0.42 rgba(26, 27, 37, 194), stop:1 rgba(21, 24, 33, 218));
-    border: 1px solid rgba(238, 232, 255, 30); border-radius: 22px; }
-QFrame#libraryToolbar { background: rgba(255, 255, 255, 5); border: 1px solid rgba(255, 255, 255, 12);
+QLabel#libraryEyebrow { color: #55625e; font-size: 10px; font-weight: 600; letter-spacing: 2px; }
+QLabel#libraryTitle { color: #1c2a26; font-size: 30px; font-weight: 600; letter-spacing: -1px; }
+QLabel#librarySubtitle { color: #55625e; font-size: 13px; }
+QLabel#libraryCount { color: #55625e; font-size: 12px; }
+QLabel#libraryDetailTitle { color: #1c2a26; font-size: 25px; font-weight: 600; letter-spacing: -0.5px; }
+QLabel#libraryDescription { color: #3e4c47; font-size: 13px; }
+QLabel#libraryState { color: #24685b; font-size: 12px; font-weight: 600; }
+QLabel#libraryFooter { color: #55625e; font-size: 11px; }
+QFrame#libraryDetail { background: #ffffff; border: 1px solid rgba(28, 42, 38, 30); border-radius: 20px; }
+QFrame#libraryToolbar { background: rgba(28, 42, 38, 12); border: 1px solid rgba(28, 42, 38, 18);
     border-radius: 14px; }
 QPushButton#libraryTab { border: 1px solid transparent; border-radius: 10px;
-    background: transparent; color: #999aaa; padding: 8px 12px; font-size: 11px; }
-QPushButton#libraryTab:hover { background: rgba(255, 255, 255, 8); color: #f5f3fa; }
-QPushButton#libraryTab:checked { border-color: rgba(222, 209, 255, 28);
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 rgba(196, 180, 248, 35), stop:1 rgba(196, 180, 248, 15)); color: #e3d9ff; }
-QPushButton#libraryTab:focus { border-color: #c4b4f8; }
-QPushButton#libraryClose { background: rgba(255, 255, 255, 7); color: #c3bfd1;
-    border: 1px solid rgba(255, 255, 255, 18); border-radius: 11px; padding: 0; font-size: 19px; }
-QPushButton#libraryClose:hover { background: rgba(196, 180, 248, 22); color: #f5f3fa; }
-QPushButton#libraryPause { background: rgba(255, 255, 255, 7); color: #c3bfd1;
-    border: 1px solid rgba(255, 255, 255, 18); border-radius: 12px; padding: 9px 12px; font-size: 11px; }
-QPushButton#libraryPause:hover { background: rgba(196, 180, 248, 18); }
-QPushButton#libraryPause:checked { background: rgba(196, 180, 248, 25); border-color: rgba(196, 180, 248, 80); }
-QPushButton#libraryAdd { background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-    stop:0 #d5c8ff, stop:1 #bba8f2); color: #211d30; border: 1px solid rgba(255, 255, 255, 80);
-    border-radius: 12px; padding: 10px 12px; font-size: 11px; font-weight: 600; }
-QPushButton#libraryAdd:hover { background: #ded3ff; border-color: #f1ebff; }
-QPushButton#libraryAdd:disabled { background: rgba(175, 219, 194, 11); color: #a8c7b6; border-color: rgba(175, 219, 194, 30); }
-QPushButton#libraryUse { background: rgba(255, 255, 255, 9); color: #e2dced; border: 1px solid rgba(255, 255, 255, 30);
-    border-radius: 12px; padding: 10px 12px; font-size: 11px; }
-QPushButton#libraryUse:hover { background: rgba(196, 180, 248, 28); border-color: rgba(196, 180, 248, 75); }
-QPushButton#libraryUse:disabled { color: #878492; border-color: rgba(255, 255, 255, 10); background: rgba(255, 255, 255, 3); }
-QPushButton#libraryRemove { background: transparent; color: #9d91aa; border: 0;
-    font-size: 10px; padding: 6px 2px; text-align: left; }
-QPushButton#libraryRemove:hover { color: #ebadbd; }
-QLineEdit#librarySearch { background: rgba(5, 6, 12, 65); border: 1px solid rgba(255, 255, 255, 16);
-    border-radius: 10px; padding: 8px 12px; color: #e1dbea; font-size: 11px; selection-background-color: #675a8c; }
-QLineEdit#librarySearch:focus { border-color: rgba(196, 180, 248, 125); background: rgba(5, 6, 12, 95); }
+    background: transparent; color: #3e4c47; padding: 9px 13px; font-size: 12px; }
+QPushButton#libraryTab:hover { background: rgba(255, 255, 255, 150); color: #1c2a26; }
+QPushButton#libraryTab:checked { border-color: rgba(28, 42, 38, 36); background: #ffffff; color: #1c2a26; font-weight: 600; }
+QPushButton#libraryTab:focus { border: 2px solid #2f7d6d; }
+QPushButton#libraryClose { background: #ffffff; color: #1c2a26;
+    border: 1px solid rgba(28, 42, 38, 46); border-radius: 11px; padding: 7px 12px; font-size: 12px; }
+QPushButton#libraryClose:hover { border-color: rgba(28, 42, 38, 110); }
+QPushButton#libraryPause { background: #ffffff; color: #1c2a26;
+    border: 1px solid rgba(28, 42, 38, 46); border-radius: 12px; padding: 9px 12px; font-size: 12px; }
+QPushButton#libraryPause:hover { border-color: rgba(28, 42, 38, 110); }
+QPushButton#libraryPause:checked { background: #1c2a26; color: #f2f4ef; border-color: #1c2a26; }
+QPushButton#libraryAdd { background: #1c2a26; color: #f2f4ef; border: 1px solid #0f1715;
+    border-radius: 12px; padding: 10px 12px; font-size: 12px; font-weight: 600; }
+QPushButton#libraryAdd:hover { background: #2b3b36; }
+QPushButton#libraryAdd:disabled { background: #dcebe3; color: #24685b; border-color: rgba(36, 104, 91, 60); }
+QPushButton#libraryUse { background: #ffffff; color: #1c2a26; border: 1px solid rgba(28, 42, 38, 60);
+    border-radius: 12px; padding: 10px 12px; font-size: 12px; }
+QPushButton#libraryUse:hover { border-color: rgba(28, 42, 38, 130); background: #f9fbf8; }
+QPushButton#libraryUse:disabled { color: #6f7b77; border-color: rgba(28, 42, 38, 22); background: rgba(28, 42, 38, 8); }
+QPushButton#libraryRemove { background: transparent; color: #8a3b2f; border: 0;
+    font-size: 12px; padding: 6px 2px; text-align: left; }
+QPushButton#libraryRemove:hover { color: #6d2a20; text-decoration: underline; }
+QLineEdit#librarySearch { background: #ffffff; border: 1px solid rgba(28, 42, 38, 50);
+    border-radius: 10px; padding: 8px 12px; color: #1c2a26; font-size: 12px; selection-background-color: #bfe0d2; }
+QLineEdit#librarySearch:focus { border: 2px solid #2f7d6d; }
 QScrollArea#libraryScroll, QScrollArea#libraryDetailScroll, QWidget#libraryDetailBody,
 QWidget#libraryGrid, QWidget#libraryViewport, QWidget#libraryDetailViewport { background: transparent; border: 0; }
-QScrollBar:vertical { background: transparent; width: 5px; margin: 4px 0; }
-QScrollBar::handle:vertical { background: rgba(206, 198, 229, 55); border-radius: 2px; min-height: 32px; }
-QScrollBar::handle:vertical:hover { background: rgba(206, 198, 229, 110); }
+QScrollBar:vertical { background: transparent; width: 8px; margin: 4px 0; }
+QScrollBar::handle:vertical { background: rgba(28, 42, 38, 70); border-radius: 4px; min-height: 32px; }
+QScrollBar::handle:vertical:hover { background: rgba(28, 42, 38, 120); }
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
 QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
 QSplitter::handle { background: transparent; width: 18px; }
-QPushButton:focus { border-color: #c4b4f8; }
+QPushButton:focus { border: 2px solid #2f7d6d; }
 """
 
 _SAMPLE = Lyrics([
@@ -541,39 +541,109 @@ class ModeCard(QAbstractButton):
     def paintEvent(self, event):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        rect = QRectF(self.rect()).adjusted(.7, .7, -.7, -.7)
-        gradient = QLinearGradient(rect.topLeft(), rect.bottomRight())
-        gradient.setColorAt(0, QColor(57, 48, 78, 190) if self.isChecked()
-                            else QColor(40, 41, 54, round(185 + 30 * self._hover)))
-        gradient.setColorAt(.48, QColor(31, 29, 44, 190) if self.isChecked()
-                            else QColor(27, 29, 40, 185))
-        gradient.setColorAt(1, QColor(28, 30, 41, 220))
-        border = _alpha(QColor("#c4b4f8"), .65) if self.isChecked() else _alpha(QColor("#e9e3fb"), .11 + self._hover * .20)
+        # A white label card on the wall; the live preview inside it stays dark, like a screen.
+        rect = QRectF(self.rect()).adjusted(3, 3, -3, -5)
+        if self.isChecked():
+            paint_shadow(p, rect, 16, 10, .24, 4)
+            p.setPen(QPen(hexc("#1c2a26"), 2))
+        else:
+            paint_shadow(p, rect, 16, 6 + 4 * self._hover, .14 + .08 * self._hover, 2 + self._hover)
+            p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(hexc("#ffffff"))
+        p.drawRoundedRect(rect, 16, 16)
         if self.hasFocus():
-            border = QColor("#ddd1ff")
-        p.setPen(QPen(border, 1.25 if self.isChecked() or self.hasFocus() else 1))
-        p.setBrush(gradient)
-        p.drawRoundedRect(rect, 22, 22)
-        # A fine inner reflection keeps the dark cards glassy without costly blur.
-        sheen = QLinearGradient(rect.topLeft(), rect.bottomRight())
-        sheen.setColorAt(0, QColor(255, 255, 255, round(20 + 12 * self._hover)))
-        sheen.setColorAt(.32, QColor(255, 255, 255, 2))
-        sheen.setColorAt(1, QColor(255, 255, 255, 0))
-        p.setBrush(Qt.BrushStyle.NoBrush)
-        p.setPen(QPen(sheen, 1))
-        p.drawRoundedRect(rect.adjusted(1.5, 1.5, -1.5, -1.5), 20, 20)
+            paint_focus(p, rect, 16)
         y = 10 + self.preview.height() + 8
         _text(p, QRectF(14, y, self.width() - 28, 24), self.spec.title, 15,
-              QColor("#f5f3fa"), QFont.Weight.DemiBold)
+              hexc("#1c2a26"), QFont.Weight.DemiBold)
         _text(p, QRectF(14, y + 24, self.width() - 28, 17), MODE_TITLES[self.spec.kind].upper(),
-              8, QColor("#b0a3cf"), QFont.Weight.DemiBold)
+              8, hexc("#24685b"), QFont.Weight.DemiBold)
         p.save()
         desc = QRectF(14, y + 45, self.width() - 28, 29)
         p.setClipRect(desc)
         p.setFont(_font(10))
-        p.setPen(QColor("#9d99ae"))
+        p.setPen(hexc("#55625e"))
         p.drawText(desc, Qt.TextFlag.TextWordWrap, self.spec.description)
         p.restore()
+        p.end()
+
+
+class FilterSwitch(QAbstractButton):
+    """A labelled on/off switch for the toolbar; the words and the switch are one target."""
+    def __init__(self, text, controller, parent=None):
+        super().__init__(parent)
+        self.c = controller
+        self._knob = 0.
+        self.setText(text)
+        self.setCheckable(True)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setAttribute(Qt.WidgetAttribute.WA_Hover)
+        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.animation = QPropertyAnimation(self, b"knob", self)
+        self.animation.setDuration(170)
+        self.animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self.toggled.connect(self._animate)
+
+    def get_knob(self):
+        return self._knob
+
+    def set_knob(self, value):
+        self._knob = float(value)
+        self.update()
+
+    knob = Property(float, get_knob, set_knob)
+
+    def _animate(self, checked):
+        self.animation.stop()
+        if getattr(self.c, "reduced_motion", False) or not self.isVisible():
+            self.set_knob(float(checked))
+            return
+        self.animation.setStartValue(self._knob)
+        self.animation.setEndValue(float(checked))
+        self.animation.start()
+
+    def sizeHint(self):
+        # Measured in the bold the label takes when the switch is on, so it never shortens.
+        words = QFontMetrics(_font(12, QFont.Weight.DemiBold)).horizontalAdvance(self.text())
+        return QSize(14 + words + 4 + 12 + 30 + 12, 36)
+
+    def minimumSizeHint(self):
+        return self.sizeHint()
+
+    def hitButton(self, point):
+        return self.rect().contains(point)
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        if not self.isEnabled():
+            p.setOpacity(.45)
+        rect = QRectF(self.rect()).adjusted(1, 1, -1, -1)
+        if self.underMouse() and self.isEnabled():
+            # The same hover as the category tabs beside it.
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QColor(255, 255, 255, pick(150, 18)))
+            p.drawRoundedRect(rect, 10, 10)
+        if self.hasFocus():
+            paint_focus(p, rect, 10)
+        on = self.isChecked()
+        _text(p, QRectF(14, 0, self.width() - 14 - 50, self.height()), self.text(), 12,
+              INK if on else INK_SOFT, QFont.Weight.DemiBold if on else QFont.Weight.Normal)
+        # A recessed track with a small raised key, like the switches in Settings.
+        a, b = hexc("#c3ccc6"), hexc("#2f7d6d")
+        t = self._knob
+        fill = QColor.fromRgbF(*(x + (y - x) * t for x, y in zip(a.getRgbF(), b.getRgbF())))
+        track = QRectF(self.width() - 12 - 30, (self.height() - 18) / 2, 30, 18)
+        p.setPen(QPen(fill.darker(118), 1))
+        p.setBrush(fill)
+        p.drawRoundedRect(track, 9, 9)
+        centre = QPointF(track.left() + 9 + 12 * t, track.center().y())
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(tint(SHADOW, pick(60, 140)))
+        p.drawEllipse(centre + QPointF(0, 1), 6.4, 6.4)
+        p.setBrush(QColor(pick("#ffffff", "#e6ece6")))
+        p.drawEllipse(centre, 6.4, 6.4)
         p.end()
 
 
@@ -590,7 +660,7 @@ class ModeLibrary(QDialog):
         self.setObjectName("embeddedModes" if self.embedded else "modeLibrary")
         self.setWindowTitle("Halo · Modes")
         self.setWindowIcon(owner.windowIcon())
-        self.setStyleSheet(LIBRARY_STYLE)
+        style(self, LIBRARY_STYLE)
         if not self.embedded:
             self.setMinimumSize(900, 600)
             self.resize(1320, 840)
@@ -612,21 +682,25 @@ class ModeLibrary(QDialog):
         heading = QHBoxLayout()
         title_group = QVBoxLayout()
         title_group.setSpacing(3)
-        title_group.addWidget(_label("THE COLLECTION", "libraryEyebrow"))
         title_group.addWidget(_label("Find your atmosphere.", "libraryTitle"))
         subtitle = _label("A different way to feel your music. Make it yours.", "librarySubtitle")
         subtitle.setWordWrap(True)
         title_group.addWidget(subtitle)
         heading.addLayout(title_group, 1)
-        self.pause_button = QPushButton("Ⅱ  Pause previews")
+        self.pause_button = QPushButton("Pause previews")
+        self.pause_button.setIcon(line_icon("pause", "#1c2a26", 14))
         self.pause_button.setObjectName("libraryPause")
         self.pause_button.setCheckable(True)
         self.pause_button.setAccessibleName("Pause live mode previews")
         self.pause_button.toggled.connect(self._pause_changed)
         heading.addWidget(self.pause_button, 0, Qt.AlignmentFlag.AlignVCenter)
-        self.close_button = QPushButton("‹" if self.embedded else "×")
+        self.close_button = QPushButton("Back to listening" if self.embedded else "×")
         self.close_button.setObjectName("libraryClose")
-        self.close_button.setFixedSize(34, 34)
+        if self.embedded:
+            self.close_button.setIcon(line_icon("back", "#1c2a26", 16))
+            self.close_button.setMinimumHeight(38)
+        else:
+            self.close_button.setFixedSize(34, 34)
         self.close_button.setAccessibleName("Back to listening" if self.embedded else "Close Modes")
         self.close_button.setToolTip("Back to listening · Esc" if self.embedded else "Close Modes · Esc")
         self.close_button.clicked.connect(self.reject)
@@ -648,6 +722,18 @@ class ModeLibrary(QDialog):
             self.category_buttons[key] = button
             toolbar.addWidget(button)
         toolbar.addStretch(1)
+        # Leave out what is already yours, so the list shows only what's new.
+        self.hide_owned = FilterSwitch("Hide included", controller)
+        self.hide_owned.setObjectName("libraryHideOwned")
+        self.hide_owned.setAccessibleName("Hide modes already in your collection")
+        self.hide_owned.setToolTip("Hide modes that are already yours: included with Halo or added by you")
+        settings = getattr(controller, "settings", None)
+        if settings is not None and settings.value("modes_hide_owned", False, type=bool):
+            self.hide_owned.setChecked(True)
+            self.hide_owned.set_knob(1.)
+        self.hide_owned.toggled.connect(self._hide_owned_changed)
+        toolbar.addWidget(self.hide_owned)
+        toolbar.addSpacing(4)
         self.search = QLineEdit()
         self.search.setObjectName("librarySearch")
         self.search.setPlaceholderText("Search modes…")
@@ -707,12 +793,9 @@ class ModeLibrary(QDialog):
         self.body_layout = QVBoxLayout(self.detail_body)
         self.body_layout.setContentsMargins(0, 0, 2, 0)
         self.body_layout.setSpacing(10)
-        stage_heading = QHBoxLayout()
-        self.detail_category = _label("", "libraryEyebrow")
-        stage_heading.addWidget(self.detail_category)
-        stage_heading.addStretch()
-        stage_heading.addWidget(_label("LIVE PREVIEW", "libraryEyebrow"))
-        self.body_layout.addLayout(stage_heading)
+        # The category reads beside the title below the preview, never as an eyebrow above it.
+        self.detail_category = _label("", "libraryState")
+        self.detail_category.hide()
         self.selected_preview = ModePreview(controller, self.clock, self.selected, self.detail)
         self.selected_preview.setMinimumHeight(120)
         self.selected_preview.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
@@ -784,23 +867,46 @@ class ModeLibrary(QDialog):
             button.setChecked(key == self.category)
         self.refresh_filter()
 
-    def refresh_filter(self, *_):
+    def hiding_owned(self):
+        """True when modes already in the collection are left out of this list."""
+        return self.hide_owned.isChecked() and self.category != "mine"
+
+    def _hide_owned_changed(self, checked):
+        settings = getattr(self.c, "settings", None)
+        if settings is not None:
+            settings.setValue("modes_hide_owned", bool(checked))
+        self.refresh_filter()
+
+    def refresh_filter(self, *_, keep_selected=False):
         query = self.search.text().strip().casefold()
-        self.filtered_specs = [spec for spec in self.specs
-                               if (self.category == "all" or self.category == spec.kind
-                                   or self.category == "mine" and self.c.has_mode(spec.kind, spec.key))
-                               and (not query or query in (spec.title + " " + spec.description + " " + MODE_TITLES[spec.kind]).casefold())]
+        matches = [spec for spec in self.specs
+                   if (self.category == "all" or self.category == spec.kind
+                       or self.category == "mine" and self.c.has_mode(spec.kind, spec.key))
+                   and (not query or query in (spec.title + " " + spec.description + " " + MODE_TITLES[spec.kind]).casefold())]
+        hide = self.hiding_owned()
+        self.filtered_specs = [spec for spec in matches if not (hide and self.c.has_mode(spec.kind, spec.key))]
+        hidden = len(matches) - len(self.filtered_specs)
+        # "My modes" is the collection itself, so there is nothing to hide there.
+        self.hide_owned.setEnabled(self.category != "mine")
         self._columns = 0
         self.reflow()
+        self.empty_label.setText("Every mode here is already yours. Turn off Hide included to see them."
+                                 if hidden and not self.filtered_specs
+                                 else "No modes found. Try another word or category.")
         self.empty_label.setVisible(not self.filtered_specs)
         self.scroll.setVisible(bool(self.filtered_specs))
         count = len(self.filtered_specs)
-        self.count_label.setText(f"{count} mode{'s' if count != 1 else ''}  ·  " + ("Your collection" if self.category == "mine" else "Curated for a different kind of listening"))
-        if self.filtered_specs and self.selected not in self.filtered_specs:
+        detail = ("Your collection" if self.category == "mine"
+                  else f"{hidden} already yours, hidden" if hidden
+                  else "Curated for a different kind of listening")
+        self.count_label.setText(f"{count} mode{'s' if count != 1 else ''}  ·  {detail}")
+        if self.filtered_specs and self.selected not in self.filtered_specs and not keep_selected:
             self.select_mode(self.filtered_specs[0], animate=False)
         else:
+            # A mode you just added stays in the detail panel, even when its card leaves the list.
             self.sync_state()
-        self.scroll.verticalScrollBar().setValue(0)
+        if not keep_selected:
+            self.scroll.verticalScrollBar().setValue(0)
 
     def reflow(self):
         width = max(1, self.scroll.viewport().width())
@@ -862,7 +968,7 @@ class ModeLibrary(QDialog):
         self.sync_preview_note()
 
     def refresh_collection(self):
-        self.refresh_filter()
+        self.refresh_filter(keep_selected=True)
 
     def repaint_previews(self, *_):
         self.sync_preview_note()
@@ -903,7 +1009,8 @@ class ModeLibrary(QDialog):
     def _pause_changed(self, paused):
         self.clock.running = not paused
         self.clock.last = None
-        self.pause_button.setText("▶  Resume previews" if paused else "Ⅱ  Pause previews")
+        self.pause_button.setText("Resume previews" if paused else "Pause previews")
+        self.pause_button.setIcon(line_icon("play" if paused else "pause", "#f2f4ef" if paused else "#1c2a26", 14))
         self._sync_timer()
         self.repaint_previews()
 
