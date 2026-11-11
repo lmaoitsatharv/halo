@@ -120,12 +120,14 @@ class BackgroundControllerTests(unittest.TestCase):
         window.draw_timer.stop()
         try:
             saved = c.immersive_mode
-            window.immersive.background_button.click()
+            window.immersive.open_menu()
+            menu = window.immersive.menu
+            menu.activate([entry.text for entry in menu.entries].index("Background settings…"))
             self.app.processEvents()
             self.assertEqual(window.settings_dialog.section, "scenes")
             self.assertEqual(c.immersive_mode, saved)
             self.assertEqual(window.immersive.style_select.findData("ship_visual") >= 0, True)
-            for selector in (window.style_select, window.immersive.style_select):
+            for selector in (window.immersive.style_select,):
                 self.assertEqual([selector.itemText(i) for i in range(selector.count())],
                                  ["Ship", "Fisheye", "Visual"])
                 self.assertEqual(selector.findData("ship"), -1)

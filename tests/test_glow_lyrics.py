@@ -14,7 +14,7 @@ from halo import glow_lyrics
 from halo.extra_lyrics import EXTRA_LYRIC_STYLES, LINE_BASED_STYLES
 from halo.glow_lyrics import (CASCADE_WORDS, GLOW_PIXELS, GLOW_RASTERS, IMPACT_RING_SPAN, NEON_CHANGE, NEON_WORDS,
                               STAR_FLOATING_WORDS, STAR_WORDS, block_ink, impact_pose, neon_flicker, star_field,
-                              star_groups, star_label_side)
+                              star_groups, star_ignition, star_label_side, star_reach, star_tempo, star_travel)
 from halo.lyric_rendering import WordTimeline, symbol_kind
 from halo.mode_catalog import BASE_MODE_KEYS
 from halo.models import LyricLine, LyricWord, Lyrics
@@ -231,6 +231,73 @@ class GlowLyricTests(unittest.TestCase):
         c.position = 3.9
         self.assertLessEqual(len(self.texts(self.stamps(self.canvas(c, "floating", (350, 140))), "face")),
                              STAR_FLOATING_WORDS)
+
+    def test_the_line_reaches_the_next_star_exactly_as_its_word_begins(self):
+        leave, arrive = star_travel(10., 10.5, .4)
+        self.assertGreater(leave, 10.)
+        self.assertEqual(arrive, 10.5)
+        self.assertEqual(star_reach(leave, leave, arrive), 0.)
+        self.assertGreater(star_reach(arrive - .02, leave, arrive), .9)
+        self.assertLess(star_reach(arrive - .02, leave, arrive), 1.)
+        self.assertEqual(star_reach(arrive, leave, arrive), 1.)
+        samples = [star_reach(leave + (arrive - leave) * i / 50, leave, arrive) for i in range(51)]
+        self.assertEqual(samples, sorted(samples))
+
+    def test_the_line_moves_at_the_pace_of_the_song(self):
+        fast = star_travel(0., 2., star_tempo([0, .2, .4, .6, .8]))
+        slow = star_travel(0., 2., star_tempo([0, .9, 1.8, 2.7]))
+        self.assertLess(fast[1] - fast[0], slow[1] - slow[0])
+        self.assertEqual((fast[1], slow[1]), (2., 2.))
+        # A quick run of words: each stroke fills most of its short gap.
+        leave, arrive = star_travel(0., .25, star_tempo([0, .25, .5, .75]))
+        self.assertGreater(arrive - leave, .18)
+
+    def test_a_star_lands_with_a_small_overshoot_then_rests(self):
+        start, rest = star_ignition(0., .22), star_ignition(1., .22)
+        peak = max(star_ignition(t / 200, .22).scale for t in range(0, 80))
+        self.assertGreater(peak, 1.04)
+        self.assertLess(peak, 1.15)
+        self.assertEqual(rest.scale, 1.)
+        self.assertLess(start.scale, .5)
+        self.assertGreater(start.flash, .9)
+        self.assertLess(rest.flash, .05)
+        self.assertLess(start.label, rest.label)
+        self.assertIsNone(rest.ring)
+
+    def star_points(self, position, reduced=False):
+        """Where stars are inked in one frame of Starline."""
+        c = self.controller("lyric_starline")
+        c.reduced_motion = reduced
+        c.position = position
+        canvas = self.canvas(c)
+        seen = []
+        real = glow_lyrics._star_ink
+        with patch.object(glow_lyrics, "_star_ink", side_effect=lambda owner, p, point, size, colour, opacity:
+                          (seen.append((point.x(), point.y(), opacity)), real(owner, p, point, size, colour, opacity))):
+            canvas.grab()
+        return canvas, [point for point in seen if point[2] > .012]
+
+    def test_nothing_rides_the_line_and_each_star_appears_as_its_word_begins(self):
+        canvas, _ = self.star_points(4.)
+        words = canvas.timeline.display_words
+        onsets = [word.begin for word in words if word.text != "♪" and 4 <= word.begin < 8]
+        lit_before = sum(1 for word in words if word.text != "♪" and word.begin < 4)
+        for k, (onset, following) in enumerate(zip(onsets, onsets[1:])):
+            with self.subTest(word=k):
+                for position in (onset + .004, (onset + following) / 2, following - .004):
+                    _, stars = self.star_points(position)
+                    # Only lit words carry stars, even while the line is on its way to the next.
+                    self.assertEqual(len(stars), lit_before + k + 1, position)
+                _, stars = self.star_points(following + .004)
+                self.assertEqual(len(stars), lit_before + k + 2)
+
+    def test_a_verse_clears_in_the_break_so_the_next_lights_on_an_empty_sky(self):
+        _, held = self.star_points(8.1)
+        _, before = self.star_points(11.97)
+        _, first = self.star_points(12.004)
+        self.assertGreater(len(held), 5)
+        self.assertEqual(before, [])
+        self.assertEqual(len(first), 1)
 
     def test_neon_shows_the_whole_line_and_lights_only_sung_words(self):
         c = self.controller("lyric_neon")

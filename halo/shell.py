@@ -1,210 +1,125 @@
-"""The single-window listening workspace. Playback stays outside the page stack."""
-import math
+"""The single-window gallery: a place nav on top, the wall in the middle, the handset below.
 
+Playback stays outside the page stack, so every page controls the same song.
+"""
 from PySide6.QtCore import Qt, QRectF, QPointF, QSize
-from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QLinearGradient, QRadialGradient, QFont
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QStackedWidget,
-    QScrollArea, QSlider, QSizePolicy, QAbstractButton, QSizeGrip, QFrame)
+from PySide6.QtGui import QColor, QPainter, QFont
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QStackedWidget,
+    QScrollArea, QSizePolicy, QSizeGrip, QLabel)
 
-from .glass import GlassPanel, GlassButton, SeekSlider, icon, colour
-from .widgets import Artwork, LyricCanvas, font, tint
-from .frontend import text_label, action, FittedTitle, ElidedLabel, HaloMark, TransportButton, selector
-from .lyric_rendering import LYRIC_STYLES
-
-
-class AlbumArtwork(Artwork):
-    """Spotify artwork stays untouched; the empty-state artwork is original."""
-    def paintEvent(self, event):
-        if not self.pixmap.isNull():
-            return super().paintEvent(event)
-        c = self.controller
-        p = QPainter(self)
-        p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        rect = QRectF(self.rect()).adjusted(.5, .5, -.5, -.5)
-        path = QPainterPath()
-        path.addRoundedRect(rect, 17, 17)
-        p.setClipPath(path)
-        gradient = QLinearGradient(rect.topLeft(), rect.bottomRight())
-        gradient.setColorAt(0, QColor("#262136"))
-        gradient.setColorAt(.5, QColor("#11151f"))
-        gradient.setColorAt(1, QColor("#121d22"))
-        p.fillRect(rect, gradient)
-        size = self.width()
-        center = QPointF(size * .5, size * .47)
-        haze = QRadialGradient(center, size * .5)
-        haze.setColorAt(0, tint(c.primary, 95))
-        haze.setColorAt(.48, tint(c.secondary, 32))
-        haze.setColorAt(1, tint(c.primary, 0))
-        p.fillRect(rect, haze)
-        p.translate(center)
-        p.rotate(-28)
-        for i in range(17, 0, -1):
-            radius = size * (.13 + i * .0082)
-            p.setPen(QPen(tint(c.primary if i > 8 else c.secondary, 12 + (17 - i) * 5), .8))
-            p.setBrush(Qt.BrushStyle.NoBrush)
-            p.drawEllipse(QRectF(-radius * 1.5, -radius * .53, radius * 3, radius * 1.06))
-        p.resetTransform()
-        if size < 100:
-            return
-        p.setPen(tint(c.primary, 155))
-        p.setFont(font(8, QFont.Weight.Medium))
-        p.drawText(rect.adjusted(18, 17, -18, -17), Qt.AlignmentFlag.AlignTop, "H / 01")
-        p.setPen(QColor("#9994ad"))
-        p.setFont(font(7))
-        p.drawText(rect.adjusted(18, 17, -18, -17), Qt.AlignmentFlag.AlignBottom, "A LITTLE ATMOSPHERE.")
+from .glass import GlassPanel, SeekSlider, icon
+from .gallery import (INK, INK_SOFT, INK_MUTED, HANDSET_INK, HANDSET_MUTED, NavTile, PlaceNav, HandsetButton, tint)
+from .wall import FramedPrint, MuseumLabel, WallLyrics, PrintThumb, StatusDot
+from .frontend import text_label, action, FittedTitle, ElidedLabel, HaloMark, TransportButton
+from .theme import style, pick
 
 
-class PlaybackSignal(QWidget):
-    def __init__(self, controller):
-        super().__init__()
-        self.c = controller
-        self.setFixedSize(28, 18)
-        self.setAccessibleName("Playback activity")
-
-    def paintEvent(self, event):
-        p = QPainter(self)
-        p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        p.setPen(QPen(QColor("#b6a6dd"), 2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
-        active = self.c.track.playing and not self.c.reduced_motion
-        phase = self.c.motion_time if active else 0
-        for i in range(5):
-            h = 3 + (math.sin(phase * 3 + i * 1.7) + 1) * (4 if active else 1)
-            p.drawLine(QPointF(5 + i * 4, 9 - h / 2), QPointF(5 + i * 4, 9 + h / 2))
+PLACES = (("listening", "Listening", "listening", "Ctrl+1"),
+          ("modes", "Modes", "modes", "Ctrl+2"),
+          ("halo", "Lighting", "halo", "Ctrl+3"),
+          ("lyrics", "Lyrics", "lyrics", "Ctrl+4"),
+          ("scenes", "Immersive", "scenes", "Ctrl+5"))
 
 
 class ListeningPage(QWidget):
+    """The print, its label and the wall lettering, composed by hand so the artwork always leads."""
     def __init__(self, window, c):
         super().__init__()
         self.host = window
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(5, 11, 6, 0)
-        layout.setSpacing(19)
-        header = QHBoxLayout()
-        heading = QVBoxLayout()
-        heading.setSpacing(5)
-        heading.addWidget(text_label("A little atmosphere.", "pageTitle"))
-        heading.addWidget(text_label("Your music, in its own world."))
-        header.addLayout(heading)
-        header.addStretch()
-        window.badge = text_label("○  Waiting for Spotify", "badge")
-        header.addWidget(window.badge, 0, Qt.AlignmentFlag.AlignTop)
-        layout.addLayout(header)
+        self.c = c
+        window.main_art = self.print = FramedPrint(c)
+        self.print.setParent(self)
+        self.print.clicked.connect(window.fullscreen)
 
-        cards = QHBoxLayout()
-        cards.setSpacing(18)
-        self.album_panel = GlassPanel(radius=23)
-        self.album_panel.setMinimumWidth(252)
-        self.album_panel.setMaximumWidth(375)
-        album = QVBoxLayout(self.album_panel)
-        album.setContentsMargins(22, 18, 22, 18)
-        album.setSpacing(10)
-        caption = QHBoxLayout()
-        caption.addWidget(text_label("NOW LISTENING", "eyebrow"))
-        caption.addStretch()
-        window.playback_signal = PlaybackSignal(c)
-        caption.addWidget(window.playback_signal)
-        album.addLayout(caption)
-        album.addStretch(1)
-        window.main_art = AlbumArtwork(c, 250)
-        album.addWidget(window.main_art, 0, Qt.AlignmentFlag.AlignHCenter)
-        album.addStretch(1)
-        window.title = FittedTitle("Waiting for Spotify")
-        album.addWidget(window.title)
+        self.label = MuseumLabel(self, c)
+        window.museum_label = self.label
+        card = QVBoxLayout(self.label.content)
+        card.setContentsMargins(30, 22, 30, 30)
+        card.setSpacing(4)
+        window.title = FittedTitle("Waiting for music")
+        window.title.setMaximumHeight(80)
+        window.title.setMinimumHeight(38)
+        card.addWidget(window.title)
         window.artist = ElidedLabel("Play something you love.")
-        window.artist.setStyleSheet("font-size: 13px; color: #aaa2b8;")
-        album.addWidget(window.artist)
+        style(window.artist, "font-size: 15px; color: #3e4c47;")
+        card.addWidget(window.artist)
         window.album_label = ElidedLabel("")
-        window.album_label.setStyleSheet("font-size: 10px; color: #716b80;")
-        album.addWidget(window.album_label)
-        album.addSpacing(5)
-        room = action("Open immersive view", window.fullscreen, "primary")
-        room.setIcon(icon("arrow", "#211931", 17))
-        room.setIconSize(QSize(17, 17))
-        room.setMinimumHeight(39)
-        room.setAccessibleName("Enter immersive view")
-        album.addWidget(room)
-        cards.addWidget(self.album_panel, 4)
+        style(window.album_label, "font-size: 12px; color: #55625e;")
+        card.addWidget(window.album_label)
+        card.addSpacing(10)
+        status = QHBoxLayout()
+        status.setSpacing(8)
+        window.status_dot = StatusDot()
+        status.addWidget(window.status_dot, 0, Qt.AlignmentFlag.AlignVCenter)
+        window.badge = text_label("Waiting for music", "badge")
+        status.addWidget(window.badge)
+        status.addStretch()
+        window.demo_button = action("Try the visual demo", lambda: c.set_demo(not c.demo), "ghost")
+        window.demo_button.setToolTip("Preview Halo with original sample lyrics. No audio plays.")
+        status.addWidget(window.demo_button)
+        card.addLayout(status)
 
-        words = GlassPanel(radius=23)
-        words.setMinimumWidth(310)
-        lyric = QVBoxLayout(words)
-        lyric.setContentsMargins(22, 19, 22, 18)
-        lyric.setSpacing(11)
-        lyric_header = QHBoxLayout()
-        lyric_header.addWidget(text_label("In the words", "panelTitle"))
-        lyric_header.addStretch()
-        window.retry_button = action("", c.retry_lyrics, "ghost")
-        window.retry_button.setIcon(icon("refresh", "#9e94b0", 17))
-        window.retry_button.setIconSize(QSize(17, 17))
-        window.retry_button.setFixedSize(30, 30)
-        window.retry_button.setToolTip("Retry lyrics lookup")
-        window.retry_button.setAccessibleName("Retry lyrics")
-        lyric_header.addWidget(window.retry_button)
-        lyric.addLayout(lyric_header)
+        window.canvas = self.lyrics = WallLyrics(c)
+        self.lyrics.setParent(self)
+
+        self.tools = QWidget(self)
+        tools = QHBoxLayout(self.tools)
+        tools.setContentsMargins(0, 0, 0, 0)
+        tools.setSpacing(6)
         window.lyrics_badge = text_label("Waiting for a song", "muted")
-        window.lyrics_badge.setStyleSheet("font-size: 10px; color: #7f768f;")
-        lyric.addWidget(window.lyrics_badge)
-        window.canvas = LyricCanvas(c)
-        lyric.addWidget(window.canvas, 1)
-        line = QFrame()
-        line.setFixedHeight(1)
-        line.setStyleSheet("background: rgba(223,211,255,14);")
-        lyric.addWidget(line)
-        tools = QHBoxLayout()
-        window.style_select = selector(c, "lyric_style", LYRIC_STYLES, "Lyric animation style")
-        window.style_select.setMinimumWidth(128)
-        tools.addWidget(window.style_select)
+        style(window.lyrics_badge, "font-size: 12px; color: #55625e;")
+        tools.addWidget(window.lyrics_badge)
+        # The lyric style is chosen in Immersive's menu, on the Lyrics page and in Modes, not on this wall.
         tools.addStretch()
-        words_only = action("Lyrics only", lambda: (c.set("immersive_mode", "lyrics"), window.fullscreen()), "ghost")
-        words_only.setToolTip("Open a fullscreen room with just the words")
-        tools.addWidget(words_only)
+        window.retry_button = action("", c.retry_lyrics, "ghost")
+        window.retry_button.setIcon(icon("refresh", "#1c2a26", 18))
+        window.retry_button.setIconSize(QSize(18, 18))
+        window.retry_button.setFixedSize(40, 40)
+        window.retry_button.setToolTip("Look for lyrics again")
+        window.retry_button.setAccessibleName("Retry lyrics")
+        tools.addWidget(window.retry_button)
         imports = action("", window.import_lrc, "ghost")
-        imports.setIcon(icon("import", "#a99bbb", 18))
+        imports.setIcon(icon("import", "#1c2a26", 18))
         imports.setIconSize(QSize(18, 18))
-        imports.setFixedWidth(34)
-        imports.setToolTip("Import timed lyrics")
+        imports.setFixedSize(40, 40)
+        imports.setToolTip("Import timed lyrics for this song")
         imports.setAccessibleName("Import timed lyrics")
         tools.addWidget(imports)
-        lyric.addLayout(tools)
-        cards.addWidget(words, 7)
-        layout.addLayout(cards, 1)
+        self.setTabOrder(self.print, window.demo_button)
 
-        self.atmosphere = GlassPanel(radius=16)
-        strip = QHBoxLayout(self.atmosphere)
-        strip.setContentsMargins(16, 11, 14, 11)
-        strip.setSpacing(11)
-        spot = text_label("✧", "panelTitle")
-        spot.setStyleSheet("font-size: 23px; color: #b9a4e2;")
-        strip.addWidget(spot)
-        info = QVBoxLayout()
-        info.setSpacing(3)
-        info.addWidget(text_label("Set the mood", "panelTitle"))
-        info.itemAt(0).widget().setStyleSheet("font-size: 12px; font-weight: 600;")
-        window.atmosphere_label = ElidedLabel("Album colours · Orbit")
-        window.atmosphere_label.setStyleSheet("font-size: 10px; color: #8b819d;")
-        info.addWidget(window.atmosphere_label)
-        strip.addLayout(info, 1)
-        window.quick_halo = action("Lighting", lambda: window.open_settings_section("halo"), "ghost")
-        window.quick_halo.setIcon(icon("halo", "#a89bbf", 16))
-        window.quick_halo.setIconSize(QSize(16, 16))
-        strip.addWidget(window.quick_halo)
-        browse = action("Explore modes", window.open_modes, "ghost")
-        browse.setIcon(icon("modes", "#a89bbf", 16))
-        browse.setIconSize(QSize(16, 16))
-        strip.addWidget(browse)
-        layout.addWidget(self.atmosphere)
+    def composition(self):
+        """Where the print, the label and the lyric sit at this page size."""
+        w, h = self.width(), self.height()
+        side = max(170., min(h * .74, w * .4, 600.))
+        gap = max(36., min(72., w * .045))
+        column = max(260., min(560., w - side * 1.16 - gap - 72))
+        group = side * 1.16 + gap + column
+        left = max(24., (w - group) / 2 - w * .02)
+        top = (h - side * 1.22) / 2 + side * .04
+        return left, top, side, gap, column
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        self.layout().activate()
-        panel = self.album_panel
-        size = max(124, min(294, panel.width() - 44, panel.height() - 218))
-        self.host.main_art.setFixedSize(size, size)
-        self.atmosphere.setVisible(self.height() >= 445)
+        left, top, side, gap, column = self.composition()
+        self.print.setGeometry(round(left), round(top), round(side * 1.16), round(side * 1.22))
+        frame = self.print.print_rect().translated(self.print.pos())
+        x = frame.right() + gap
+        label_height = 172 if self.height() >= 470 else 150
+        self.label.setGeometry(round(x - 8), round(frame.top() - 4), round(min(column, 440) + 16), label_height)
+        lyric_top = frame.top() + label_height + 8
+        tools_height = 40
+        lyric_bottom = frame.bottom() - tools_height - 6
+        self.lyrics.setGeometry(round(x), round(lyric_top), round(column), max(110, round(lyric_bottom - lyric_top)))
+        self.tools.setGeometry(round(x), round(frame.bottom() - tools_height + 2), round(column), tools_height)
+
+    def spotlight(self):
+        """The pool of song light behind the print, in page coordinates."""
+        frame = self.print.print_rect().translated(self.print.pos())
+        return frame.center() - QPointF(0, frame.height() * .06), frame.width() * 1.02
 
 
 class SheetLayer(QWidget):
-    """A native dialog's controls, presented as a sheet inside the existing window."""
+    """A native dialog's controls, presented as a card inside the existing window."""
     def __init__(self, parent):
         super().__init__(parent)
         self.dialog = None
@@ -213,20 +128,21 @@ class SheetLayer(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(32, 20, 32, 20)
         layout.addStretch()
-        self.panel = GlassPanel(radius=22, variant="sheet")
+        self.panel = GlassPanel(radius=18, variant="sheet")
         self.panel.setMaximumWidth(680)
         self.panel.setMinimumWidth(440)
         content = QVBoxLayout(self.panel)
-        content.setContentsMargins(18, 12, 18, 15)
+        content.setContentsMargins(22, 14, 18, 18)
         heading = QHBoxLayout()
         self.title = text_label("", "panelTitle")
         heading.addWidget(self.title)
         heading.addStretch()
         close = action("", self.dismiss, "ghost")
-        close.setIcon(icon("close", "#b3a8c7", 16))
+        close.setIcon(icon("close", "#1c2a26", 16))
         close.setIconSize(QSize(16, 16))
-        close.setFixedSize(30, 30)
-        close.setAccessibleName("Close sheet")
+        close.setFixedSize(40, 40)
+        close.setAccessibleName("Close")
+        close.setToolTip("Close  ·  Esc")
         heading.addWidget(close)
         content.addLayout(heading)
         self.scroll = QScrollArea()
@@ -253,7 +169,7 @@ class SheetLayer(QWidget):
         dialog.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.scroll.setWidget(dialog)
         self.panel.setFixedWidth(min(self.preferred_width, self.parentWidget().width() - 64))
-        self.panel.setFixedHeight(min(self.parentWidget().height() - 46, max(430, dialog.sizeHint().height() + 65)))
+        self.panel.setFixedHeight(min(self.parentWidget().height() - 46, max(430, dialog.sizeHint().height() + 100)))
         self.setGeometry(self.parentWidget().rect())
         self.show()
         self.raise_()
@@ -272,24 +188,12 @@ class SheetLayer(QWidget):
     def resizeEvent(self, event):
         self.panel.setFixedWidth(min(self.preferred_width, self.width() - 64))
         if self.dialog is not None:
-            self.panel.setFixedHeight(min(self.height() - 46, max(430, self.dialog.sizeHint().height() + 65)))
+            self.panel.setFixedHeight(min(self.height() - 46, max(430, self.dialog.sizeHint().height() + 100)))
         super().resizeEvent(event)
 
     def paintEvent(self, event):
         p = QPainter(self)
-        p.fillRect(self.rect(), QColor(5, 5, 12, 175))
-
-
-def _nav(window, text, key, glyph, callback):
-    button = GlassButton(text, controller=window.c, variant="nav")
-    button.setCheckable(True)
-    button.setFixedHeight(43)
-    button.setIcon(icon(glyph, "#b1a6c5", 19))
-    button.setIconSize(QSize(19, 19))
-    button.setAccessibleName(text)
-    button.clicked.connect(callback)
-    window.nav_buttons[key] = button
-    return button
+        p.fillRect(self.rect(), QColor(28, 42, 38, 96) if pick(True, False) else QColor(0, 0, 0, 150))
 
 
 def build_shell(window, c):
@@ -298,120 +202,137 @@ def build_shell(window, c):
     window.current_page = "listening"
     window.nav_buttons = {}
     root = QVBoxLayout(window)
-    root.setContentsMargins(1, 1, 1, 1)
+    root.setContentsMargins(0, 0, 0, 0)
     root.setSpacing(0)
     window.app_stack = QStackedWidget()
     root.addWidget(window.app_stack)
     window.shell = QWidget()
     window.app_stack.addWidget(window.shell)
     shell = QVBoxLayout(window.shell)
-    shell.setContentsMargins(0, 0, 0, 0)
-    shell.setSpacing(0)
-    body = QHBoxLayout()
-    body.setContentsMargins(13, 13, 21, 0)
-    body.setSpacing(22)
-    sidebar = GlassPanel(radius=18)
-    sidebar.setFixedWidth(178)
-    navigation = QVBoxLayout(sidebar)
-    navigation.setContentsMargins(12, 18, 12, 13)
-    navigation.setSpacing(6)
+    # The top margin clears Windows' own keys when the wall runs up under them (MainWindow._fit_title_strip).
+    shell.setContentsMargins(22, 14, 22, 6)
+    window.shell_layout = shell
+    shell.setSpacing(6)
+
+    header = QGridLayout()
+    header.setContentsMargins(0, 0, 0, 0)
+    header.setColumnStretch(0, 1)
+    header.setColumnStretch(2, 1)
     brand = QHBoxLayout()
-    brand.setSpacing(6)
+    brand.setSpacing(8)
     window.mark = HaloMark(c)
     window.mark.setFixedSize(36, 36)
     brand.addWidget(window.mark)
-    wordmark = text_label("halo", "panelTitle")
-    wordmark.setStyleSheet("font-size: 25px; font-weight: 600; letter-spacing: 3px; color: #eae5f4;")
-    brand.addWidget(wordmark)
+    # The name and what Halo is, stacked beside the mark; the window's title bar stays empty.
+    names = QVBoxLayout()
+    names.setSpacing(0)
+    names.setContentsMargins(0, 0, 0, 0)
+    wordmark = QLabel("halo")
+    style(wordmark, "font-size: 24px; font-weight: 600; letter-spacing: 3px; color: #1c2a26;")
+    names.addWidget(wordmark)
+    window.tagline = QLabel("Your listening space")
+    window.tagline.setObjectName("brandTagline")
+    style(window.tagline, "font-size: 12px; color: #55625e; padding-left: 1px;")
+    names.addWidget(window.tagline)
+    brand.addLayout(names)
     brand.addStretch()
-    navigation.addLayout(brand)
-    navigation.addSpacing(22)
-    navigation.addWidget(text_label("YOUR SPACE", "eyebrow"))
-    navigation.addSpacing(8)
-    navigation.addWidget(_nav(window, "Listening", "listening", "listening", lambda: window.navigate("listening")))
-    window.modes_button = _nav(window, "Modes", "modes", "modes", window.open_modes)
+    header.addLayout(brand, 0, 0, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+
+    window.place_nav = PlaceNav()
+    callbacks = {"listening": lambda: window.navigate("listening"),
+                 "modes": window.open_modes}
+    for key, text, glyph, hint in PLACES:
+        tile = NavTile(text, glyph, hint, c)
+        callback = callbacks.get(key) or (lambda checked=False, section=key: window.open_settings_section(section))
+        tile.clicked.connect(callback)
+        if key == "scenes":
+            tile.setToolTip(f"Immersive  ·  set up the full-screen rooms  ·  {hint}")
+            tile.setAccessibleName("Immersive settings")
+        window.nav_buttons[key] = window.place_nav.add(tile)
+    window.modes_button = window.nav_buttons["modes"]
     window.modes_button.setAccessibleName("Browse modes")
-    navigation.addWidget(window.modes_button)
-    navigation.addSpacing(22)
-    navigation.addWidget(text_label("PERSONALIZE", "eyebrow"))
-    navigation.addSpacing(8)
-    for text, key, glyph in (("Lighting", "halo", "halo"), ("Lyrics", "lyrics", "lyrics"), ("Immersive", "scenes", "scenes")):
-        navigation.addWidget(_nav(window, text, key, glyph, lambda checked=False, section=key: window.open_settings_section(section)))
-    navigation.addStretch(1)
-    window.settings_button = _nav(window, "Settings", "settings", "settings", window.open_settings)
+    header.addWidget(window.place_nav, 0, 1, Qt.AlignmentFlag.AlignCenter)
+
+    window.settings_button = NavTile("Settings", "settings", "Ctrl+,", c, standalone=True)
     window.settings_button.setAccessibleName("Open settings")
-    window.settings_button.setToolTip("Settings · Ctrl+,")
-    navigation.addWidget(window.settings_button)
-    navigation.addSpacing(12)
-    window.demo_button = action("Try the visual demo", lambda: c.set_demo(not c.demo), "ghost")
-    window.demo_button.setToolTip("Preview Halo with original sample lyrics. No audio plays.")
-    navigation.addWidget(window.demo_button)
-    body.addWidget(sidebar)
+    window.settings_button.clicked.connect(window.open_settings)
+    window.nav_buttons["settings"] = window.settings_button
+    header.addWidget(window.settings_button, 0, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+    shell.addLayout(header)
+
     window.page_stack = QStackedWidget()
     window.page_stack.setObjectName("workspacePages")
     window.listening_page = ListeningPage(window, c)
     window.page_stack.addWidget(window.listening_page)
-    body.addWidget(window.page_stack, 1)
-    shell.addLayout(body, 1)
+    shell.addWidget(window.page_stack, 1)
 
-    bottom = QVBoxLayout()
-    bottom.setContentsMargins(13, 14, 13, 7)
-    bottom.setSpacing(5)
-    window.player = GlassPanel(radius=19, variant="player")
+    # The audio-guide handset: the same controls on every page.
+    window.player = GlassPanel(radius=26, variant="player")
     window.player.setFixedHeight(84)
+    window.player.setMaximumWidth(1080)
     player = QHBoxLayout(window.player)
-    player.setContentsMargins(18, 12, 18, 12)
-    player.setSpacing(14)
-    window.player_art = AlbumArtwork(c, 46)
-    player.addWidget(window.player_art)
+    player.setContentsMargins(16, 8, 16, 14)
+    player.setSpacing(10)
+    window.now_playing = QWidget()
+    now = QHBoxLayout(window.now_playing)
+    now.setContentsMargins(0, 0, 6, 0)
+    now.setSpacing(10)
+    window.player_art = PrintThumb(c, 42)
+    now.addWidget(window.player_art)
     info = QVBoxLayout()
-    info.setSpacing(3)
-    window.player_title = ElidedLabel("Waiting for Spotify")
-    window.player_title.setStyleSheet("font-size: 12px; font-weight: 600; color: #e8e2f1;")
-    window.player_title.setFixedWidth(180)
-    window.player_artist = ElidedLabel("Spotify desktop")
-    window.player_artist.setStyleSheet("font-size: 10px; color: #8b829c;")
-    window.player_artist.setFixedWidth(180)
+    info.setSpacing(1)
+    window.player_title = ElidedLabel("Waiting for music")
+    window.player_title.setStyleSheet("font-size: 13px; font-weight: 600; color: #f2f4ef;")
+    window.player_title.setFixedWidth(170)
+    window.player_artist = ElidedLabel("Spotify, a browser or any player")
+    window.player_artist.setStyleSheet("font-size: 11px; color: #aab7b1;")
+    window.player_artist.setFixedWidth(170)
     info.addWidget(window.player_title)
     info.addWidget(window.player_artist)
-    player.addLayout(info)
-    player.addSpacing(5)
-    transport = QHBoxLayout()
-    transport.setSpacing(9)
+    now.addLayout(info)
+    player.addWidget(window.now_playing)
     window.previous = TransportButton("previous", lambda: c.transport("previous"), c)
     window.play = TransportButton("play", lambda: c.transport("toggle"), c)
     window.next = TransportButton("next", lambda: c.transport("next"), c)
     for item in (window.previous, window.play, window.next):
-        transport.addWidget(item)
-    player.addLayout(transport)
-    player.addSpacing(12)
+        player.addWidget(item, 0, Qt.AlignmentFlag.AlignVCenter)
+    player.addSpacing(8)
+    window.time_label = QLabel("0:00")
+    window.time_label.setStyleSheet("font-size: 12px; color: #aab7b1;")
+    window.time_label.setMinimumWidth(38)
+    window.time_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+    player.addWidget(window.time_label)
     window.progress = SeekSlider()
     window.progress.setRange(0, 1000)
     window.progress.setAccessibleName("Track position")
+    window.progress.setToolTip("Track position  ·  drag, or use the arrow keys")
     window.progress.sliderReleased.connect(lambda: c.seek(window.progress.value() / 1000 * c.track.duration))
     player.addWidget(window.progress, 1)
-    window.time_label = text_label("0:00 / 0:00")
-    window.time_label.setStyleSheet("font-size: 10px; color: #9a8eab;")
-    window.time_label.setMinimumWidth(78)
-    player.addWidget(window.time_label)
-    expand = action("", window.fullscreen, "ghost")
-    expand.setIcon(icon("fullscreen", "#b8abc9", 20))
-    expand.setIconSize(QSize(20, 20))
-    expand.setFixedSize(36, 36)
-    expand.setAccessibleName("Enter immersive view")
-    expand.setToolTip("Immersive view")
-    player.addWidget(expand)
-    bottom.addWidget(window.player)
+    window.duration_label = QLabel("0:00")
+    window.duration_label.setStyleSheet("font-size: 12px; color: #aab7b1;")
+    window.duration_label.setMinimumWidth(38)
+    player.addWidget(window.duration_label)
+    player.addSpacing(6)
+    window.share_button = HandsetButton("share", window.open_share_card, c, "Ctrl+Shift+S")
+    window.mini_button = HandsetButton("mini", window.open_mini_player, c, "Ctrl+Shift+M")
+    window.immersive_button = HandsetButton("fullscreen", window.fullscreen, c, "F11")
+    for item in (window.share_button, window.mini_button, window.immersive_button):
+        player.addWidget(item, 0, Qt.AlignmentFlag.AlignVCenter)
+    handset_row = QHBoxLayout()
+    handset_row.addStretch()
+    handset_row.addWidget(window.player, 12)
+    handset_row.addStretch()
+    shell.addLayout(handset_row)
+
     footer = QHBoxLayout()
-    footer.setContentsMargins(7, 0, 1, 0)
-    window.footer = ElidedLabel("Spotify desktop · close to keep Halo in the tray")
-    window.footer.setStyleSheet("font-size: 9px; color: #655d75;")
+    footer.setContentsMargins(6, 0, 0, 0)
+    window.footer = ElidedLabel("No login needed · close to keep Halo in the tray")
+    style(window.footer, "font-size: 11px; color: #55625e;")
     footer.addWidget(window.footer, 1)
     grip = QSizeGrip(window)
     grip.setFixedSize(12, 12)
     footer.addWidget(grip)
-    bottom.addLayout(footer)
-    shell.addLayout(bottom)
+    shell.addLayout(footer)
 
     from .settings_ui import SettingsStudio
     window.settings_dialog = SettingsStudio(window, c, embedded=True)
@@ -420,4 +341,3 @@ def build_shell(window, c):
     window.sheet = SheetLayer(window)
     window.nav_buttons["listening"].setChecked(True)
     window.page_stack.setCurrentWidget(window.listening_page)
-

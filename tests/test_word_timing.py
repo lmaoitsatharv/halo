@@ -5,11 +5,8 @@ import unittest
 import numpy as np
 
 from halo.word_model import ALPHABET, BLANK, BOUNDARY, TOKEN, encode
-from halo.word_timing import (SAVED_CORRECTION, TRUSTED_EVIDENCE, LinePlan, Live, PaceFollower, line_evidence, line_plan,
+from halo.word_timing import (SAVED_CORRECTION, TRUSTED_EVIDENCE, LinePlan, line_evidence, line_plan,
                               place_line, trusted_lines, viterbi)
-
-FIRM = Live(sharpness=.5, threshold=.5, late=1.5, eager=.25)
-
 
 def posteriors(path, sharp=8.):
     logits = np.zeros((len(path), len(ALPHABET)))
@@ -22,17 +19,6 @@ def spoken(tokens, gap=4, lead=10):
     for token in tokens:
         path += [token] + [BLANK] * (gap - 1)
     return path + [BLANK] * lead
-
-
-def follow(tokens, starts, frames, pace, wait=5., settings=FIRM):
-    follower = PaceFollower(tokens, starts, pace, wait, settings)
-    opened, seen = [None] * len(starts), 0
-    for t, frame in enumerate(frames):
-        count = follower.step(frame)
-        for word in range(seen, count):
-            opened[word] = t
-        seen = count
-    return opened
 
 
 class ViterbiTests(unittest.TestCase):
@@ -48,54 +34,6 @@ class ViterbiTests(unittest.TestCase):
     def test_too_few_frames_is_refused(self):
         with self.assertRaises(ValueError):
             viterbi(posteriors([BLANK]), [TOKEN["a"], TOKEN["b"]])
-
-
-class PaceFollowerTests(unittest.TestCase):
-    def test_clear_words_open_when_they_are_heard(self):
-        tokens, starts = encode(["go", "now"])
-        opened = follow(tokens, starts, posteriors(spoken(tokens, 3, 12)), pace=3.)
-        for word, frame in enumerate(opened):
-            self.assertLessEqual(abs(frame - (12 + 3 * starts[word])), 4, opened)
-
-    def test_with_no_evidence_it_keeps_the_pace(self):
-        tokens, starts = encode(["one", "two", "three"])
-        opened = follow(tokens, starts, posteriors([BLANK] * 120), pace=6., wait=6.)
-        self.assertLessEqual(abs(opened[2] - (6 + 6 * FIRM.late * (starts[2] + 1))), 2)
-
-    def test_hearing_a_word_early_beats_a_slow_pace(self):
-        tokens, starts = encode(["go", "now"])
-        self.assertLess(follow(tokens, starts, posteriors(tokens + [BLANK] * 5), pace=20., wait=2.)[1], 12)
-
-    def test_the_deadline_counts_from_the_last_word_heard(self):
-        tokens, starts = encode(["go", "now", "then"])
-        opened = follow(tokens, starts, posteriors(tokens[:4] + [BLANK] * 200), pace=10.)
-        self.assertLessEqual(abs(opened[1] - (opened[0] + (starts[1] - starts[0]) * 10 * FIRM.late)), 3, opened)
-
-    def test_a_missed_start_does_not_stop_it(self):
-        tokens, starts = encode(["fast", "words", "here"])
-        self.assertNotIn(None, follow(tokens, starts, posteriors([BLANK] * 200), pace=5.))
-
-    def test_the_tuned_defaults_keep_words_in_order_and_never_stall(self):
-        tokens, starts = encode(["fast", "words", "here"])
-        opened = follow(tokens, starts, posteriors([BLANK] * 200), pace=5., settings=Live())
-        self.assertNotIn(None, opened)
-        self.assertEqual(opened, sorted(opened))
-
-    def test_words_only_ever_open_in_order(self):
-        tokens, starts = encode(["hello", "world", "again"])
-        noise = np.random.default_rng(5).normal(size=(200, len(ALPHABET)))
-        noise -= np.logaddexp.reduce(noise, axis=1, keepdims=True)
-        follower = PaceFollower(tokens, starts, 4., 5.)
-        counts = [follower.step(frame) for frame in noise]
-        self.assertEqual(counts, sorted(counts))
-
-    def test_belief_stays_a_probability(self):
-        tokens, starts = encode(["go"])
-        follower = PaceFollower(tokens, starts, 3., 2.)
-        for frame in posteriors(spoken(tokens, 2, 2)):
-            follower.step(frame)
-            self.assertAlmostEqual(float(follower.belief.sum()), 1.)
-            self.assertTrue((follower.belief >= 0).all())
 
 
 class LinePlanTests(unittest.TestCase):
@@ -183,3 +121,48 @@ class TrustedLinesTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SteeredPlacementTests(unittest.TestCase):
+    """The estimated time of each word steers the alignment where the model hears nothing clear."""
+    def flat(self, frames):
+        return np.full((frames, len(ALPHABET)), -np.log(len(ALPHABET)))
+
+    def test_with_nothing_to_hear_words_land_on_their_expected_frames(self):
+        from halo.word_timing import expected_entry
+        tokens, starts = encode(["one", "two", "three"])
+        expected = [20, 60, 100]
+        first = viterbi(self.flat(140), tokens, expected_entry(140, len(tokens), starts, expected))
+        self.assertEqual([int(first[start]) for start in starts], expected)
+
+    def test_without_steering_the_same_silence_puts_words_anywhere(self):
+        tokens, starts = encode(["one", "two", "three"])
+        first = viterbi(self.flat(140), tokens)
+        self.assertNotEqual([int(first[start]) for start in starts], [20, 60, 100])
+
+    def test_clear_singing_far_from_the_estimate_still_wins(self):
+        from halo.word_timing import expected_entry
+        tokens, starts = encode(["something", "wonderful"])
+        frames = posteriors(spoken(tokens, 4, 60))
+        first = viterbi(frames, tokens, expected_entry(len(frames), len(tokens), starts, [5, 25]))
+        self.assertEqual(list(first), list(viterbi(frames, tokens)))
+
+    def test_steering_never_strays_far_from_a_slightly_wrong_estimate(self):
+        from halo.word_timing import expected_entry
+        tokens, starts = encode(["go", "now"])
+        frames = posteriors(spoken(tokens, 3, 30), sharp=1.)   # faintly heard near frame 30
+        first = viterbi(frames, tokens, expected_entry(len(frames), len(tokens), starts, [26, 40]))
+        self.assertLessEqual(abs(int(first[starts[0]]) - 30), 4)
+
+    def test_place_line_takes_expected_seconds_for_every_word(self):
+        plan = line_plan("go now")
+        frames = posteriors(spoken(list(plan.tokens), 4, 30))
+        steered = place_line(frames, plan, 100., expected=[100.3, 100.9])
+        plain = place_line(frames, plan, 100.)
+        self.assertEqual(steered.starts, plain.starts)
+        # Evidence is measured without the steering, so an estimate can never vouch for a line.
+        self.assertEqual(steered.evidence, plain.evidence)
+
+    def test_an_unheard_line_is_still_rejected_not_saved_as_its_estimate(self):
+        plan = line_plan("one two three")
+        self.assertIsNone(place_line(self.flat(140), plan, 0., expected=[.4, 1.2, 2.]))

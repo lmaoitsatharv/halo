@@ -43,6 +43,36 @@ class LookupTests(unittest.TestCase):
         self.assertEqual(self.results[0].lines, [])
         self.assertIn("untimed", self.results[0].message)
 
+    def test_a_web_player_with_a_wrong_length_still_finds_the_exact_song(self):
+        # Brave reported 12:41 for a 5:35 song on Apple Music's website.
+        track = Track(self.track.title, self.track.artist, "Another release", 761, browser=True)
+        self.worker.request = Mock(side_effect=lambda endpoint, params: None if endpoint == "get" else [self.timed])
+        self.worker.fetch(track, 1)
+        self.assertEqual(len(self.results[0].lines), 2)
+
+    def test_an_app_with_a_wrong_length_keeps_the_strict_gate(self):
+        track = Track("Fallin' in Moonlight", self.track.artist, "Another release", 761)
+        self.worker.request = Mock(side_effect=lambda endpoint, params: None if endpoint == "get" else [self.timed])
+        self.worker.fetch(track, 1)
+        self.assertEqual(self.results[0].lines, [])
+
+    def test_the_relaxed_web_match_still_needs_the_same_artist_and_version(self):
+        track = Track("Fallin' in Moonlight", self.track.artist, "", 761, browser=True)
+        wrong = [{**self.timed, "artistName": "Cover Artist"}, {**self.timed, "trackName": "Fallin' in Moonlight (Live)"}]
+        self.worker.request = Mock(side_effect=lambda endpoint, params: None if endpoint == "get" else wrong)
+        self.worker.fetch(track, 1)
+        self.assertEqual(self.results[0].lines, [])
+
+    def test_a_choice_from_the_relaxed_web_match_can_be_selected(self):
+        track = Track("Fallin' in Moonlight", self.track.artist, "", 761, browser=True)
+        choices = []
+        self.worker.choices_ready.connect(lambda generation, items: choices.append(items))
+        self.worker.request = Mock(side_effect=lambda endpoint, params: None if endpoint == "get" else [{**self.timed, "id": 7}])
+        self.worker.list_choices(track, 1)
+        self.assertEqual([choice["id"] for choice in choices[0]], ["7"])
+        self.worker.select_candidate(track, 2, "7")
+        self.assertEqual(len(self.results[-1].lines), 2)
+
     def test_single_cue_is_not_claimed_as_synced(self):
         single = {**self.plain, "syncedLyrics": "[00:00]All original text in one cue"}
         self.worker.request = Mock(side_effect=lambda endpoint, params: single if endpoint == "get" else [single])

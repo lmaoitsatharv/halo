@@ -80,14 +80,14 @@ class ModeCollectionTests(unittest.TestCase):
         c = self.controller()
         window = self.window(c)
         c.add_mode("lyrics", "lyric_marquee")
-        for selector in (window.style_select, window.immersive.style_select):
+        for selector in (window.immersive.style_select,):
             self.assertGreaterEqual(selector.findData("lyric_marquee"), 0)
         self.assertIn("lyric_marquee", {tile.mode_id for tile in window.mode_tiles})
         c.set("lyric_style", "lyric_marquee")
-        self.assertEqual(window.style_select.currentData(), "lyric_marquee")
+        self.assertEqual(window.immersive.style_select.currentData(), "lyric_marquee")
         self.assertTrue(c.remove_mode("lyrics", "lyric_marquee"))
         self.assertEqual(c.lyric_style, "ship_visual")
-        for selector in (window.style_select, window.immersive.style_select):
+        for selector in (window.immersive.style_select,):
             self.assertEqual(selector.findData("lyric_marquee"), -1)
         self.assertNotIn("lyric_marquee", {tile.mode_id for tile in window.mode_tiles})
 

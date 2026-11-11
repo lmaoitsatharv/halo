@@ -11,6 +11,8 @@ from .lyric_rendering import LYRIC_STYLES
 from .mode_library import SceneCard, StyleCard
 from .mode_catalog import available_specs
 from .glass import APP_STYLE, GlassPanel, GlassButton, icon, draw_icon, colour
+from .gallery import (INK, INK_SOFT, CARD, FOCUS, HandsetButton, ink_accent, paint_shadow, paint_focus,
+                      face)
 
 
 STYLE = APP_STYLE
@@ -119,58 +121,19 @@ class HaloMark(QWidget):
         if self.underMouse() and not self.c.reduced_motion:
             self.hover_phase += elapsed * 40
         phase = getattr(self.c, "motion_time", 0) * 20 + (self.hover_phase if not self.c.reduced_motion else 0)
-        p.setPen(QPen(tint(self.c.primary, 48), 5))
+        accent = ink_accent(getattr(self.c, "halo_primary", self.c.primary), target=3.2)
+        p.setPen(QPen(tint(INK, 30), 5))
         p.drawEllipse(QRectF(6, 6, 33, 33))
-        p.setPen(QPen(self.c.primary, 2.4, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        p.setPen(QPen(accent, 2.6, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
         p.drawArc(QRectF(6, 6, 33, 33), int(phase * 16), 245 * 16)
-        p.setPen(QPen(self.c.secondary, 2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        p.setPen(QPen(INK, 2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
         p.drawArc(QRectF(13, 13, 19, 19), int((-phase + 130) * 16), 220 * 16)
 
 
-class TransportButton(GlassButton):
-    """Crisp vector transport icons rather than platform-dependent glyphs."""
+class TransportButton(HandsetButton):
+    """Previous, play and next on the audio-guide handset."""
     def __init__(self, kind, callback, controller=None):
-        super().__init__("▶" if kind == "play" else kind, controller=controller)
-        self.kind = kind
-        self.setFixedSize(42 if kind == "play" else 32, 42 if kind == "play" else 32)
-        self.clicked.connect(callback)
-        self.setAccessibleName({"play": "Play or pause", "previous": "Previous track", "next": "Next track"}[kind])
-        self.setToolTip(self.accessibleName())
-
-    def paintEvent(self, event):
-        p = QPainter(self)
-        p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        primary = self.kind == "play"
-        box = QRectF(self.rect()).adjusted(1, 1, -1, -1)
-        p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(QColor.fromRgbF(.83 + self._hover * .07, .79 + self._hover * .08, .97)
-                   if primary else QColor(223, 211, 255, round(self._hover * 20)))
-        if self.isDown():
-            p.setBrush(QColor("#b3a0df") if primary else QColor(223, 211, 255, 30))
-        p.drawEllipse(box)
-        ink = QColor("#221c30" if primary else "#b9b1c9")
-        if not self.isEnabled():
-            ink.setAlpha(70)
-        if self.hasFocus():
-            p.setBrush(Qt.BrushStyle.NoBrush)
-            p.setPen(QPen(QColor("#c4b4f8"), 1))
-            p.drawEllipse(box.adjusted(2, 2, -2, -2))
-        p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(ink)
-        x, y = self.width() / 2, self.height() / 2
-        if primary and self.text() == "Ⅱ":
-            p.drawRoundedRect(QRectF(x - 6, y - 7, 4, 14), 1, 1)
-            p.drawRoundedRect(QRectF(x + 2, y - 7, 4, 14), 1, 1)
-        else:
-            direction = -1 if self.kind == "previous" else 1
-            size = 8 if primary else 5
-            path = QPainterPath(QPointF(x - direction * size * .65, y - size))
-            path.lineTo(x + direction * size, y)
-            path.lineTo(x - direction * size * .65, y + size)
-            path.closeSubpath()
-            p.drawPath(path)
-            if not primary:
-                p.drawRoundedRect(QRectF(x + direction * 6 - 1, y - 5, 2, 10), .7, .7)
+        super().__init__(kind, callback, controller, hint={"previous": "Ctrl+Left", "next": "Ctrl+Right", "play": "Space"}[kind])
 
 
 LYRIC_CARD_PREVIEW, ROOM_CARD_PREVIEW = 45, 140
@@ -216,10 +179,18 @@ class ModeTile(QAbstractButton):
     def paintEvent(self, event):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        box = QRectF(self.rect()).adjusted(1, 1, -1, -1)
+        box = QRectF(self.rect()).adjusted(2, 2, -2, -4)
         selected = self.isChecked()
-        p.setPen(QPen(tint(self.c.primary, 150) if selected else QColor("#464b60" if self.underMouse() else "#323745"), 1.2))
-        p.setBrush(QColor("#2a2b3e" if selected else "#1e2330" if self.underMouse() else "#1a1e28"))
+        hovered = self.underMouse() and self.isEnabled()
+        if self.isDown():
+            box.translate(0, 1)
+        elif selected:
+            box.translate(0, -1)
+            paint_shadow(p, box, 12, 9, .24, 3)
+        else:
+            paint_shadow(p, box, 12, 6 if hovered else 4, .2 if hovered else .14, 2)
+        p.setPen(QPen(INK, 2) if selected else Qt.PenStyle.NoPen)
+        p.setBrush(CARD)
         p.drawRoundedRect(box, 12, 12)
         preview = QRectF(9, 7, self.width() - 18, self.preview_height)
         if self.setting == "immersive_mode":
@@ -230,6 +201,10 @@ class ModeTile(QAbstractButton):
         self.last_phase_tick = now
         if self.underMouse() and not self.c.reduced_motion:
             self.hover_phase += elapsed
+        # Every preview is a small dark screen hung inside the white card.
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor("#11171a"))
+        p.drawRoundedRect(preview, 8, 8)
         if self.setting == "halo_mode":
             dpr = self.devicePixelRatioF()
             a, b = getattr(self.c, "halo_primary", self.c.primary), getattr(self.c, "halo_secondary", self.c.secondary)
@@ -271,22 +246,20 @@ class ModeTile(QAbstractButton):
                 self.live_card.paint(cached, QRectF(0, 0, preview.width(), preview.height()))
                 cached.end()
             p.drawPixmap(preview.topLeft(), self.preview_cache)
-        p.setPen(QColor("#f0eef6" if selected else "#bec3d3"))
+        p.setPen(QColor(INK if selected else INK_SOFT))
         title_width = max(20, self.width() - (31 if selected else 20))
-        face = font(9)
-        if QFontMetrics(face).horizontalAdvance(self.title) > title_width:
-            face = font(8)
-        p.setFont(face)
-        fitted_title = QFontMetrics(face).elidedText(self.title, Qt.TextElideMode.ElideRight, title_width)
+        title_face = font(9, QFont.Weight.DemiBold if selected else QFont.Weight.Normal)
+        if QFontMetrics(title_face).horizontalAdvance(self.title) > title_width:
+            title_face = font(8, QFont.Weight.DemiBold if selected else QFont.Weight.Normal)
+        p.setFont(title_face)
+        fitted_title = QFontMetrics(title_face).elidedText(self.title, Qt.TextElideMode.ElideRight, title_width)
         p.drawText(QRectF(10, preview.bottom() + 3, title_width, 21), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, fitted_title)
         if selected:
             p.setPen(Qt.PenStyle.NoPen)
-            p.setBrush(self.c.primary)
-            p.drawEllipse(QPointF(self.width() - 12, preview.bottom() + 13), 2.5, 2.5)
+            p.setBrush(INK)
+            p.drawEllipse(QPointF(self.width() - 13, preview.bottom() + 13), 3.5, 3.5)
         if self.hasFocus():
-            p.setPen(QPen(QColor("#e3dafa"), 1, Qt.PenStyle.DashLine))
-            p.setBrush(Qt.BrushStyle.NoBrush)
-            p.drawRoundedRect(box.adjusted(3, 3, -3, -3), 9, 9)
+            paint_focus(p, box, 12)
 
 
 def selector(controller, field, specs, accessible):

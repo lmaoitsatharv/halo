@@ -2,6 +2,7 @@ import json
 import logging
 import math
 import time
+from dataclasses import replace
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError
 from PySide6.QtCore import QObject, Signal, Slot
@@ -27,6 +28,7 @@ class LyricsWorker(QObject):
         self.closing = False
         self.choice_key = None
         self.choice_records = {}
+        self.choice_loose = False
 
     def obsolete(self, generation):
         return self.closing or (self.latest_generation is not None and generation != self.latest_generation)
@@ -70,21 +72,48 @@ class LyricsWorker(QObject):
         result.selected_record = candidate_metadata(record, result)
         return result
 
-    def collect(self, track, generation, all_choices=False):
+    def gather(self, track, generation, all_choices=False):
+        """The strict lookup, then for a web player only, the same song without trusting its length.
+
+        A browser tab can report a length far from the recording's (Brave gave 12:41 for a 5:35
+        song), which the three-second gate would reject. The relaxed pass still demands the same
+        title, artist and version, and is never used for an app that reports its own length.
+        """
+        memo = {}
+        pairs = self.collect(track, generation, all_choices, memo=memo)
+        if (pairs is None or not getattr(track, "browser", False) or not track.duration
+                or any(result.lines for _, result in pairs) or self.obsolete(generation)):
+            return pairs
+        strict_state = self.choice_key, self.choice_records, self.choice_loose
+        loose = self.collect(track, generation, all_choices, loose=True, memo=memo)
+        if loose is not None and any(result.lines for _, result in loose):
+            return loose
+        self.choice_key, self.choice_records, self.choice_loose = strict_state
+        return pairs if loose is not None else None
+
+    def collect(self, track, generation, all_choices=False, loose=False, memo=None):
         """Bound requests and retained payloads, and keep stale work off the UI."""
+        match = replace(track, duration=0) if loose else track
+        memo = {} if memo is None else memo
+
+        def request(endpoint, params):
+            key = (endpoint, tuple(sorted(params.items())))
+            if key not in memo:
+                memo[key] = self.request(endpoint, params)
+            return memo[key]
         records_by_key = {}
         parsed = {}
         record_sizes = {}
         payload_bytes = 0
 
         def candidate_rank(identity, record, result):
-            return (not bool(result.lines), *album_rank(record, track)[:2],
+            return (not bool(result.lines), *album_rank(record, match)[:2],
                     not result.has_word_timing, not bool(record.get("instrumental")),
                     not bool(record.get("plainLyrics")), str(identity))
 
         def add(record):
             nonlocal payload_bytes
-            if not recording_match(record, track):
+            if not recording_match(record, match):
                 return
             album = record.get("albumName")
             identity = record_id(record) or (record["trackName"], record["artistName"],
@@ -119,12 +148,12 @@ class LyricsWorker(QObject):
         for variant in title_search_variants(track.title)[:3]:
             if self.obsolete(generation):
                 return None
-            records = self.request("search", {"track_name": variant, "artist_name": track.artist}) or []
+            records = request("search", {"track_name": variant, "artist_name": track.artist}) or []
             if self.obsolete(generation):
                 return None
             if isinstance(records, list):
-                eligible = [item for item in records[:MAX_SEARCH_RECORDS] if recording_match(item, track)]
-                for record in sorted(eligible, key=lambda item: album_rank(item, track)):
+                eligible = [item for item in records[:MAX_SEARCH_RECORDS] if recording_match(item, match)]
+                for record in sorted(eligible, key=lambda item: album_rank(item, match)):
                     add(record)
             if not all_choices and any(item.lines for item in parsed.values()):
                 break
@@ -134,9 +163,9 @@ class LyricsWorker(QObject):
             params = {"track_name": track.title, "artist_name": track.artist}
             if track.album:
                 params["album_name"] = track.album
-            if 1 <= track.duration <= 3600:
-                params["duration"] = round(track.duration, 3)
-            add(self.request("get", params))
+            if 1 <= match.duration <= 3600:
+                params["duration"] = round(match.duration, 3)
+            add(request("get", params))
             if self.obsolete(generation):
                 return None
         ordered = sorted(records_by_key, key=lambda key:
@@ -146,6 +175,7 @@ class LyricsWorker(QObject):
         # catalogue cache of raw lyric responses across a listening session.
         self.choice_key = self.track_key(track)
         self.choice_records = {record_id(record): record for record, _ in pairs if record_id(record)}
+        self.choice_loose = loose
         return pairs
 
     @Slot(object, int)
@@ -156,7 +186,7 @@ class LyricsWorker(QObject):
             self.choices_ready.emit(generation, [])
             return
         try:
-            pairs = self.collect(track, generation, all_choices=True)
+            pairs = self.gather(track, generation, all_choices=True)
             if pairs is None or self.obsolete(generation):
                 return
             choices = [candidate_metadata(record, lyrics) for record, lyrics in pairs if record_id(record)]
@@ -171,7 +201,7 @@ class LyricsWorker(QObject):
         if self.obsolete(generation):
             return
         record = self.choice_records.get(str(identity)) if self.choice_key == self.track_key(track) else None
-        if not record or not recording_match(record, track):
+        if not record or not recording_match(record, replace(track, duration=0) if self.choice_loose else track):
             result = Lyrics(message="That lyrics choice is no longer available. Open Wrong lyrics again.")
         else:
             try:
@@ -194,7 +224,7 @@ class LyricsWorker(QObject):
             time.sleep(delay)
         self.last_request = time.monotonic()
         request = Request("https://lrclib.net/api/" + endpoint + "?" + urlencode(params),
-                          headers={"User-Agent": "Halo/0.1 (Windows Spotify companion; https://lrclib.net/docs)",
+                          headers={"User-Agent": "Halo/0.1 (Windows music companion; https://lrclib.net/docs)",
                                    "Accept": "application/json"})
         try:
             with urlopen(request, timeout=8) as response:
@@ -226,7 +256,7 @@ class LyricsWorker(QObject):
             self.ready.emit(generation, Lyrics(message="Lyrics service is busy. Try again shortly."))
             return
         try:
-            pairs = self.collect(track, generation)
+            pairs = self.gather(track, generation)
             if pairs is None or self.obsolete(generation):
                 return
             record, result = pairs[0] if pairs else (None, self.result_for(None))

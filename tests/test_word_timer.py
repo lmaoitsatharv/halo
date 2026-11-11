@@ -169,59 +169,8 @@ class WordTimerTests(unittest.TestCase):
         self.play(.2, .6)
         self.timer.settle()
         self.assertEqual(self.done[0][0], "old")
-        self.assertIsNone(self.timer.live_word(0))
         self.play(.6, 16)
         self.assertEqual(sorted(self.finish()), [0, 1, 2])
-
-    def test_live_word_follows_the_line(self):
-        lines = song(["go now then"])
-        self.start(lines)
-        self.assertIsNone(self.timer.live_word(0))
-        self.play(0, 1.1)
-        self.assertEqual(self.timer.live_word(0), 0)
-        self.play(1.1, 1.75)
-        self.assertGreaterEqual(self.timer.live_word(0), 1)
-        self.assertIsNone(self.timer.live_word(1))
-
-    def test_live_word_counts_words_it_cannot_spell(self):
-        lines = song(["go -- now then"])
-        self.start(lines)
-        self.play(0, 2.2)
-        self.assertEqual(self.timer.live_word(0), 3)
-
-    def test_no_word_is_reported_before_one_is_heard(self):
-        self.start(song(["go now then"]))
-        self.play(0, .8)
-        self.assertIn(0, self.timer.following)
-        self.assertIsNone(self.timer.live_word(0))
-
-    def test_a_line_keeps_following_past_the_next_lines_lead_in(self):
-        lines = song(["go now then with more words here", "we run home"], gap=1.5)
-        self.start(lines)
-        self.play(0, 2.3)
-        self.assertIsNotNone(self.timer.live_word(0))
-        self.assertIn(1, self.timer.following)
-
-    def test_an_open_line_takes_the_pace_of_the_line_just_finished(self):
-        lines = song(["go now then", "we run home", "they sing loud"], gap=2.)
-        self.start(lines)
-        self.play(0, 3.5)
-        self.assertIsNotNone(self.timer.song_pace)
-        fits = 2 / STEP / len(line_plan(lines[1].text).tokens)
-        self.assertAlmostEqual(self.timer.following[1][0].pace, min(self.timer.song_pace, fits))
-
-    def test_a_seek_clears_the_live_word(self):
-        lines = song(["go now then", "we run home"])
-        self.start(lines)
-        self.play(0, 1.2)
-        self.play(.2, .3)
-        self.assertIsNone(self.timer.live_word(0))
-
-    def test_pace_carries_to_the_next_line(self):
-        lines = song(["go now then", "we run home", "they sing loud"])
-        self.start(lines)
-        self.play(0, 5)
-        self.assertLess(self.timer.song_pace, 10)
 
     def test_memory_is_bounded_to_30_seconds(self):
         self.assertLessEqual(MAX_STEPS * STEP, 30)
@@ -277,7 +226,6 @@ class WordTimerTests(unittest.TestCase):
             self.play(0, .2)
         self.timer.feed(np.ones((BLOCK, 2), np.float32), RATE, 1., True)
         self.timer.settle()
-        self.assertIsNone(self.timer.live_word(0))
         self.assertTrue(self.timer.failed)
 
     def test_close_stops_the_thread(self):
@@ -285,6 +233,34 @@ class WordTimerTests(unittest.TestCase):
         self.timer.close()
         self.assertFalse(self.timer.thread.is_alive())
 
+    def test_every_line_is_placed_with_its_estimate(self):
+        from unittest.mock import patch
+        from halo import word_timer
+        from halo.lyric_rendering import WordTimeline
+        lines = song(["go now then", "we run home", "they sing loud", "all night long"])
+        seen = []
+        real = word_timer.place_line
+
+        def spy(log_probs, plan, first_frame_time, expected=None):
+            seen.append(expected)
+            return real(log_probs, plan, first_frame_time, expected)
+        with patch.object(word_timer, "place_line", side_effect=spy):
+            self.start(lines)
+            self.play(0, 19)
+            self.finish()
+        self.assertEqual(len(seen), 4)
+        # The same estimate the display uses for these lines, so learning starts from what is shown.
+        timeline = WordTimeline(lines, 0)
+        for number, expected in enumerate(seen[:3]):
+            start, end = timeline.ranges[number]
+            self.assertEqual([round(value, 6) for value in expected],
+                             [round(word.begin, 6) for word in timeline.words[start:end]])
+
+    def test_unspellable_lines_do_not_upset_the_songs_pace(self):
+        lines = song(["go now then", "तुम ही हो", "we run home", "they sing loud", "all night long"])
+        self.start(lines)
+        self.play(0, 22)
+        self.assertEqual(sorted(self.finish()), [0, 2, 3, 4])
 
 if __name__ == "__main__":
     unittest.main()

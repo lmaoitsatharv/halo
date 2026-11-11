@@ -23,10 +23,10 @@ LINES = [LyricLine(1, "go now then"), LyricLine(5, "we run home"), LyricLine(9, 
 
 class FakeTimer:
     def __init__(self):
-        self.songs, self.fed, self.finished, self.closed, self.word = [], [], 0, False, None
+        self.songs, self.fed, self.finished, self.closed = [], [], 0, False
         self.abandoned, self.failed = 0, False
 
-    def start_song(self, key, lines, on_done):
+    def start_song(self, key, lines, on_done, duration=0):
         self.songs.append((key, list(lines), on_done))
 
     def finish_song(self):
@@ -37,9 +37,6 @@ class FakeTimer:
 
     def feed(self, samples, rate, position, playing):
         self.fed.append((position, playing))
-
-    def live_word(self, line):
-        return self.word
 
     def close(self):
         self.closed = True
@@ -311,8 +308,8 @@ class WordTimingSurfaceTests(AppCase):
         notice.assert_called_once()
         self.assertTrue(c.learn_word_timing)
 
-    def test_the_notice_says_replays_are_smoother(self):
-        for words in ("first listen", "abrupt", "next word", "Replays", "saved timing"):
+    def test_the_notice_says_a_first_listen_is_estimated_and_replays_are_learned(self):
+        for words in ("first listen", "estimate", "Replays", "learned", "another listen"):
             self.assertIn(words, LEARN_FIRST_LISTEN_NOTICE)
 
     def test_dont_show_again_is_remembered_across_restarts(self):
@@ -385,7 +382,7 @@ class WordTimingSurfaceTests(AppCase):
 
     def test_live_status_text(self):
         c = self.with_song(self.controller(True))
-        self.assertEqual(c.timing_label(), "Line synced · words following playback")
+        self.assertEqual(c.timing_label(), "Line synced · learning word timing")
 
     def test_no_label_while_off(self):
         self.assertEqual(self.with_song(self.controller(False)).timing_label(), "")
@@ -393,7 +390,7 @@ class WordTimingSurfaceTests(AppCase):
     def test_paused_song_still_counts_as_following(self):
         c = self.with_song(self.controller(True))
         c.accept_track(Track("Song", "Band", "Album", 200, 5, False, True))
-        self.assertEqual(c.timing_label(), "Line synced · words following playback")
+        self.assertEqual(c.timing_label(), "Line synced · learning word timing")
 
     def test_forget_buttons_clear_timing(self):
         c = self.controller(True)
@@ -418,17 +415,13 @@ class WordTimingSurfaceTests(AppCase):
 
 
 class CanvasController:
-    """The small surface a canvas reads, plus a settable live word."""
+    """The small surface a canvas reads."""
     def __init__(self):
         self.lyrics = Lyrics(list(LINES))
         self.track = Track(duration=18, playing=True)
         self.position, self.offset, self.generation, self.motion_time = 5.1, 0, 1, 10.
         self.lyric_style, self.reduced_motion = "visual", True
         self.primary, self.secondary = QColor("#e0d4f0"), QColor("#9b88cf")
-        self.word = None
-
-    def live_word(self, line):
-        return self.word
 
     def seek(self, value):
         pass
@@ -458,49 +451,6 @@ class CanvasTests(unittest.TestCase):
         with patch.object(canvas, method, side_effect=spy):
             canvas.grab()
         return seen[-1]
-
-    def test_live_word_drives_the_canvas(self):
-        c, canvas = self.canvas()
-        canvas.grab()
-        c.word = 2
-        self.assertEqual(self.shown(canvas), canvas.timeline.display_word(1, 2))
-
-    def test_no_live_word_keeps_the_estimate(self):
-        c, canvas = self.canvas()
-        canvas.grab()
-        self.assertEqual(self.shown(canvas), canvas.timeline.display_at(1, c.position)[1])
-
-    def test_seek_back_moves_the_live_word_back(self):
-        c, canvas = self.canvas()
-        c.word = 2
-        canvas.grab()
-        c.word = None
-        c.position = 5.01
-        self.assertEqual(self.shown(canvas), canvas.timeline.display_at(1, 5.01)[1])
-
-    def test_a_line_with_real_word_timing_ignores_live_words(self):
-        c, canvas = self.canvas()
-        words = (LyricWord("we ", 5.), LyricWord("run ", 5.05), LyricWord("home", 7.))
-        c.lyrics = Lyrics([LINES[0], LyricLine(5, "we run home", words), LINES[2]])
-        c.generation += 1
-        canvas.grab()
-        c.word = 2
-        self.assertEqual(self.shown(canvas), canvas.timeline.display_at(1, c.position)[1])
-
-    def test_ship_ignores_live_words(self):
-        c, canvas = self.canvas("ship_visual")
-        image = canvas.grab().toImage()
-        c.word = 2
-        self.assertEqual(image, canvas.grab().toImage())
-
-    def test_glow_entrance_counts_from_the_live_word(self):
-        c, canvas = self.canvas("lyric_impact")
-        canvas.grab()
-        c.word = 2
-        canvas.grab()
-        shown = canvas.timeline.display_word(1, 2)
-        c.position += .05
-        self.assertAlmostEqual(canvas.word_elapsed(shown, c.position), .05)
 
     def peak_speed(self, learned):
         """Peak words per second of the on-screen position through a burst of quick and slow words."""
@@ -538,7 +488,7 @@ class CanvasTests(unittest.TestCase):
         self.assertLessEqual(timeline.flowing(0, 3.), 1.)
         self.assertEqual(timeline.flowing(1, 4.), 1.)
 
-    def test_elapsed_uses_the_timeline_without_a_live_word(self):
+    def test_elapsed_counts_from_the_words_start(self):
         c, canvas = self.canvas()
         canvas.grab()
         word = canvas.timeline.display_at(1, c.position)[1]

@@ -5,6 +5,8 @@ from PySide6.QtWidgets import (QWidget, QLabel, QPushButton, QVBoxLayout, QHBoxL
                               QComboBox, QSlider, QStackedWidget, QButtonGroup,
                               QColorDialog, QSizePolicy, QCheckBox)
 from .glass import GlassSlider
+from .gallery import INK, tint
+from .theme import hexc, style
 
 
 HALO_ANIMATIONS = (
@@ -51,16 +53,16 @@ class ColorWell(QPushButton):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         box = QRectF(self.rect()).adjusted(1, 1, -1, -1)
-        p.setBrush(QColor("#272c3b" if self.underMouse() else "#1a1e28"))
-        p.setPen(QPen(QColor("#a995d3" if self.hasFocus() else "#464d60" if self.underMouse() else "#373e50"), 1.2))
+        p.setBrush(hexc("#f9fbf8" if self.underMouse() else "#ffffff"))
+        p.setPen(QPen(hexc("#2f7d6d") if self.hasFocus() else tint(INK, 110 if self.underMouse() else 50), 2 if self.hasFocus() else 1))
         p.drawRoundedRect(box, 11, 11)
         p.setBrush(self.color)
-        p.setPen(QPen(QColor("#626b7c"), 1))
+        p.setPen(QPen(tint(INK, 90), 1))
         p.drawEllipse(QRectF(12, (self.height() - 24) / 2, 24, 24))
         face = QFont("Segoe UI")
         face.setPixelSize(11)
         p.setFont(face)
-        p.setPen(QColor("#dce0ed"))
+        p.setPen(QColor(INK))
         p.drawText(QRectF(45, 0, self.width() - 53, self.height()), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, self.text())
 
 
@@ -70,13 +72,14 @@ class LightControls(QWidget):
         super().__init__(parent)
         self.controller = controller
         self.setObjectName("haloFineTune")
-        self.setStyleSheet("""
-            QPushButton#haloTuneTab { border: 0; border-radius: 9px; padding: 7px 10px; background: transparent; color: #9098ac; font-size: 11px; }
-            QPushButton#haloTuneTab:checked { background: #343447; color: #f0eafa; }
-            QPushButton#haloTuneTab:focus { border: 1px solid #ad98d9; padding: 6px 9px; }
-            QLabel#haloTuneLabel { font-size: 11px; color: #b4bbce; }
-            QLabel#haloTuneValue { font-size: 11px; color: #e0d5f6; }
-            QLabel#haloTuneBalance { font-size: 10px; color: #8893ac; }
+        style(self, """
+            QPushButton#haloTuneTab { border: 1px solid transparent; border-radius: 9px; padding: 8px 12px; background: transparent; color: #3e4c47; font-size: 12px; }
+            QPushButton#haloTuneTab:hover { background: rgba(28, 42, 38, 12); color: #1c2a26; }
+            QPushButton#haloTuneTab:checked { background: #ffffff; color: #1c2a26; font-weight: 600; border-color: rgba(28, 42, 38, 40); }
+            QPushButton#haloTuneTab:focus { border: 2px solid #2f7d6d; padding: 7px 11px; }
+            QLabel#haloTuneLabel { font-size: 12px; color: #3e4c47; }
+            QLabel#haloTuneValue { font-size: 12px; color: #24685b; font-weight: 600; }
+            QLabel#haloTuneBalance { font-size: 11px; color: #55625e; }
         """)
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -146,7 +149,7 @@ class LightControls(QWidget):
         self.mix_balance.setAlignment(Qt.AlignmentFlag.AlignCenter)
         colours.addWidget(self.mix_balance)
         self.artwork_online = QCheckBox("Find missing covers online")
-        self.artwork_online.setToolTip("When Spotify supplies no cover, send the song title, artist and album to MusicBrainz and fetch matching artwork from Cover Art Archive. No login or audio is sent.")
+        self.artwork_online.setToolTip("When your player supplies no cover, send the song title, artist and album to MusicBrainz and fetch matching artwork from Cover Art Archive. No login or audio is sent.")
         self.artwork_online.toggled.connect(lambda enabled: controller.set("artwork_online", enabled))
         colours.addWidget(self.artwork_online)
         colours.addStretch(1)

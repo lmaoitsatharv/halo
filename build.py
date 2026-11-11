@@ -85,6 +85,9 @@ for dist in importlib.metadata.distributions():
 lucide_notice = target / "licenses" / "lucide" / "LICENSE"
 lucide_notice.parent.mkdir(parents=True, exist_ok=True)
 shutil.copy2(root / "third_party" / "lucide" / "LICENSE", lucide_notice)
+model_notice = target / "licenses" / "word-model" / "NOTICE.md"
+model_notice.parent.mkdir(parents=True, exist_ok=True)
+shutil.copy2(root / "third_party" / "word-model" / "NOTICE.md", model_notice)
 zip_path = dist_dir / "Halo-Windows-x64.zip"
 with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
     for file in target.rglob("*"):

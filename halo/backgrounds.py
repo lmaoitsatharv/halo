@@ -22,7 +22,7 @@ BACKGROUND_SOURCES = (("ambient", "Halo ambience"), ("artwork", "Album artwork")
 BACKGROUND_FITS = (("cover", "Fill the scene"), ("contain", "Fit the whole image"))
 BACKGROUND_MOTIONS = (("still", "Still"), ("drift", "Slow drift"), ("breathe", "Gentle breathing"))
 BACKGROUND_PLAYBACK = (("music", "With the music"), ("always", "Keep moving"))
-BACKGROUND_ART_SOURCES = (("spotify", "Spotify cover"), ("online", "Online cover"))
+BACKGROUND_ART_SOURCES = (("spotify", "Player cover"), ("online", "Online cover"))
 BACKGROUND_DEFAULTS = {
     "background_source": "ambient", "background_path": "", "background_fit": "cover",
     "background_motion": "drift", "background_playback": "music",
@@ -214,7 +214,7 @@ class BackgroundRenderer(QObject):
                     self._clear("Halo ambience")
                 elif source == "artwork":
                     self._set_image(_decode_artwork(data))
-                    self.status = "Online cover" if self.settings["background_art_source"] == "online" and getattr(controller, "background_artwork", b"") else "Spotify cover"
+                    self.status = "Online cover" if self.settings["background_art_source"] == "online" and getattr(controller, "background_artwork", b"") else "Player cover"
                 elif source == "image":
                     self._path = validate_background_file(self.settings["background_path"], "image")
                     self._set_image(_checked_reader(QImageReader(self._path)))
@@ -234,7 +234,7 @@ class BackgroundRenderer(QObject):
             self._previous = QImage()
             self._fade = 1.
         if source == "artwork" and self.has_media:
-            self.status = "Online cover" if self.settings["background_art_source"] == "online" and getattr(controller, "background_artwork", b"") else "Spotify cover"
+            self.status = "Online cover" if self.settings["background_art_source"] == "online" and getattr(controller, "background_artwork", b"") else "Player cover"
         self._update_video()
         self._update_timer()
         self.changed.emit()

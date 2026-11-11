@@ -21,62 +21,61 @@ from .color_controls import LightControls
 from .frontend import ModeTile, ElidedLabel, action, text_label, selector
 from .backgrounds import BackgroundRenderer, BACKGROUND_PRESETS
 from .mode_catalog import available_specs
-from .glass import GlassSlider
+from .glass import GlassSlider, icon as line_icon
+from .gallery import INK, SHADOW
+from .theme import hexc, pick, style, painted_icon, APPEARANCES
 from .scene_extras import extra_scene_layout, paint_extra_scene
 
 
 STUDIO_STYLE = """
-QDialog#settingsStudio { background: #0e1016; }
+QDialog#settingsStudio { background: #e7ece6; }
 QDialog#embeddedSettings { background: transparent; }
-QWidget#studioSidebar { background: rgba(255, 255, 255, 5); border: 1px solid rgba(255, 255, 255, 15); border-radius: 18px; }
-QFrame#studioPreview { background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 rgba(255,255,255,10),stop:1 rgba(255,255,255,3)); border: 1px solid rgba(255, 255, 255, 22); border-radius: 24px; }
-QFrame#studioGroup { background: qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 rgba(255,255,255,10),stop:1 rgba(255,255,255,5)); border: 1px solid rgba(255, 255, 255, 20); border-radius: 18px; }
+QWidget#studioSidebar { background: rgba(28, 42, 38, 10); border: 1px solid rgba(28, 42, 38, 22); border-radius: 18px; }
+QFrame#studioPreview { background: rgba(255, 255, 255, 120); border: 1px solid rgba(28, 42, 38, 26); border-radius: 22px; }
+QFrame#studioGroup { background: #ffffff; border: 1px solid rgba(28, 42, 38, 30); border-radius: 14px; }
 QLabel { background: transparent; }
-QLabel#studioTitle { color: #f5f3fa; font-size: 28px; font-weight: 600; }
-QLabel#studioSectionTitle { color: #e9e6f1; font-size: 13px; font-weight: 600; }
-QLabel#studioRowTitle { color: #edeaf4; font-size: 12px; font-weight: 500; }
-QLabel#studioHint { color: #999aaa; font-size: 11px; }
-QLabel#studioValue { color: #c4b4f8; font-size: 11px; }
-QLabel#studioEyebrow { color: #78798c; font-size: 9px; letter-spacing: 1.6px; font-weight: 600; }
+QLabel#studioTitle { color: #1c2a26; font-size: 28px; font-weight: 600; }
+QLabel#studioSectionTitle { color: #1c2a26; font-size: 14px; font-weight: 600; }
+QLabel#studioRowTitle { color: #1c2a26; font-size: 13px; font-weight: 600; }
+QLabel#studioHint { color: #55625e; font-size: 12px; }
+QLabel#studioValue { color: #24685b; font-size: 12px; font-weight: 600; }
+QLabel#studioEyebrow { color: #55625e; font-size: 10px; letter-spacing: 1.6px; font-weight: 600; }
 QPushButton#studioNav { background: transparent; border: 0; border-radius: 9px; text-align: left;
-                       padding: 11px 10px; color: #999aaa; font-size: 12px; }
-QPushButton#studioNav:checked { color: #faf7ff; font-weight: 600; }
-QPushButton#studioNav:hover { color: #ffffff; }
-QPushButton#studioNav:focus { border: 1px solid rgba(196,180,248,155); padding: 10px 9px; }
-QFrame#studioNavSelection { background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 rgba(196,180,248,31),stop:1 rgba(160,174,240,13)); border: 1px solid rgba(196,180,248,52); border-radius: 11px; }
-QPushButton#studioClose { background: rgba(255,255,255,7); border: 1px solid rgba(255,255,255,22); padding: 0;
-                        border-radius: 11px; font-size: 19px; color: #b5b2c4; }
-QPushButton#studioClose:hover { color: #ffffff; background: rgba(196,180,248,23); }
-QPushButton#studioBack { background: rgba(255,255,255,5); border: 1px solid rgba(255,255,255,18); padding: 7px 12px;
-                       border-radius: 12px; font-size: 11px; color: #aaa7bc; }
-QPushButton#studioBack:hover { color: #f5f3fa; background: rgba(196,180,248,18); border-color: rgba(196,180,248,66); }
-QPushButton#backgroundChoice { background: rgba(255,255,255,7); border: 1px solid rgba(255,255,255,20);
-                               border-radius: 11px; padding: 9px 5px; font-size: 11px; }
-QPushButton#backgroundChoice:checked { background: rgba(196,180,248,30); border-color: rgba(196,180,248,135);
-                                      color: #ece5ff; }
-QPushButton#backgroundPreset { background: rgba(255,255,255,7); border: 1px solid rgba(255,255,255,19);
-                               border-radius: 10px; padding: 8px 4px; font-size: 11px; }
-QPushButton#backgroundPreset:hover { background: rgba(196,180,248,25); border-color: rgba(196,180,248,100); }
+                       padding: 11px 10px; color: #3e4c47; font-size: 13px; }
+QPushButton#studioNav:checked { color: #1c2a26; font-weight: 600; }
+QPushButton#studioNav:hover { color: #1c2a26; }
+QPushButton#studioNav:focus { border: 2px solid #2f7d6d; padding: 9px 8px; }
+QFrame#studioNavSelection { background: #ffffff; border: 1px solid rgba(28, 42, 38, 30); border-radius: 11px; }
+QPushButton#backgroundChoice { background: #ffffff; border: 1px solid rgba(28, 42, 38, 46); color: #1c2a26;
+                               border-radius: 11px; padding: 9px 5px; font-size: 12px; }
+QPushButton#backgroundChoice:hover { border-color: rgba(28, 42, 38, 110); }
+QPushButton#backgroundChoice:checked { background: #1c2a26; border-color: #1c2a26; color: #f2f4ef; font-weight: 600; }
+QPushButton#backgroundPreset { background: #ffffff; border: 1px solid rgba(28, 42, 38, 46); color: #1c2a26;
+                               border-radius: 10px; padding: 8px 4px; font-size: 12px; }
+QPushButton#backgroundPreset:hover { border-color: rgba(28, 42, 38, 110); background: #f7f9f6; }
 QPushButton#backgroundDisclosure { text-align: left; background: transparent;
-                                   border: 0; padding: 10px 0; color: #c4b4f8; font-size: 11px; }
-QPushButton { background: rgba(255,255,255,7); border: 1px solid rgba(255,255,255,23); border-radius: 11px; padding: 8px 11px; color: #d7d4e2; }
-QPushButton:hover { background: rgba(196,180,248,20); border-color: rgba(196,180,248,76); }
-QPushButton:disabled { color: #626272; border-color: rgba(255,255,255,10); }
-QPushButton#primary { background: #c4b4f8; color: #211b35; border: 0; font-weight: 600; }
-QPushButton#primary:hover { background: #d8cbff; }
-QComboBox { background: rgba(255,255,255,8); border: 1px solid rgba(255,255,255,24); border-radius: 10px; padding: 8px 10px; color: #e0dce9; }
-QComboBox:hover { border-color: rgba(196,180,248,90); }
-QComboBox QAbstractItemView { background: #20212b; selection-background-color: #40394f; }
-QSlider::groove:horizontal { background: rgba(255,255,255,23); border: 0px solid transparent; height: 3px; border-radius: 1px; }
-QSlider::sub-page:horizontal { background: #bcaef0; border: 0px solid transparent; height: 3px; border-radius: 1px; }
-QSlider::handle:horizontal { background: #eee8ff; width: 11px; margin: -5px 0; border-radius: 5px; }
+                                   border: 0; padding: 10px 0; color: #24685b; font-size: 12px; font-weight: 600; }
+QPushButton { background: #ffffff; border: 1px solid rgba(28, 42, 38, 46); border-radius: 11px; padding: 8px 11px; color: #1c2a26; }
+QPushButton:hover { border-color: rgba(28, 42, 38, 110); background: #f9fbf8; }
+QPushButton:pressed { background: #eaefe9; }
+QPushButton:disabled { color: #8d9894; border-color: rgba(28, 42, 38, 22); }
+QPushButton:focus { border: 2px solid #2f7d6d; }
+QPushButton#primary { background: #1c2a26; color: #f2f4ef; border: 0; font-weight: 600; }
+QPushButton#primary:hover { background: #2b3b36; }
+QComboBox { background: #ffffff; border: 1px solid rgba(28, 42, 38, 50); border-radius: 10px; padding: 8px 10px; color: #1c2a26; }
+QComboBox:hover { border-color: rgba(28, 42, 38, 110); }
+QComboBox QAbstractItemView { background: #ffffff; color: #1c2a26; selection-background-color: #dcebe3; selection-color: #1c2a26; }
+QSlider::groove:horizontal { background: rgba(28, 42, 38, 40); border: 0px solid transparent; height: 4px; border-radius: 2px; }
+QSlider::sub-page:horizontal { background: #2f7d6d; border: 0px solid transparent; height: 4px; border-radius: 2px; }
+QSlider::handle:horizontal { background: #ffffff; border: 1px solid rgba(28, 42, 38, 90); width: 14px; margin: -6px 0; border-radius: 7px; }
 QScrollArea, QWidget#studioPage, QWidget#studioViewport { background: transparent; border: 0; }
-QScrollBar::handle:vertical { background: rgba(196,180,248,55); }
+QScrollBar::handle:vertical { background: rgba(28, 42, 38, 70); }
 """
 
 
-LEARN_FIRST_LISTEN_NOTICE = ("On a first listen, words can move abruptly, because Halo can't see the next word coming. "
-                             "Replays use saved timing, so words glide smoothly once a song has played through.")
+LEARN_FIRST_LISTEN_NOTICE = ("On a first listen, words keep Halo's estimate while it listens. "
+                             "Replays use the timing it learned for the lines it heard clearly, which is closer; "
+                             "lines it was unsure of stay estimated until another listen.")
 LEARN_WORD_TIMING_HINT = ("Halo analyses all sound on this PC's output with a small model that runs here, to place each lyric word. "
                           "It keeps only word times, which do show which songs you played, and never saves or sends audio. "
                           "Timing is estimated, and can be wrong. "
@@ -132,20 +131,21 @@ class StudioNavButton(QPushButton):
             p = QPainter(self)
             p.setRenderHint(QPainter.RenderHint.Antialiasing)
             sheen = QLinearGradient(0, 0, self.width(), self.height())
-            sheen.setColorAt(0, QColor(220, 211, 255, round(14 * self._hover)))
-            sheen.setColorAt(1, QColor(220, 211, 255, 0))
+            sheen.setColorAt(0, tint(INK, round(14 * self._hover)))
+            sheen.setColorAt(1, tint(INK, 0))
             p.setPen(Qt.PenStyle.NoPen)
             p.setBrush(sheen)
             p.drawRoundedRect(QRectF(self.rect()).adjusted(1, 1, -1, -1), 10, 10)
 
 
 def studio_icon(kind="general"):
-    pixmap = QPixmap(48, 48)
-    pixmap.setDevicePixelRatio(2.)
-    pixmap.fill(Qt.GlobalColor.transparent)
-    p = QPainter(pixmap)
-    p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    p.setPen(QPen(QColor("#d5cedf"), 1.5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+    return painted_icon(lambda p, rect, mode: _paint_studio_icon(p, rect, kind))
+
+
+def _paint_studio_icon(p, rect, kind):
+    p.translate(rect.topLeft())
+    p.scale(rect.width() / 24, rect.height() / 24)
+    p.setPen(QPen(hexc("#1c2a26"), 1.5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
     p.setBrush(Qt.BrushStyle.NoBrush)
     if kind == "general":
         path = QPainterPath()
@@ -159,7 +159,7 @@ def studio_icon(kind="general"):
         p.drawEllipse(QPointF(12, 12), 3., 3.)
     elif kind == "halo":
         p.drawEllipse(QRectF(3, 3, 18, 18))
-        p.setPen(QPen(QColor("#a696c3"), 2.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        p.setPen(QPen(hexc("#2f7d6d"), 2.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
         p.drawArc(QRectF(7, 7, 10, 10), 20 * 16, 245 * 16)
     elif kind == "lyrics":
         for y, length in ((6, 13), (12, 17), (18, 10)):
@@ -168,8 +168,12 @@ def studio_icon(kind="general"):
         p.drawRoundedRect(QRectF(3, 4, 18, 14), 3, 3)
         p.drawLine(QPointF(8, 21), QPointF(16, 21))
         p.drawLine(QPointF(12, 18), QPointF(12, 21))
-    p.end()
-    return QIcon(pixmap)
+
+
+def _explore(text, callback):
+    button = action(text, callback, "ghost")
+    button.setIcon(line_icon("modes", "#1c2a26", 16))
+    return button
 
 
 def show_learn_notice(parent):
@@ -233,22 +237,27 @@ class StudioSwitch(QCheckBox):
     def paintEvent(self, event):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        a, b = QColor("#434048"), QColor("#cdb8ee")
+        # A recessed track; the knob is a small raised key that slides across.
+        a, b = hexc("#c3ccc6"), hexc("#2f7d6d")
         t = self._knob
         colour = QColor.fromRgbF(*(x + (y - x) * t for x, y in zip(a.getRgbF(), b.getRgbF())))
-        p.setPen(QPen(QColor("#eadfff") if self.hasFocus() else colour.lighter(115), 1))
+        track = QRectF(1, 2, 40, 21)
+        p.setPen(QPen(QColor(INK) if self.hasFocus() else colour.darker(118), 1.2 if self.hasFocus() else 1))
         p.setBrush(colour)
-        p.drawRoundedRect(QRectF(1, 2, 40, 21), 10.5, 10.5)
+        p.drawRoundedRect(track, 10.5, 10.5)
+        knob = QPointF(12 + 18 * t, 12.5)
         p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(QColor("#fffaff"))
-        p.drawEllipse(QPointF(12 + 18 * t, 12.5), 7.4, 7.4)
+        p.setBrush(tint(SHADOW, pick(60, 140)))
+        p.drawEllipse(knob + QPointF(0, 1.2), 7.8, 7.8)
+        p.setBrush(QColor(pick("#ffffff", "#e6ece6")))
+        p.drawEllipse(knob, 7.6, 7.6)
 
 
 class PageCurtain(QWidget):
     """Animate a captured page, keeping the live controls responsive below it."""
     def __init__(self, stack, background="#141416", radius=0):
         super().__init__(stack)
-        self.background, self.radius = QColor(background), radius
+        self.background, self.radius = background, radius
         self._progress = 1.
         self.before = self.after = QPixmap()
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
@@ -287,7 +296,7 @@ class PageCurtain(QWidget):
             path = QPainterPath()
             path.addRoundedRect(QRectF(self.rect()), self.radius, self.radius)
             p.setClipPath(path)
-        p.fillRect(self.rect(), self.background)
+        p.fillRect(self.rect(), hexc(self.background))
         t = self._progress
         p.setOpacity(1 - t)
         p.drawPixmap(QPointF(-10 * t, 0), self.before)
@@ -533,10 +542,6 @@ class StudioPreview(QFrame):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 22, 20, 22)
         header = QHBoxLayout()
-        dot = QLabel("●")
-        dot.setStyleSheet("color: #a6d7bd; font-size: 8px;")
-        header.addWidget(dot)
-        header.addWidget(text_label("LIVE PREVIEW", "studioEyebrow"))
         header.addStretch()
         layout.addLayout(header)
         self.scene = PreviewScreen(controller, self)
@@ -669,7 +674,7 @@ class SettingsStudio(QDialog):
         self.setWindowTitle("Halo · Settings")
         self.setWindowIcon(owner.windowIcon())
         self.setMinimumSize(0, 0) if self.embedded else self.setMinimumSize(960, 600)
-        self.setStyleSheet(STUDIO_STYLE)
+        style(self, STUDIO_STYLE)
         self.section = "general"
         self.switches = {}
         self.background_controls = {}
@@ -685,12 +690,17 @@ class SettingsStudio(QDialog):
         root.setContentsMargins(4, 8, 4, 4) if self.embedded else root.setContentsMargins(24, 21, 24, 18)
         root.setSpacing(18)
         heading = QHBoxLayout()
-        heading.addWidget(text_label("PREFERENCES" if self.embedded else "Settings", "studioEyebrow" if self.embedded else "studioSectionTitle"))
+        if not self.embedded:
+            heading.addWidget(text_label("Settings", "studioSectionTitle"))
         heading.addStretch()
         if not self.embedded:
             heading.addWidget(text_label("MAKE HALO YOURS", "studioEyebrow"))
             heading.addSpacing(18)
-        close = action("‹  Back to listening" if self.embedded else "×", self.close, "studioBack" if self.embedded else "studioClose")
+        close = action("Back to listening" if self.embedded else "×", self.close, "studioBack" if self.embedded else "studioClose")
+        if self.embedded:
+            from .glass import icon as line_icon
+            close.setIcon(line_icon("back", "#1c2a26", 16))
+            close.setIconSize(QSize(16, 16))
         if not self.embedded:
             close.setFixedSize(32, 32)
         close.setAccessibleName("Back to listening" if self.embedded else "Close settings")
@@ -742,14 +752,14 @@ class SettingsStudio(QDialog):
         center.addSpacing(12)
         self.pages = QStackedWidget()
         self.pages.setMinimumWidth(270 if self.embedded else 330)
-        self.curtain = PageCurtain(self.pages, "#14151d")
+        self.curtain = PageCurtain(self.pages, "#e7ece6")
         center.addWidget(self.pages, 1)
         columns.addLayout(center, 6)
         self.preview = StudioPreview(controller)
         columns.addWidget(self.preview, 5)
         root.addLayout(columns, 1)
         footer = QHBoxLayout()
-        self.saved = text_label("✓   Changes save automatically", "studioHint")
+        self.saved = text_label("Changes save automatically", "studioHint")
         footer.addWidget(self.saved)
         footer.addStretch()
         footer.addWidget(text_label("Esc to return" if self.embedded else "Esc to close   ·   Ctrl+, to open", "studioEyebrow"))
@@ -905,10 +915,10 @@ class SettingsStudio(QDialog):
         art_controls.setContentsMargins(0, 0, 0, 0)
         art_controls.setSpacing(0)
         self.background_art_source = self.background_selector(art_controls, "background_art_source", "Artwork source", (
-            ("spotify", "Spotify cover", "Use the artwork supplied by Spotify."),
+            ("spotify", "Player cover", "Use the artwork your player supplies."),
             ("online", "Find a cover online", "Match song details with MusicBrainz and Cover Art Archive.")))
         source.addWidget(self.background_art_group)
-        self.background_privacy = text_label("Online matching sends song, artist and album details to MusicBrainz and Cover Art Archive. Spotify artwork is used when a match is unavailable.", "studioHint")
+        self.background_privacy = text_label("Online matching sends song, artist and album details to MusicBrainz and Cover Art Archive. Your player's artwork is used when a match is unavailable.", "studioHint")
         self.background_privacy.setWordWrap(True)
         source.addSpacing(8)
         source.addWidget(self.background_privacy)
@@ -1034,8 +1044,8 @@ class SettingsStudio(QDialog):
             if source == "ambient":
                 status = "Soft album-colour light. No background file needed."
             elif source == "artwork":
-                status = ("Online cover matching · Spotify artwork is the fallback." if c.background_art_source == "online" else
-                          "Changes with the cover supplied by Spotify.")
+                status = ("Online cover matching · your player's artwork is the fallback." if c.background_art_source == "online" else
+                          "Changes with the cover your player supplies.")
                 renderer = self.preview.scene.background
                 if not renderer.has_media and renderer.status not in {"", "Halo ambience"}:
                     status = renderer.status
@@ -1055,11 +1065,18 @@ class SettingsStudio(QDialog):
     def build_pages(self):
         general = self.page()
         essential = self.group(general, "Desktop experience")
+        self.appearance_select = selector(self.c, "appearance", APPEARANCES, "Appearance")
+        self.appearance_select.setMinimumWidth(156)
+        self.row(essential, "Appearance", "A light wall, or the dark wall after hours. Match Windows follows your Windows setting for apps.",
+                 self.appearance_select)
+        self.owner.setting_controls["appearance"] = self.appearance_select
         self.owner.reduced_motion = self.switch(essential, "reduced_motion", "Reduce motion", "Keep the light and words calm. Transitions settle instantly.")
         self.row(essential, "When you close Halo", "Keep your music, glow and floating lyrics in the system tray.", text_label("Keep running", "studioValue"))
         library = self.group(general, "Artwork & connection")
-        self.switch(library, "artwork_online", "Find missing covers online", "Use MusicBrainz and Cover Art Archive when Spotify omits a cover. Song details are shared for matching.")
-        self.row(library, "Music source", "Halo connects through Windows media controls.", text_label("Spotify desktop", "studioValue"))
+        self.switch(library, "artwork_online", "Find missing covers online", "Use MusicBrainz and Cover Art Archive when your player omits a cover. Song details are shared for matching.")
+        self.music_source = text_label("Any player", "studioValue")
+        self.row(library, "Music source", "Halo follows whatever is playing in Windows media controls: Spotify, a browser tab or a music app.",
+                 self.music_source)
         general.addStretch()
 
         halo = self.page()
@@ -1082,13 +1099,13 @@ class SettingsStudio(QDialog):
         halo.addWidget(self.light_controls)
         halo.addWidget(text_label("Explore looks", "studioSectionTitle"))
         self.modes(halo, "halo_mode", HALO_MODES)
-        halo.addWidget(action("Explore light modes   →", lambda: self.owner.open_modes("halo"), "ghost"))
+        halo.addWidget(_explore("Explore light modes", lambda: self.owner.open_modes("halo")))
         halo.addStretch()
 
         lyrics = self.page()
         lyrics.addWidget(text_label("Lyric style", "studioSectionTitle"))
         self.modes(lyrics, "lyric_style", LYRIC_STYLES)
-        lyrics.addWidget(action("Explore lyric styles   →", lambda: self.owner.open_modes("lyrics"), "ghost"))
+        lyrics.addWidget(_explore("Explore lyric styles", lambda: self.owner.open_modes("lyrics")))
         self.lens_status = text_label("", "studioHint")
         self.lens_status.setWordWrap(True)
         lyrics.addWidget(self.lens_status)
@@ -1140,13 +1157,19 @@ class SettingsStudio(QDialog):
         lyrics.addStretch()
 
         scenes = self.page()
-        scenes.addWidget(text_label("Choose your room", "studioSectionTitle"))
-        self.modes(scenes, "immersive_mode", IMMERSIVE_SCENES)
-        scenes.addWidget(action("Explore immersive rooms   →", lambda: self.owner.open_modes("scenes"), "ghost"))
-        scenes.addWidget(action("Enter immersive view   →", self.enter_immersive, "primary"))
+        enter = action("Enter immersive view", self.enter_immersive, "primary")
+        enter.setIcon(line_icon("fullscreen", "#f2f4ef", 18))
+        enter.setToolTip("Enter immersive view  ·  F11")
+        scenes.addWidget(enter)
         hint = text_label("Space to play or pause. Esc to return. Your window size is kept when you come back.", "studioHint")
         hint.setWordWrap(True)
         scenes.addWidget(hint)
+        scenes.addSpacing(6)
+        scenes.addWidget(text_label("Choose your room", "studioSectionTitle"))
+        self.modes(scenes, "immersive_mode", IMMERSIVE_SCENES)
+        explore_rooms = action("Explore immersive rooms", lambda: self.owner.open_modes("scenes"), "ghost")
+        explore_rooms.setIcon(line_icon("modes", "#1c2a26", 16))
+        scenes.addWidget(explore_rooms)
         self.build_background_controls(scenes)
         scenes.addStretch()
         self.sync_lyrics()
@@ -1156,18 +1179,20 @@ class SettingsStudio(QDialog):
             self.c.set("hide_learn_word_timing_notice", True)
 
     def sync_lyrics(self):
+        c = self.c
+        if hasattr(self, "music_source"):
+            self.music_source.setText(c.track.source if c.track.connected and c.track.source else "Any player")
         if not hasattr(self, "lyric_song_label"):
             return
-        c = self.c
         enabled = c.can_correct_lyrics()
-        self.lyric_song_label.setText(c.track.title if enabled else "Play a Spotify song to save corrections")
+        self.lyric_song_label.setText(c.track.title if enabled else "Play a song to save corrections")
         self.song_timing_slider.setEnabled(enabled)
         for button in [*self.song_timing_buttons, self.import_lyrics_button, self.choose_lyrics_button]:
             button.setEnabled(enabled)
         self.automatic_lyrics_button.setEnabled(enabled and bool(c.saved_lyric_kind))
         populated = [line for line in c.lyrics.lines if line.text.strip()]
         true_words = sum(bool(getattr(line, "words", ())) for line in populated)
-        timing = ("Word timing learned on this PC; other words follow playback or are estimated." if c.lyrics.timing_source == "learned"
+        timing = ("Word timing learned on this PC; other words are estimated." if c.lyrics.timing_source == "learned"
                   else "Word timestamps supplied by the lyric source." if true_words and true_words == len(populated)
                   else "Some lines have word timestamps; other words are estimated." if true_words
                   else "Line timestamps only; word animation is estimated." if populated
