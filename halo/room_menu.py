@@ -3,12 +3,17 @@
 The dropdown reads like a Windows 11 menu: an icon and a word per row, a dot beside the
 current choice, flyouts for longer lists, a switch for things that are simply on or off,
 and the key that does the same thing on the right.
+
+Flyouts keep a safety triangle: moving diagonally from a row toward its open flyout may cross
+other rows without closing it. The triangle runs from where the pointer left the row to the
+flyout's near corners. Inside it, heading toward the flyout, the flyout stays; resting on
+another row for AIM_PATIENCE_MS, heading back, or leaving the triangle switches at once.
 """
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
 from PySide6.QtCore import Qt, QRectF, QPointF, QPoint, Signal, QTimer
-from PySide6.QtGui import QColor, QPainter, QPen, QPainterPath, QFont, QFontMetricsF, QGuiApplication
+from PySide6.QtGui import QColor, QPainter, QPen, QPainterPath, QFont, QFontMetricsF, QGuiApplication, QPolygonF
 from PySide6.QtWidgets import QWidget, QAbstractButton
 
 from .gallery import face, tint, paint_shadow, keyboard_reason
@@ -21,6 +26,8 @@ MUTED = QColor("#9eaaa4")
 DISABLED = QColor("#6f7a75")
 MINT = QColor("#b7e4ad")
 ON_MINT = QColor("#1c2a26")
+AIM_PATIENCE_MS = 300  # how long the pointer may rest on another row before its flyout takes over
+AIM_SLACK = 6.         # pixels of give around the triangle, for an unsteady hand
 
 
 @dataclass
@@ -74,6 +81,16 @@ class RoomMenu(QWidget):
         self._pressed_inside = False
         self._has_icons = False
         self._right = 0.
+        # The safety triangle toward an open flyout (global coordinates), and where the pointer last was.
+        self._aim = None
+        self._aim_side = 1
+        self._last_point = None
+        self._last_index = -1
+        self._pointer_here = False  # whether the pointer's last move was over this menu's own rows
+        self._aim_timer = QTimer(self)
+        self._aim_timer.setSingleShot(True)
+        self._aim_timer.setInterval(AIM_PATIENCE_MS)
+        self._aim_timer.timeout.connect(self._aim_expired)
 
     # --- building ----------------------------------------------------------------------
 
@@ -267,6 +284,7 @@ class RoomMenu(QWidget):
         self.update()
 
     def close_child(self):
+        self._stop_aim()
         if self.child is not None:
             child, self.child = self.child, None
             child.close()
@@ -305,14 +323,28 @@ class RoomMenu(QWidget):
     def mouseMoveEvent(self, event):
         global_point = event.globalPosition().toPoint()
         menu = self._menu_at(global_point)
-        if menu is not None and menu is not self:
+        if menu is None:
+            # Between menus or outside them: no menu's rows are under the pointer.
+            for each in self.chain():
+                each._pointer_here = False
+            return
+        if menu is not self:
             menu._hover_at(menu.mapFromGlobal(global_point))
             return
-        if menu is self:
-            self._hover_at(event.position().toPoint())
+        self._hover_at(event.position().toPoint())
 
     def _hover_at(self, point):
         index = self.row_at(point)
+        here = QPointF(self.mapToGlobal(QPointF(point)))
+        self._pointer_here = True
+        # The pointer is in this menu, so every menu that opened it has been reached: their triangles are done.
+        ancestor = self.parent_menu
+        while ancestor is not None:
+            ancestor._reached_flyout()
+            ancestor = ancestor.parent_menu
+        if self._aiming(index, here):
+            return
+        self._last_point, self._last_index = here, index
         if index != self.hover:
             self.hover = index
             if index >= 0 and self.entries[index].kind == "submenu":
@@ -320,6 +352,70 @@ class RoomMenu(QWidget):
             elif index >= 0 and self.child is not None:
                 self.close_child()
             self.update()
+
+    # --- the safety triangle -------------------------------------------------------------
+
+    def _flyout_open(self):
+        return self.child is not None and self.child.isVisible()
+
+    def aim_area(self, exit_point):
+        """The triangle from where the pointer left a row to the open flyout's near edge, and which side it is on."""
+        panel = self.child.panel()
+        corners = [QPointF(self.child.mapToGlobal(corner)) for corner in
+                   (panel.topLeft(), panel.bottomLeft(), panel.topRight(), panel.bottomRight())]
+        side = 1 if corners[0].x() >= exit_point.x() else -1
+        top, bottom = (corners[0], corners[1]) if side > 0 else (corners[2], corners[3])
+        apex = QPointF(exit_point.x() - side * AIM_SLACK, exit_point.y())
+        return QPolygonF([apex, top + QPointF(side * AIM_SLACK, -AIM_SLACK),
+                          bottom + QPointF(side * AIM_SLACK, AIM_SLACK)]), side
+
+    def _aiming(self, index, here):
+        """True while the pointer is on its way to the open flyout: hold the flyout and its row as they are."""
+        if not self._flyout_open() or index == self.child.owner_index:
+            self._stop_aim()
+            return False
+        if self._aim is None:
+            # Arm the triangle only on the move that leaves the flyout's own row.
+            if self._last_point is None or self._last_index != self.child.owner_index:
+                return False
+            self._aim, self._aim_side = self.aim_area(self._last_point)
+            self._aim_timer.start()
+        if not self._aim.containsPoint(here, Qt.FillRule.OddEvenFill):
+            self._stop_aim()
+            return False
+        toward = (here.x() - self._last_point.x()) * self._aim_side
+        if toward < -2:
+            # Heading back, away from the flyout: the person wants another row.
+            self._stop_aim()
+            return False
+        if toward > 0:
+            self._aim_timer.start()  # still travelling toward the flyout: keep waiting
+        self._last_point, self._last_index = here, index
+        return True
+
+    def _stop_aim(self):
+        self._aim = None
+        self._aim_timer.stop()
+
+    def _reached_flyout(self):
+        """The pointer made it into the open flyout: stop aiming, and forget the rows it brushed past."""
+        self._pointer_here = False
+        self._stop_aim()
+        self._last_point = None
+        self._last_index = -1
+
+    def _aim_expired(self):
+        """The pointer rested on another row: let that row take over where it is.
+
+        Only if it is still resting on this menu's rows; in the flyout or between menus, nothing changes.
+        """
+        self._aim = None
+        if self._last_point is None or not self.isVisible() or not self._pointer_here:
+            return
+        point = self.mapFromGlobal(self._last_point)
+        if self.panel().contains(point):
+            self._last_index = -1  # do not re-arm the triangle from here
+            self._hover_at(point.toPoint())
 
     def mousePressEvent(self, event):
         global_point = event.globalPosition().toPoint()

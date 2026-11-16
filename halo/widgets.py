@@ -6,13 +6,13 @@ from PySide6.QtCore import Qt, QEvent, QRectF, QRect, QPointF
 from PySide6.QtGui import (QColor, QFont, QImage, QPainter, QPen, QLinearGradient,
                           QRadialGradient, QPainterPath, QPixmap)
 from PySide6.QtWidgets import QWidget
-from .models import floating_geometry
+from .models import floating_geometry, TAGLINE
 from .glow import paint_edge_glow
 from .taskbar import allow_taskbar_reveal
 from .extra_lyrics import LINE_BASED_STYLES, paint_lyric_mode
 from .lens import (COLUMN_SHARE, LENS_STRENGTH, MIN_CANVAS, lens_disabled, lens_geometry, magnification,
                    output_y, shared_lens, warp_source)
-from .lyric_rendering import (LYRIC_STYLES, WordTimeline, TypeCache, clamp, smooth,
+from .lyric_rendering import (LYRIC_STYLES, WordTimeline, TypeCache, clamp, smooth, lyric_presence, BREAK_BLANK_STYLES,
                               spring, alpha, SYMBOLS, symbol_kind, line_symbol_kind, canonical_lyric_style)
 
 WHITE = QColor("#f1f5ef")
@@ -301,10 +301,13 @@ class LyricCanvas(QWidget):
         available = min(y - half, self.height() - y - half)
         return smooth(available / max(12, self.height() * .13))
 
+    def empty_text(self):
+        """What the room says with no lines to show, whether lyrics were not found or nothing is playing."""
+        return TAGLINE
+
     def _empty(self, p):
         w, h = self.width(), self.height()
-        shape = self._shape("Your music. A little more alive.", max(1, w - 44), h * .4,
-                            min(30, w * .055), "center")
+        shape = self._shape(self.empty_text(), max(1, w - 44), h * .4, min(30, w * .055), "center")
         self._text(p, shape, w / 2, h * .43, WHITE)
 
     def paintEvent(self, event):
@@ -331,6 +334,30 @@ class LyricCanvas(QWidget):
             c.lyrics.index_at(position), position)
         motion = self._clock()
         transition = self._advance(index, word_index, position, motion)
+        # In the styles that framed a break with the lines either side, nobody singing means no words on screen.
+        presence = (lyric_presence(lines, position, bool(getattr(c, "reduced_motion", False)))
+                    if style in BREAK_BLANK_STYLES else 1.)
+        if presence <= .01:
+            p.end()
+            return
+        if presence < .99:
+            outer = p
+            dpr = self.devicePixelRatioF()
+            layer = QPixmap(max(1, round(self.width() * dpr)), max(1, round(self.height() * dpr)))
+            layer.setDevicePixelRatio(dpr)
+            layer.fill(Qt.GlobalColor.transparent)
+            p = QPainter(layer)
+            p.setRenderHint(QPainter.RenderHint.Antialiasing)
+            self._paint_style(p, style, index, word_index, fraction, motion, transition)
+            p.end()
+            outer.setOpacity(presence)
+            outer.drawPixmap(0, 0, layer)
+            outer.end()
+            return
+        self._paint_style(p, style, index, word_index, fraction, motion, transition)
+        p.end()
+
+    def _paint_style(self, p, style, index, word_index, fraction, motion, transition):
         if paint_lyric_mode(self, p, style, index, word_index, fraction, motion, transition):
             pass
         elif style == "ship_visual":
@@ -342,7 +369,6 @@ class LyricCanvas(QWidget):
             # Empty cues occupy a real scroll position; only their ink is
             # omitted, so context stays above/below an empty centre.
             self._fisheye(p, index, word_index, fraction, motion, True)
-        p.end()
 
     def _instrumental(self, p, motion):
         w, h = self.width(), self.height()
@@ -354,12 +380,17 @@ class LyricCanvas(QWidget):
             p.setBrush(alpha(c.primary, breath))
             p.drawEllipse(QRectF(w / 2 + (i - 1) * radius * 4 - radius, h / 2 - radius, radius * 2, radius * 2))
 
+    def text_scale(self):
+        """How much larger than usual the words are drawn; the desktop's floating lyrics follow their Size setting."""
+        return 1.
+
     def _base_size(self):
         w, h = self.width(), self.height()
         if self.mode == "preview":
             return min(44, max(20, w / 11))
         if self.mode == "floating":
-            return min(48, max(20, w / 15))
+            scale = self.text_scale()
+            return min(48 * scale, max(20 * scale, w / 15))
         giant = self.scene_mode in {"lyrics", "cinema", "orbit", "scene_runway"}
         return min(110 if giant else 76, max(25, min(w / (9 if giant else 11), h / 7)))
 
@@ -665,12 +696,15 @@ class FloatingLyrics(LyricCanvas):
         if self.target_screen:
             geometry = self.target_screen.availableGeometry()
             self.setGeometry(*floating_geometry((geometry.x(), geometry.y(), geometry.width(), geometry.height()),
-                                                self.controller.floating_x, self.controller.floating_y))
+                                                self.controller.floating_x, self.controller.floating_y, self.text_scale()))
+
+    def text_scale(self):
+        return max(.5, min(2., getattr(self.controller, "floating_size", 100) / 100))
 
     def paintEvent(self, event):
         if self.previewing and not (self.controller.lyrics.lines and self.controller.track.playing):
             p = QPainter(self)
-            p.setFont(font(26, QFont.Weight.DemiBold))
+            p.setFont(font(round(26 * self.text_scale()), QFont.Weight.DemiBold))
             p.setPen(QColor("#000000"))
             p.drawText(self.rect().translated(1, 2), Qt.AlignmentFlag.AlignCenter, "Floating lyrics preview")
             p.setPen(self.controller.primary)

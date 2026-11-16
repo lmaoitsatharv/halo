@@ -82,12 +82,24 @@ class Lyrics:
         return bisect_right([line.time for line in self.lines], position) - 1
 
 
-def floating_geometry(screen_rect, horizontal=50, vertical=90):
-    """Position the entire overlay within the monitor's usable area."""
+# What Halo shows wherever a song's words would go, when it has none to show.
+TAGLINE = "Your music. A little more alive."
+
+
+def finding_lyrics(lyrics):
+    """True while a lyrics lookup is still running (its message says so)."""
+    return str(getattr(lyrics, "message", "") or "").startswith("Finding")
+
+
+FLOATING_SIZES = (50, 200)  # the floating lyrics' size setting, in percent
+
+
+def floating_geometry(screen_rect, horizontal=50, vertical=90, scale=1.):
+    """Position the entire overlay within the monitor's usable area; scale is its size (1 = 860 × 220)."""
     sx, sy, sw, sh = screen_rect
     margin = max(0, min(20, sw // 10, sh // 10))
-    width = max(1, min(860, sw - 2 * margin))
-    height = max(1, min(220, sh - 2 * margin))
+    width = max(1, min(round(860 * scale), sw - 2 * margin))
+    height = max(1, min(round(220 * scale), sh - 2 * margin))
     x = sx + margin + round(max(0, sw - 2 * margin - width) * max(0, min(100, horizontal)) / 100)
     y = sy + margin + round(max(0, sh - 2 * margin - height) * max(0, min(100, vertical)) / 100)
     return x, y, width, height

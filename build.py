@@ -93,4 +93,14 @@ with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as ar
     for file in target.rglob("*"):
         if file.is_file():
             archive.write(file, file.relative_to(target.parent))
+# In-app updates download the release's ZIP only if it matches this list, and install it only if
+# its VERSION.txt names the release's version. Publish both files with every release. The update
+# helper is Halo.exe itself (main.py's --apply-update), so there is nothing else to ship.
+digest = hashlib.sha256()
+with open(zip_path, "rb") as package:
+    for block in iter(lambda: package.read(1 << 20), b""):
+        digest.update(block)
+sums_path = dist_dir / "SHA256SUMS.txt"
+sums_path.write_text(f"{digest.hexdigest()}  {zip_path.name}\n", encoding="utf-8", newline="\n")
 print(f"Portable ZIP: {zip_path} ({zip_path.stat().st_size / 1024**2:.1f} MB)")
+print(f"Checksums: {sums_path}")

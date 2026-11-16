@@ -6,7 +6,8 @@ from unittest.mock import patch
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QApplication
 
-from halo.lyric_rendering import LYRIC_STYLES, WordTimeline
+from halo.lyric_rendering import (LYRIC_STYLES, WordTimeline, lyric_presence, BREAK_MIN, BREAK_OUT, BREAK_IN,
+                                  BREAK_BLANK_STYLES)
 from halo.models import Lyrics, LyricLine, LyricWord, Track, parse_lrc
 from halo.widgets import LyricCanvas
 
@@ -192,6 +193,59 @@ class LyricGapTests(unittest.TestCase):
                         self.assertTrue(any(y > canvas.height() / 2 + 20 for y in centres))
                         self.assertTrue(all(abs(y - canvas.height() / 2) > 20 for y in centres))
                         cutout.assert_not_called()
+
+
+    def test_only_the_styles_that_framed_breaks_with_quiet_lines_go_blank(self):
+        self.assertEqual(BREAK_BLANK_STYLES, {"lyric_afterimage", "lyric_cascade", "lyric_starline",
+                                              "lyric_neon", "lyric_impact"})
+        for style in [spec[0] for spec in LYRIC_STYLES]:
+            for surface in ("preview", "floating", "immersive"):
+                with self.subTest(style=style, surface=surface):
+                    c = self.controller(style, 7)
+                    canvas = self.canvas(c, surface)
+                    with patch.object(canvas, "_paint_style") as paint:
+                        canvas.grab()
+                        # A break: the five show nothing; Ship, Fisheye and the rest keep their own break look.
+                        self.assertEqual(paint.called, style not in BREAK_BLANK_STYLES)
+                        paint.reset_mock()
+                        c.position = 3
+                        canvas.grab()
+                        paint.assert_called()
+
+    def test_the_quiet_line_styles_draw_no_lines_around_a_break(self):
+        for style in sorted(BREAK_BLANK_STYLES):
+            with self.subTest(style=style):
+                c = self.controller(style, 7)
+                canvas = self.canvas(c, "immersive")
+                with patch.object(canvas, "_text", wraps=canvas._text) as text, \
+                     patch.object(canvas, "_shape", wraps=canvas._shape) as shapes:
+                    canvas.grab()
+                    text.assert_not_called()
+                    shapes.assert_not_called()
+
+    def test_presence_fades_out_into_a_break_and_up_with_the_next_line(self):
+        lines = parse_lrc("[00:02]An original ocean\n[00:05]\n[00:07]   \n[00:10]A new quiet moon\n"
+                          "[00:12]\n[00:12.50]A quick breath\n[00:14]")
+        self.assertEqual(lyric_presence(lines, 1), 0.)             # before the first line
+        self.assertEqual(lyric_presence(lines, 2), 0.)             # the first words fade up...
+        self.assertEqual(lyric_presence(lines, 2 + BREAK_IN), 1.)  # ...and are fully there
+        self.assertEqual(lyric_presence(lines, 4.9), 1.)
+        self.assertGreater(lyric_presence(lines, 5 + BREAK_OUT / 2), 0.)
+        self.assertLess(lyric_presence(lines, 5 + BREAK_OUT / 2), 1.)
+        for position in (5 + BREAK_OUT, 6, 7, 8, 9.99):            # two blank cues in a row are one break
+            self.assertEqual(lyric_presence(lines, position), 0., position)
+        self.assertEqual(lyric_presence(lines, 10), 0.)
+        self.assertEqual(lyric_presence(lines, 10 + BREAK_IN), 1.)
+        self.assertLess(12.5 - 12, BREAK_MIN)
+        for position in (12, 12.2, 12.5, 13):                      # a pause shorter than BREAK_MIN keeps the words
+            self.assertEqual(lyric_presence(lines, position), 1., position)
+        self.assertEqual(lyric_presence(lines, 14 + BREAK_OUT), 0.)  # the end of the song
+        # Reduced motion: no fades; the words simply go and come back.
+        self.assertEqual(lyric_presence(lines, 5, reduced=True), 0.)
+        self.assertEqual(lyric_presence(lines, 10, reduced=True), 1.)
+        self.assertEqual(lyric_presence(lines, 2, reduced=True), 1.)
+        self.assertEqual(lyric_presence(lines, 1, reduced=True), 0.)
+        self.assertEqual(lyric_presence([], 3), 1.)
 
 
 if __name__ == "__main__":

@@ -2,7 +2,7 @@ from PySide6.QtCore import QSize, Qt, QRectF, Signal, QSignalBlocker
 from PySide6.QtGui import QPainter, QColor, QPen, QFont
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel,
                               QSlider, QPushButton, QComboBox, QCheckBox, QWidget, QApplication)
-from .models import floating_geometry
+from .models import floating_geometry, FLOATING_SIZES
 from .widgets import font, tint
 from .glass import GlassSlider, icon
 from .theme import style
@@ -35,19 +35,24 @@ class PositionPreview(QWidget):
         p.setBrush(QColor("#0b1311"))
         p.setPen(QPen(QColor("#405247"), 1))
         p.drawRoundedRect(monitor, 10, 10)
-        x, y, w, h = floating_geometry((0, 0, screen.width(), screen.height()), self.c.floating_x, self.c.floating_y)
+        size = self.size_scale()
+        x, y, w, h = floating_geometry((0, 0, screen.width(), screen.height()), self.c.floating_x, self.c.floating_y, size)
         marker = QRectF(monitor.x() + x * scale, monitor.y() + y * scale, w * scale, h * scale)
         p.setBrush(tint(self.c.primary, 32))
         p.setPen(QPen(tint(self.c.primary, 170), 1))
         p.drawRoundedRect(marker, 6, 6)
-        p.setFont(font(10, QFont.Weight.DemiBold))
+        p.setFont(font(max(7, round(10 * size)), QFont.Weight.DemiBold))
         p.setPen(self.c.primary)
         p.drawText(marker, Qt.AlignmentFlag.AlignCenter, "Your lyrics")
 
+    def size_scale(self):
+        return getattr(self.c, "floating_size", 100) / 100
+
     def move_to(self, point):
         monitor, screen, scale = self.bounds()
-        low = floating_geometry((0, 0, screen.width(), screen.height()), 0, 0)
-        high = floating_geometry((0, 0, screen.width(), screen.height()), 100, 100)
+        size = self.size_scale()
+        low = floating_geometry((0, 0, screen.width(), screen.height()), 0, 0, size)
+        high = floating_geometry((0, 0, screen.width(), screen.height()), 100, 100, size)
         px = (point.x() - monitor.x()) / scale - low[2] / 2
         py = (point.y() - monitor.y()) / scale - low[3] / 2
         x = round(100 * (px - low[0]) / (high[0] - low[0])) if high[0] > low[0] else 50
@@ -75,12 +80,12 @@ class PositionDialog(QDialog):
         self.resize(460, 640)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 20, 24, 20)
-        layout.setSpacing(9)
+        layout.setSpacing(7)
         title = QLabel("Put your lyrics where you want them.")
         title.setStyleSheet("font-size: 18px; font-weight: 600;")
         title.setWordWrap(True)
         layout.addWidget(title)
-        hint = QLabel("Drag the preview or use the position sliders.")
+        hint = QLabel("Drag the preview or use the sliders. Size makes the words larger or smaller.")
         style(hint, "color: #55625e;")
         layout.addWidget(hint)
         self.monitor = QComboBox()
@@ -93,6 +98,9 @@ class PositionDialog(QDialog):
         layout.addWidget(self.preview)
         self.x_slider = self.make_slider(layout, "Horizontal", "floating_x", "Left", "Right")
         self.y_slider = self.make_slider(layout, "Vertical", "floating_y", "Top", "Bottom")
+        self.size_slider = self.make_slider(layout, "Size", "floating_size", "Smaller", "Larger", FLOATING_SIZES)
+        self.size_slider.setSingleStep(5)
+        self.size_slider.setPageStep(10)
         grid = QGridLayout()
         for row, y in enumerate((0, 50, 90)):
             for column, x in enumerate((0, 50, 100)):
@@ -105,7 +113,7 @@ class PositionDialog(QDialog):
                 preset.setToolTip(name)
                 preset.setAccessibleName("Position " + name)
                 preset.setAutoDefault(False)
-                preset.setFixedHeight(40)
+                preset.setFixedHeight(34)
                 preset.clicked.connect(lambda checked=False, x=x, y=y: self.set_position(x, y))
                 grid.addWidget(preset, row, column)
         layout.addLayout(grid)
@@ -138,7 +146,7 @@ class PositionDialog(QDialog):
         self.monitor.setCurrentIndex(max(0, selected))
         del blocker
 
-    def make_slider(self, layout, title, setting, low_label, high_label):
+    def make_slider(self, layout, title, setting, low_label, high_label, limits=(0, 100)):
         row = QHBoxLayout()
         row.addWidget(QLabel(title + " · " + low_label + " → " + high_label))
         row.addStretch()
@@ -146,9 +154,9 @@ class PositionDialog(QDialog):
         row.addWidget(value)
         layout.addLayout(row)
         slider = GlassSlider(Qt.Orientation.Horizontal)
-        slider.setRange(0, 100)
+        slider.setRange(*limits)
         slider.setValue(getattr(self.c, setting))
-        slider.setAccessibleName(title + " lyrics position")
+        slider.setAccessibleName("Floating lyrics size" if setting == "floating_size" else title + " lyrics position")
         slider.valueChanged.connect(lambda number: (self.c.set(setting, number), value.setText(str(number) + "%")))
         layout.addWidget(slider)
         return slider

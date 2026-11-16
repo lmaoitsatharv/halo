@@ -8,13 +8,13 @@ from pathlib import Path
 import sys
 import time
 from dataclasses import replace
-from PySide6.QtCore import QObject, Signal, QTimer, Qt, QSettings, QLockFile, QThread, QEvent, QSize, QPoint, QPointF
-from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap, QCursor, QShortcut, QKeySequence
+from PySide6.QtCore import QObject, Signal, QTimer, Qt, QSettings, QLockFile, QThread, QEvent, QSize, QPoint, QPointF, QRect
+from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap, QCursor, QShortcut, QKeySequence, QActionGroup
 from PySide6.QtWidgets import (QApplication, QHBoxLayout, QLabel, QCheckBox, QSlider,
     QFileDialog, QSystemTrayIcon, QMenu, QMessageBox, QDialog, QVBoxLayout,
     QListWidget, QPushButton, QPlainTextEdit)
 from . import __version__
-from .models import Track, Lyrics, parse_lrc, load_lrc, DEMO_LRC
+from .models import Track, Lyrics, parse_lrc, load_lrc, DEMO_LRC, FLOATING_SIZES
 from .spotify import SpotifyWorker
 from .lyrics import LyricsWorker
 from .lyric_store import LyricStore, recording_key, MAX_OFFSET_MS
@@ -29,10 +29,13 @@ from .taskbar import allow_taskbar_reveal
 from .titlebar import (EXPANDED, TITLE_STRIP, WORKSPACE_FLAGS, strip_height, handle_message,
                        redraw as redraw_title_strip)
 from .positioning import PositionDialog
-from .mini_player import MiniPlayer
+from .mini_player import MINI_STYLES, MINI_STYLE_KEYS
+from .mini_styles import create_mini
+from .wheel_guard import install as install_wheel_guard
 from .gallery import song_light, mix
 from . import theme
 from .share_card import ShareCardDialog
+from .updates import UpdateService, UpdatePrompt
 
 from .frontend import STYLE, build_main
 from .immersive import Immersive, IMMERSIVE_SCENES
@@ -137,6 +140,7 @@ class Controller(QObject):
         self.floating = settings.value("floating", False, type=bool)
         self.floating_x = max(0, min(100, settings.value("floating_x", 50, type=int)))
         self.floating_y = max(0, min(100, settings.value("floating_y", 90, type=int)))
+        self.floating_size = max(FLOATING_SIZES[0], min(FLOATING_SIZES[1], settings.value("floating_size", 100, type=int)))
         self.floating_screen = settings.value("floating_screen", "", type=str)
         self.reactive = settings.value("reactive", False, type=bool)
         self.intensity = max(0, min(100, settings.value("intensity", 62, type=int)))
@@ -187,6 +191,9 @@ class Controller(QObject):
         self.reactive = self.halo_animation in AUDIO_ANIMATIONS
         self.reduced_motion = settings.value("reduced_motion", False, type=bool)
         self.appearance = self.choice("appearance", theme.APPEARANCES, "system")
+        self.mini_style = self.choice("mini_style", MINI_STYLES, MINI_STYLE_KEYS[0])
+        self.mini_song_accent = settings.value("mini_song_accent", False, type=bool)
+        self.update_auto = settings.value("update_auto", True, type=bool)
         self.motion_time = 0.0
         self.motion_phase = 0.0
         # The same animation clock, never wrapped, for effects that should not repeat each loop.
@@ -566,6 +573,10 @@ class Controller(QObject):
         if name == "song_offset":
             self.set_song_offset(value)
             return
+        if name == "mini_style" and value not in MINI_STYLE_KEYS:
+            return
+        if name == "floating_size":
+            value = max(FLOATING_SIZES[0], min(FLOATING_SIZES[1], int(value)))
         if name == "offset":
             self.set_song_offset(int(value) - self.global_offset)
             return
@@ -878,6 +889,11 @@ class MainWindow(DesktopBackdrop):
         # The taskbar and Alt+Tab say "Halo"; the window itself shows no title (see titlebar.py).
         self.setWindowTitle("Halo")
         self.setWindowIcon(make_icon())
+        # Scrolling a page scrolls it; sliders and dropdowns take the wheel only once clicked.
+        self.wheel_guard = install_wheel_guard(self)
+        # Settings shows the update state, so the service exists before the pages are built.
+        self.updates = UpdateService(controller, parent=self)
+        self.update_prompt = None
         build_main(self, controller)
         # Windows' ordinary frame, kept for the fullscreen room; the workspace lets the wall run to the top.
         self._framed_flags = self.windowFlags()
@@ -922,19 +938,37 @@ class MainWindow(DesktopBackdrop):
         menu.addAction("Modes", self.open_modes)
         menu.addAction("Immersive view", self.fullscreen)
         menu.addAction("Mini player", self.open_mini_player)
+        styles = menu.addMenu("Mini player style")
+        group = QActionGroup(styles)
+        self.tray_mini_styles = {}
+        for key, name, description in MINI_STYLES:
+            action = styles.addAction(name)
+            action.setCheckable(True)
+            action.setToolTip(description)
+            action.setChecked(controller.mini_style == key)
+            action.triggered.connect(lambda _checked=False, key=key: self.choose_mini_style(key))
+            group.addAction(action)
+            self.tray_mini_styles[key] = action
         menu.addSeparator()
         self.tray_glow = menu.addAction("Screen-edge glow")
         self.tray_glow.setCheckable(True)
         self.tray_glow.setChecked(controller.glow)
         self.tray_glow.triggered.connect(self.glow.setChecked)
         menu.addSeparator()
+        self.tray_update = menu.addAction(self.updates.action_text(), self.update_clicked)
         menu.addAction("Quit Halo", self.quit)
         self.tray.setContextMenu(menu)
         self.tray.activated.connect(lambda reason: self.reopen() if reason == QSystemTrayIcon.ActivationReason.Trigger else None)
         self.tray.show()
+        self.tray.messageClicked.connect(self._tray_message_clicked)
+        self.updates.changed.connect(self._sync_update_action)
+        self.updates.offer.connect(self.offer_update)
+        self.updates.notice.connect(self._update_notice)
+        self.updates.quitRequested.connect(self.quit)
         controller.trackChanged.connect(self.refresh)
         controller.lyricsChanged.connect(self.refresh_lyrics)
         controller.settingChanged.connect(lambda: self.tray_glow.setChecked(controller.glow))
+        controller.settingChanged.connect(self._sync_mini_style)
         controller.settingChanged.connect(self.place_overlay)
         controller.settingChanged.connect(self.sync_navigation)
         controller.paletteChanged.connect(self.update)
@@ -1012,16 +1046,31 @@ class MainWindow(DesktopBackdrop):
             maximized = self._return_maximized
             placing = self._placing_initial
             self._placing_initial = True
+            self._leaving_room = True
             try:
                 self.showNormal()
+                # The strip goes back on before the window is placed. Its saved place was measured with the
+                # strip, and when the strip returns Windows keeps the frame where it is and grows the wall up
+                # into the old title bar, so placing first left the window that much too high.
+                self._title_strip(True)
                 if maximized:
                     self.showMaximized()
                 elif self._workspace_geometry is not None:
-                    self.setGeometry(self._workspace_geometry)
+                    target = QRect(self._workspace_geometry)
+                    self.setGeometry(target)
+                    # Qt is still working from the old frame's margins for a moment, which leaves the window a
+                    # few pixels off and creeping further each trip; place it again once the new frame is known.
+                    QTimer.singleShot(0, self, lambda: self._settle_workspace_geometry(target))
             finally:
                 self._return_maximized = maximized
                 self._placing_initial = placing
+                self._leaving_room = False
         self._title_strip(True)
+
+    def _settle_workspace_geometry(self, target):
+        if (not self.exiting and not self.isFullScreen() and not self.isMaximized() and not self.isMinimized()
+                and self.geometry() != target):
+            self.setGeometry(target)
 
     def navigate(self, page):
         """Change the visible page; no dialog or second native window is opened."""
@@ -1124,7 +1173,9 @@ class MainWindow(DesktopBackdrop):
         self.show_sheet(self.position_dialog, "Lyric placement")
 
     def open_settings(self):
-        if self.current_page == "settings" and not self._immersive_active():
+        # Lighting, Lyrics and Immersive are sections of Settings too; the Settings key always goes to General.
+        if (self.current_page == "settings" and not self._immersive_active()
+                and getattr(self.settings_dialog, "section", "general") == "general"):
             self.reopen()
             self.sync_navigation()
             return
@@ -1312,11 +1363,6 @@ class MainWindow(DesktopBackdrop):
         """Rest the window and keep playback at hand in a small always-on-top card."""
         if self.exiting:
             return
-        if self.mini_player is None:
-            self.mini_player = MiniPlayer(self.c)
-            self.mini_player.setWindowIcon(self.windowIcon())
-            self.mini_player.restoreRequested.connect(self.restore_from_mini)
-            self.mini_player.closeRequested.connect(self.close_mini_player)
         self._remember_window_state()
         if self.sheet.isVisible():
             self.sheet.dismiss()
@@ -1324,11 +1370,46 @@ class MainWindow(DesktopBackdrop):
             self._show_workspace()
             self.navigate(self._immersive_return_page)
         self.hide()
+        self._show_mini()
+        self._sync_preview_activity()
+
+    def _show_mini(self, previous=None):
+        """Show the mini player in the chosen style; in another style's place when one is given."""
+        if self.mini_player is None:
+            self.mini_player = create_mini(self.c)
+            self.mini_player.setWindowIcon(self.windowIcon())
+            self.mini_player.restoreRequested.connect(self.restore_from_mini)
+            self.mini_player.closeRequested.connect(self.close_mini_player)
         self.mini_player.refresh()
-        self.mini_player.place()
+        if previous is not None:
+            self.mini_player.place_like(previous)
+            self.mini_player.remember()
+        else:
+            self.mini_player.place()
         self.mini_player.show()
         self.mini_player.raise_()
-        self._sync_preview_activity()
+
+    def choose_mini_style(self, key):
+        """Pick a mini player style from the tray, and show the mini player in it."""
+        self.c.set("mini_style", key)
+        if self.mini_player is None or not self.mini_player.isVisible():
+            self.open_mini_player()
+
+    def _sync_mini_style(self):
+        """Swap the mini player for the newly chosen style, in the same corner of the screen."""
+        for key, action in getattr(self, "tray_mini_styles", {}).items():
+            if action.isChecked() != (self.c.mini_style == key):
+                action.setChecked(self.c.mini_style == key)
+        mini = self.mini_player
+        if mini is None or mini.STYLE == self.c.mini_style:
+            return
+        visible = mini.isVisible() and not self.exiting
+        previous = mini.frameGeometry() if visible else None
+        mini.hide()
+        mini.deleteLater()
+        self.mini_player = None
+        if visible:
+            self._show_mini(previous)
 
     def restore_from_mini(self):
         self.close_mini_player()
@@ -1377,6 +1458,48 @@ class MainWindow(DesktopBackdrop):
         self.showFullScreen()
         self.activateWindow()
         self._sync_preview_activity()
+
+    def update_clicked(self):
+        """The tray's and Settings' update key: check now, or open the update that is waiting."""
+        if self.updates.state in ("ready", "available"):
+            self.offer_update(True)
+        elif not self.updates.busy():
+            self.updates.check(manual=True)
+
+    def offer_update(self, asked=False):
+        """Ask before installing, in the window's sheet. Unasked, never over the room or another sheet."""
+        if self.updates.state not in ("ready", "available") or self.exiting:
+            return
+        on_screen = self.isVisible() and not self.isMinimized() and not self._immersive_active()
+        if asked or (on_screen and not self.sheet.isVisible()):
+            if self._immersive_active():
+                self.immersive.leave()
+            if not self.isVisible() or self.isMinimized():
+                self.reopen()
+            if self.update_prompt is None:
+                self.update_prompt = UpdatePrompt(self.updates, self)
+            self.update_prompt.sync()
+            self.show_sheet(self.update_prompt, self.update_prompt.title())
+        elif self.updates.state == "ready":
+            # Out of sight (tray, Immersive, another sheet): say so, and open the card on a click.
+            self.tray.showMessage(f"Halo {self.updates.release.version} is ready",
+                                  "Click to see what's new and install it.", make_icon(), 10000)
+
+    def _tray_message_clicked(self):
+        # Halo's only tray notifications are about updates; a click opens the one that is waiting.
+        if self.updates.state in ("ready", "available"):
+            self.offer_update(True)
+
+    def _update_notice(self, title, message):
+        """Results of a check or an update. Settings shows them on its own page; elsewhere the tray does."""
+        on_settings = (self.isVisible() and not self.isMinimized() and self.current_page == "settings"
+                       and getattr(self.settings_dialog, "section", "") == "general")
+        if not on_settings:
+            self.tray.showMessage(title, message, make_icon(), 8000)
+
+    def _sync_update_action(self):
+        self.tray_update.setText(self.updates.action_text())
+        self.tray_update.setEnabled(not self.updates.busy())
 
     def import_lrc(self):
         filename, _ = QFileDialog.getOpenFileName(self, "Import timed lyrics for this song", "", "Timed lyrics (*.lrc *.elrc *.lyricsfile.yaml *.yaml *.yml)")
@@ -1458,7 +1581,9 @@ class MainWindow(DesktopBackdrop):
             self._placing_initial = True
             try:
                 super().changeEvent(event)
-                if (not self._immersive_active() and not self.isMinimized()
+                # While _show_workspace is leaving the room it maximises the window itself, after the strip
+                # is back; maximising here first would place the window with the room's frame.
+                if (not self._immersive_active() and not self.isMinimized() and not getattr(self, "_leaving_room", False)
                         and maximized and not self.isMaximized()):
                     self.showMaximized()
             finally:
@@ -1551,6 +1676,7 @@ def main():
                         choices=[item[0] for item in LYRIC_STYLES], help="Choose a lyric animation")
     parser.add_argument("--immersive-mode", choices=[item[0] for item in IMMERSIVE_SCENES], help="Choose an immersive scene")
     parser.add_argument("--appearance", choices=[item[0] for item in theme.APPEARANCES], help="Light wall, dark wall, or match Windows")
+    parser.add_argument("--mini-style", choices=MINI_STYLE_KEYS, help="Choose how the mini player looks")
     args = parser.parse_args()
     source_root = Path(__file__).resolve().parent.parent
     default_data = Path(os.getenv("LOCALAPPDATA", str(source_root))) / "Halo" if getattr(sys, "frozen", False) else source_root / ".data"
@@ -1569,14 +1695,18 @@ def main():
         return 0
     settings = QSettings(str(data_dir / "settings.ini"), QSettings.Format.IniFormat)
     c = Controller(settings, offline=args.offline)
-    for setting in ("halo_mode", "lyric_style", "immersive_mode", "appearance"):
+    for setting in ("halo_mode", "lyric_style", "immersive_mode", "appearance", "mini_style"):
         if getattr(args, setting):
             c.set(setting, getattr(args, setting))
     theme.follow(c.appearance)
     theme.apply(theme.resolve(c.appearance))
     window = MainWindow(c)
     app.aboutToQuit.connect(c.close)
+    app.aboutToQuit.connect(window.updates.close)
     window.show()
+    if not (args.snapshot or args.report):
+        # Finish an update that just happened, then check GitHub on schedule (packaged app only).
+        window.updates.start()
     if args.settings:
         QTimer.singleShot(0, window.open_settings)
     if args.modes and not args.snapshot:

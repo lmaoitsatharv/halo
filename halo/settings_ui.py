@@ -24,6 +24,8 @@ from .mode_catalog import available_specs
 from .glass import GlassSlider, icon as line_icon
 from .gallery import INK, SHADOW
 from .theme import hexc, pick, style, painted_icon, APPEARANCES
+from .mini_player import MINI_STYLES
+from .updates import AUTO_UPDATE_HINT
 from .scene_extras import extra_scene_layout, paint_extra_scene
 
 
@@ -1070,6 +1072,11 @@ class SettingsStudio(QDialog):
         self.row(essential, "Appearance", "A light wall, or the dark wall after hours. Match Windows follows your Windows setting for apps.",
                  self.appearance_select)
         self.owner.setting_controls["appearance"] = self.appearance_select
+        self.mini_style_select = selector(self.c, "mini_style", MINI_STYLES, "Mini player style")
+        self.mini_style_select.setMinimumWidth(156)
+        self.row(essential, "Mini player", "How the small always-on-top player looks (Ctrl+Shift+M). Right-click it to switch styles.",
+                 self.mini_style_select)
+        self.owner.setting_controls["mini_style"] = self.mini_style_select
         self.owner.reduced_motion = self.switch(essential, "reduced_motion", "Reduce motion", "Keep the light and words calm. Transitions settle instantly.")
         self.row(essential, "When you close Halo", "Keep your music, glow and floating lyrics in the system tray.", text_label("Keep running", "studioValue"))
         library = self.group(general, "Artwork & connection")
@@ -1077,6 +1084,8 @@ class SettingsStudio(QDialog):
         self.music_source = text_label("Any player", "studioValue")
         self.row(library, "Music source", "Halo follows whatever is playing in Windows media controls: Spotify, a browser tab or a music app.",
                  self.music_source)
+        if getattr(self.owner, "updates", None) is not None:
+            self.build_updates(general)
         general.addStretch()
 
         halo = self.page()
@@ -1111,7 +1120,7 @@ class SettingsStudio(QDialog):
         lyrics.addWidget(self.lens_status)
         desktop = self.group(lyrics, "On your desktop")
         self.owner.floating = self.switch(desktop, "floating", "Floating lyrics", "Keep words above your desktop while Halo is minimized.")
-        self.row(desktop, "Position", "Choose a monitor and place your words.", action("Adjust…", self.owner.open_position_settings, "ghost"))
+        self.row(desktop, "Position & size", "Choose a monitor, place your words and set how large they are.", action("Adjust…", self.owner.open_position_settings, "ghost"))
         timing = self.group(lyrics, "Timing & lyrics")
         self.lyric_song_label = text_label("", "studioRowTitle")
         self.lyric_song_label.setTextFormat(Qt.TextFormat.PlainText)
@@ -1173,6 +1182,41 @@ class SettingsStudio(QDialog):
         self.build_background_controls(scenes)
         scenes.addStretch()
         self.sync_lyrics()
+
+    def build_updates(self, page):
+        """The version, what the updater is doing, a key to check or install, and the automatic switch."""
+        service = self.owner.updates
+        updates = self.group(page, "Updates")
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 14, 0, 14)
+        row.setSpacing(14)
+        words = QVBoxLayout()
+        words.setSpacing(5)
+        words.addWidget(text_label(f"Halo {service.version}", "studioRowTitle"))
+        self.update_status = text_label("", "studioHint")
+        self.update_status.setWordWrap(True)
+        words.addWidget(self.update_status)
+        row.addLayout(words, 1)
+        self.update_button = action("Check now", self.owner.update_clicked)
+        self.update_button.setMinimumWidth(132)
+        self.update_button.setAccessibleName("Updates")
+        row.addWidget(self.update_button, 0, Qt.AlignmentFlag.AlignVCenter)
+        updates.addLayout(row)
+        self.switch(updates, "update_auto", "Check for updates automatically", AUTO_UPDATE_HINT)
+        service.changed.connect(self.sync_updates)
+        self.sync_updates()
+
+    def sync_updates(self):
+        service = self.owner.updates
+        self.update_status.setText(service.status_text())
+        self.update_button.setText(service.button_text())
+        self.update_button.setEnabled(not service.busy())
+        self.update_button.setObjectName("primary" if service.state == "ready" else "")
+        self.update_button.setToolTip({"ready": "See what's new and install it",
+                                       "available": "See the new version and where to get it"}.get(
+                                           service.state, "Ask GitHub for a newer release now"))
+        self.update_button.updateGeometry()
+        self.update_button.update()
 
     def learn_timing_clicked(self, checked):
         if checked and not self.c.hide_learn_word_timing_notice and show_learn_notice(self):
@@ -1334,6 +1378,8 @@ class SettingsStudio(QDialog):
     def showEvent(self, event):
         super().showEvent(event)
         self.sync_lens_status()
+        if hasattr(self, "update_status"):
+            self.sync_updates()  # "Checked … ago" moves on while the page is away
         QTimer.singleShot(0, self, self.sync_visibility)
 
     def hideEvent(self, event):

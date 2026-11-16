@@ -2,7 +2,7 @@
 
 A Windows companion for the music you play, inspired by ambient music lighting and desktop lyrics. It follows **Spotify**, a browser tab (Spotify or Apple Music on the web, YouTube, YouTube Music) or a music app. Independent software; not affiliated with Spotify, Apple, Google, Lumn or Verci.
 
-> **Version:** this guide describes **Halo 0.6.0**, the **Gallery wall** redesign. Halo 0.4.0 and 0.5.0 used a dark glass window with a sidebar; their pages and settings are the same, but they sit on the wall now.
+> **Version:** this guide describes **Halo 0.7.0**. Since 0.6.0 Halo has been the **Gallery wall** design; 0.4.0 and 0.5.0 used a dark glass window with a sidebar, with the same pages and settings.
 
 ## Download for Windows
 
@@ -17,19 +17,34 @@ Windows 10 (1809+) or Windows 11 · 64-bit · Portable · No Python or GitHub ac
 
 Keep **Halo.exe**, **_internal** and **licenses** together in the extracted folder. Run the app from that folder, after extraction. No installation is needed. To quit completely, right-click the Halo icon in the system tray → **Quit Halo**.
 
-**Updating?** Quit Halo from its tray icon, extract the new ZIP into a fresh folder, then open the new **Halo.exe**. Your saved preferences are kept separately in Windows.
+**Updating.** From 0.7.0 on, Halo updates itself: it checks GitHub's releases when it starts and every six hours, downloads a new version in the background and asks before installing it (**Update now** or **Later**). Halo then closes, puts the new version in place and opens again; if the new version doesn't start, Halo puts the old one back. Your preferences are kept separately in Windows and are not touched. Turn the checks off in **Settings → General → Updates**, or use **Check now** there or **Check for updates** in the tray menu. Halo updates itself only when its folder can be changed without administrator rights; otherwise, download the new ZIP as before.
+
+**Coming from 0.6.0 or earlier?** Those versions can't update themselves, so download 0.7.0 once by hand: quit Halo from its tray icon, extract the new ZIP into a fresh folder, then open the new **Halo.exe**. Your preferences carry over.
 
 [Website](https://halo-music-companion.vercel.app) · [All releases and checksums](https://github.com/lmaoitsatharv/halo/releases) · [Troubleshooting](#troubleshooting)
 
 ![Halo's Listening page on the light wall, playing its original visual demo](docs/images/halo-desktop.png)
 
-## What's new in 0.6.0
+## What's new in 0.7.0
+
+- **Halo updates itself.** New versions download in the background, are checked against the release's SHA-256 checksums, and install when you choose **Update now**; a version that fails to start is rolled back. See [Download](#download-for-windows).
+- **Five mini player styles.** **Case** (the lit case), **Notch** (a tall card with Halo's mark, the clock on a bright tab, the cover with three lines of lyrics, a seek bar and big keys; green, or the song's colour with **Song colour accent**), **Capsule** (a slim pill with a round cover ringed by progress), **Disc** (the cover as a record that turns while the song plays) and **Poster** (the cover edge to edge with the lyric lettered over it). Right-click the mini player to switch, press **Ctrl+Shift+M** inside it for the next style, or choose in the tray menu or **Settings → General → Mini player**. A new style takes the old one's corner of the screen.
+- **Floating lyrics size.** **Lyrics → Position & size → Adjust…** has a **Size** slider from 50% to 200%; the words and their area grow or shrink together and stay on screen.
+- **Quieter breaks.** Afterimage, Cascade, Starline, Neon and Impact used to show the lines either side of an instrumental break around an empty centre; now the words fade away for the break and the next line fades in when the singing returns. The other styles keep their own break looks.
+- **When no lyrics are found**, the Listening wall, Immersive and the mini player say **Your music. A little more alive.**
+- **Scrolling scrolls.** Sliders and dropdowns change with the mouse wheel only after you click them, so scrolling down Settings no longer changes whatever the pointer crosses.
+- **Smoother menus.** In Immersive's menu and the mini player's menu, moving diagonally toward an open flyout keeps it open, even across other rows.
+- **Fixes.** Leaving Immersive puts the window back exactly where it was (a window that wasn't maximised used to come back too high). The **Settings** key opens Settings from Lighting, Lyrics and Immersive too.
+
+![Halo's five mini player styles: Case, Notch (green and in the song's colour), Capsule, Disc and Poster](docs/images/halo-mini-players.png)
+
+## In 0.6.0
 
 - **The Gallery wall.** The window is a wall: the cover hangs as a framed print under a spotlight tinted by the song, a museum label carries the title, artist and album, and the lyric is lettered on the wall with the word being sung in the song's colour. The spotlight breathes only while music plays. Navigation is one row of places (**Listening**, **Modes**, **Lighting**, **Lyrics**, **Immersive**, with **Ctrl+1–5**) and a **Settings** button. Playback sits on a dark handset on every page.
 - **Dark mode.** **Settings → General → Appearance** offers **Match Windows** (the default), **Light** and **Dark**: the same wall after hours.
 - **The wall runs to the window's top edge**, with only Windows' minimise, maximise and close keys on it.
 - **Any player.** Halo follows whatever plays through Windows' media controls: Spotify, a browser tab or a music app. If two play at once, it stays on the one it shows; when that one pauses and another plays, it switches. Video titles from browser tabs are cleaned before the lyrics search, so "Artist - Song (Official Video)" looks up the song.
-- **Mini player** (**Ctrl+Shift+M**): a small always-on-top case with the print, the song, the line being sung and a fine progress line. Only the play key shows at rest; hover or Tab in for previous and next, the times, and the keys back to Halo and to the tray. Click the print to bring Halo back.
+- **Mini player** (**Ctrl+Shift+M**): a small always-on-top case with the print, the song, the line being sung and a fine progress line. Only the play key shows at rest; hover or Tab in for previous and next, the times, and the keys back to Halo and to the tray. Click the print to bring Halo back. (0.7.0 adds four more styles.)
 - **Lyric share cards** (**Ctrl+Shift+S**): a 1080×1350 picture of the line being sung, the print and the label, on a light or dark wall. **Copy** or **Save PNG…**. Made on your PC; nothing is uploaded.
 - **Immersive menu.** One key at the top left of Immersive holds **Room ›**, **Lyric style ›**, **Lighting ›**, a **Background** switch, Background settings, Modes and **Return to Halo**. The room's player bar is the same handset as the main window, with Mini player and Return. **F11** goes in and back out.
 - **Better word timing.** Without word timestamps, words are now placed at the song's own pace, so a line ends when the singing would rather than being stretched to the next line. On 39 hand-timed songs this cut the typical error from 272 ms to 189 ms. With **Learn word timing from playback** on, a new model that has heard real singing places words on replays: typical error 71 ms (was 128 ms), and two thirds of lines are learned on the first listen. See [Lyrics](#motion-and-lyric-styles).
@@ -46,11 +61,11 @@ Earlier highlights: the Modes library with live previews, smoother audio pulses,
 1. Open **Halo.exe** from the extracted **Halo** folder. If you built from source, it is in `dist/Halo/Halo.exe` (or `<dir>/Halo/Halo.exe` when built with `--dist-dir <dir>`).
 2. Play a song. Halo detects it automatically through Windows' media controls; no login, API key or Premium account is required by Halo. **Settings → General → Music source** shows which player Halo is following.
 3. The row at the top holds **Listening**, **Modes**, **Lighting**, **Lyrics** and **Immersive** (**Ctrl+1** to **Ctrl+5**). **Settings** (**Ctrl+,**) opens on **General**; **‹ Back to listening** or **Esc** leaves it. **Lighting**, **Lyrics** and **Immersive** each show a live monitor preview on the right. Changes save automatically, and the handset stays available on every page. **Lighting** contains the screen-edge and audio switches, style picker, light sliders and colour controls. **Album colours** lights the halo with the two most vivid colours in the cover, raising dark ones while keeping their hue, and fades between tracks; lyrics and accents use readable tints of the same colours. **General** has **Appearance**, **Reduce motion** and the optional **Find missing covers online** switch, which is off by default.
-4. The handset holds previous, play, next and the timeline, then **Share** (**Ctrl+Shift+S**), **Mini player** (**Ctrl+Shift+M**) and **Immersive** (**F11**). **Space** plays and pauses; **Ctrl+Left** and **Ctrl+Right** skip.
+4. The handset holds previous, play, next and the timeline, then **Share** (**Ctrl+Shift+S**), **Mini player** (**Ctrl+Shift+M**) and **Immersive** (**F11**). **Space** plays and pauses; **Ctrl+Left** and **Ctrl+Right** skip. The mini player stays on top in the style you choose (Case, Notch, Capsule, Disc or Poster); drag it anywhere, click its cover or press **Esc** to bring Halo back, and right-click it to change its style.
 5. In **Lyrics**, turn on **Floating lyrics**, then minimize Halo or close its window to the tray. Lyrics keep advancing above your desktop with clicks passing through them. Restoring the window, or opening the mini player, hides the floating text.
-   Use **Adjust…** in the Position row to choose a monitor, drag the preview, adjust horizontal/vertical position, or use the nine presets. **Preview on desktop** shows the actual placement while the settings are open. **Reset position** restores bottom-center placement on the primary display.
+   Use **Adjust…** in the **Position & size** row to choose a monitor, drag the preview, adjust horizontal/vertical position, use the nine presets, or make the words larger or smaller with **Size** (50–200%). **Preview on desktop** shows the actual placement while the settings are open. **Reset position** restores bottom-center placement on the primary display.
 6. **Immersive** (**F11**) opens the selected room inside the same window: Listening room, Lyrics only, Cinema or Orbit. The menu key at its top left changes the room, lyric style and lighting, switches your background on or off, and returns to Halo. The header and player fade, and the cursor hides, after 1.5 seconds without cursor movement; move the mouse to reveal them. Press **Space** to play/pause and **Esc** or **F11** to return.
-7. Right-click Halo's icon in the system tray to open Halo, Settings, Modes, the mini player or immersive view, toggle the screen-edge glow, or **Quit Halo** completely.
+7. Right-click Halo's icon in the system tray to open Halo, Settings, Modes, the mini player (and choose its style) or immersive view, toggle the screen-edge glow, **Check for updates**, or **Quit Halo** completely.
 
 **Try the visual demo** on the Listening page previews lighting and original timed text without a player. **Back to your music** ends the demo. The demo does not play audio.
 
@@ -143,6 +158,8 @@ Song details and artwork are read locally through [Windows media controls](https
 
 Players sometimes omit their cover from Windows' media feed. Halo retries late or failed artwork and refreshes the cover and album colours when it arrives. If you enable **Find missing covers online**, Halo sends song-title/artist search terms to [MusicBrainz](https://musicbrainz.org/doc/MusicBrainz_API) and requests the matching release's front cover from [Cover Art Archive](https://musicbrainz.org/doc/Cover_Art_Archive/API). The player's artwork takes priority. No login details or audio are sent for cover lookup.
 
+**Updates.** Unless you turn off **Check for updates automatically**, Halo asks GitHub's API for the latest release of this project when it starts and every six hours (or, when GitHub is limiting requests, its release page), and downloads the new version from GitHub's release downloads. These requests carry only a generic app name ("Halo-Updater"): no song, account, settings or PC details. GitHub sees your IP address, as any website does. A download is installed only if its SHA-256 matches the release's `SHA256SUMS.txt`. Downloads wait in `updates` beside Halo's settings until installed or replaced.
+
 Audio-reactive mode measures **all sound on the current default output device**, including other apps. It does not use the microphone, save recordings or send audio anywhere. If the output device changes, it reconnects. Silence and incompatible devices fall back to gentle motion.
 
 **Learn word timing from playback** is optional and off by default, in **Lyrics → Timing & lyrics**. While it is on and a song is playing, a small model running on this PC analyses **all sound on the current default output device**, including other apps, to place each lyric word. Audio stays in memory for about 30 seconds at most and is never saved or sent anywhere; only word times are stored, in a `learned-timing` folder beside your settings, for up to 512 songs. **Forget learned timing** and **Forget all** remove them. It cannot follow lyrics in scripts other than Latin, or imported lyrics; those keep the estimate. Spotify's User Guidelines restrict recording content and feeding it into machine learning models, so turn this on only if you accept that.
@@ -194,7 +211,7 @@ Source runs keep settings/logs in `.data/` beside the source. Packaged builds us
 
 Install `requirements-dev.txt` for the packaging tool (PyInstaller). `build.py` runs PyInstaller with command-line options; it does not use a `.spec` file. It uses a clean native-library search path and includes an icon, dependency notices, this guide, the `docs` folder and a portable ZIP. Run the build in a normal Windows development environment; restricted application containers cannot access the desktop media session.
 
-By default, `build.py` writes the app folder to `dist\Halo` and the archive to `dist\Halo-Windows-x64.zip`. With `--dist-dir <dir>`, it writes `<dir>\Halo` and `<dir>\Halo-Windows-x64.zip` instead. The package contains `source-manifest.json`, which records the exact module hashes, and `VERSION.txt`, which records the version from `halo/__init__.py`.
+By default, `build.py` writes the app folder to `dist\Halo`, the archive to `dist\Halo-Windows-x64.zip` and its checksum to `dist\SHA256SUMS.txt`. With `--dist-dir <dir>`, it writes them under `<dir>` instead. Publish `SHA256SUMS.txt` with the ZIP: the updater installs a download only if it matches. The package contains `source-manifest.json`, which records the exact module hashes, and `VERSION.txt`, which records the version from `halo/__init__.py`.
 
 If Halo may be running from an existing build, do not overwrite that folder. Package with `--dist-dir` pointing to a fresh, empty staging folder, check the new executable, quit the running Halo from its tray icon, then replace the existing app folder.
 

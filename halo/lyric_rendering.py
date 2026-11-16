@@ -159,6 +159,54 @@ class WordTimeline:
         return line, self._display_indexes[word_index], fraction
 
 
+# Breaks in the singing. The styles that frame a break with the lines either side of it (quiet
+# verses above and below an empty centre) show nothing instead; the rest keep their own break looks.
+BREAK_BLANK_STYLES = frozenset({"lyric_afterimage", "lyric_cascade", "lyric_starline", "lyric_neon", "lyric_impact"})
+BREAK_MIN = 1.5   # seconds; a shorter pause between lines keeps the words in view
+BREAK_OUT = .5    # seconds for the words to fade as a break begins
+BREAK_IN = .35    # seconds for the next line to fade up when the singing returns
+
+
+def _sung(line):
+    return bool(line.text.strip())
+
+
+def _break_from(lines, index):
+    """Where the run of blank cues holding index starts, and how long it lasts until words come back."""
+    start = index
+    while start > 0 and not _sung(lines[start - 1]):
+        start -= 1
+    following = next((line.time for line in lines[index + 1:] if _sung(line)), None)
+    return lines[start].time, (following - lines[start].time) if following is not None else float("inf")
+
+
+def lyric_presence(lines, position, reduced=False):
+    """How much of the lyrics to show: 1 while words are sung, 0 before the first line and through a break.
+
+    A break is a blank cue (or a run of them) lasting BREAK_MIN or longer. The words fade out as it
+    begins and the next line fades up as it starts; with reduced motion both happen at once.
+    """
+    if not lines:
+        return 1.
+    # Reduced motion: the words go the moment a break begins and return the moment the singing does.
+    ease = (lambda t: 1. if t >= 0 else 0.) if reduced else smooth
+    index = bisect_right([line.time for line in lines], position) - 1
+    if index < 0:
+        return 0.
+    line = lines[index]
+    if not _sung(line):
+        began, length = _break_from(lines, index)
+        if length < BREAK_MIN:
+            return 1.
+        return 1. - ease((position - began) / BREAK_OUT)
+    earlier = index - 1
+    if earlier < 0 or not any(_sung(item) for item in lines[:index]):
+        return ease((position - line.time) / BREAK_IN)  # the first words of the song
+    if not _sung(lines[earlier]) and _break_from(lines, earlier)[1] >= BREAK_MIN:
+        return ease((position - line.time) / BREAK_IN)
+    return 1.
+
+
 @dataclass
 class TextShape:
     path: QPainterPath

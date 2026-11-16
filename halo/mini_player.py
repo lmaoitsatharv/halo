@@ -1,15 +1,22 @@
-"""The mini player: a small dark case for the song, always on top, while Halo's window rests.
+"""The mini player: a small always-on-top window for the song, while Halo's window rests.
 
-At rest it holds only what the song needs: the framed print under the song's light, the title and
-artist, the line being sung with its word in that light, a fine progress line and the play key.
-Hovering, or tabbing in, brings up previous and next beside play, the times, and two small keys on
-the case's top edge: back to Halo, and close to the tray. The case is dark in both lights, so it
-sits well on any desktop.
+It comes in several styles (MINI_STYLES). They share one window, MiniBase: it stays on top, drags
+from anywhere, remembers where it was left, answers the same keys (Space, Ctrl+Left, Ctrl+Right,
+Esc), and opens a Windows 11 style menu on right-click for switching styles. Each style decides
+only how the song looks and where its keys sit.
+
+The Case style lives here: a small dark case holding the framed print under the song's light, the
+title and artist, the line being sung with its word in that light, a fine progress line and the
+play key. Hovering, or tabbing in, brings up previous and next beside play, the times, and two
+small keys on the case's top edge: back to Halo, and close to the tray. The case is dark in both
+lights, so it sits well on any desktop.
+
+The other styles are in mini_styles.py.
 """
 import math
 import time
 
-from PySide6.QtCore import Qt, QRectF, QPointF, QPoint, Signal
+from PySide6.QtCore import Qt, QRectF, QPointF, QPoint, QTimer, Signal
 from PySide6.QtGui import (QColor, QPainter, QPainterPath, QPen, QFont, QFontMetricsF, QKeySequence, QShortcut,
                            QGuiApplication, QLinearGradient, QPixmap)
 from PySide6.QtWidgets import QGraphicsOpacityEffect, QWidget
@@ -17,10 +24,30 @@ from PySide6.QtWidgets import QGraphicsOpacityEffect, QWidget
 from .gallery import (HANDSET_INK, HANDSET_MUTED, HANDSET_RAISED, FRAME, MAT, WHITE, HandsetButton, _Hover, face,
                       tint, mix, paint_shadow, paint_spotlight, song_light, contrast)
 from .wall import wall_lines, line_words, sung_word
+from .models import TAGLINE, finding_lyrics
 
 CASE_TOP = QColor("#1a2420")
 CASE_LOW = QColor("#0f1513")
 CASE_EDGE = QColor("#060a09")
+
+# Every look the mini player can take: (key, name, what it is). The first is the default.
+MINI_STYLES = (
+    ("case", "Case", "The cover as a small print in a lit case, with the line being sung."),
+    ("notch", "Notch", "A tall card: the cover, three lines of lyrics, the clock on a bright tab, and big keys."),
+    ("capsule", "Capsule", "A slim pill: a round cover ringed by progress, the line being sung, and play."),
+    ("disc", "Disc", "The cover as a record that turns while the song plays, ringed by its progress."),
+    ("poster", "Poster", "The cover, edge to edge, with the line being sung lettered over it."),
+)
+MINI_STYLE_KEYS = tuple(spec[0] for spec in MINI_STYLES)
+
+
+def mini_style_name(key):
+    return next((name for style, name, _ in MINI_STYLES if style == key), MINI_STYLES[0][1])
+
+
+def next_mini_style(key):
+    keys = MINI_STYLE_KEYS
+    return keys[(keys.index(key) + 1) % len(keys)] if key in keys else keys[0]
 
 
 def _ease(t):
@@ -98,14 +125,19 @@ class CaseChip(_Hover):
             p.drawEllipse(body.adjusted(-1.5, -1.5, 1.5, 1.5))
 
 
-class MiniPlayer(QWidget):
-    """A small always-on-top case: the print, the song, the line being sung, and playback."""
+class MiniBase(QWidget):
+    """The window every mini player style shares: on top, draggable, remembered, with the same keys and menu.
+
+    A style sets STYLE and SIZE, makes its keys in make_key(), places them in arrange(), and paints
+    in paintEvent(). Keys listed in hidden_keys come up while the pointer is over the window or the
+    keyboard is in it.
+    """
     restoreRequested = Signal()
     closeRequested = Signal()
-    SIZE = (384, 136)
-    REHANG = .6
-    RISE = .32
+    STYLE = ""
+    SIZE = (320, 120)
     REVEAL = .16  # seconds for the hidden keys to come up or go
+    RISE = .32    # seconds for a new lyric line to settle
 
     def __init__(self, controller):
         super().__init__(None, Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
@@ -117,27 +149,25 @@ class MiniPlayer(QWidget):
         self.setMouseTracking(True)
         self._drag = None
         self._pressed_at = None
+        self._seeking = False
         self.pixmap = QPixmap()
         self.track_key = None
-        self.print_cache = QPixmap()
-        self.print_key = None
-        self.previous_print = QPixmap()
-        self.hung_at = 0.
-        self.shown_index = None
-        self.changed_at = 0.
-        self.scroll = 0.
-        self.lyric_room = 0.
+        self.art_cache = {}
         self.hovered = False
         self.revealed = 0.
         self._last_tick = None
-        self.previous = MiniKey("previous", lambda: controller.transport("previous"), controller, "Ctrl+Left")
-        self.play = MiniKey("play", lambda: controller.transport("toggle"), controller, "Space")
-        self.next = MiniKey("next", lambda: controller.transport("next"), controller, "Ctrl+Right")
-        self.restore_button = CaseChip("restore", self.restoreRequested.emit, controller, "Esc")
-        self.close_button = CaseChip("close", self.closeRequested.emit, controller)
-        self.hidden_keys = (self.previous, self.next, self.restore_button, self.close_button)
+        self.shown_index = None
+        self.changed_at = 0.
+        self.menu = None
+        self.prepare()
+        self.previous = self.make_key("previous", lambda: controller.transport("previous"), "Ctrl+Left")
+        self.play = self.make_key("play", lambda: controller.transport("toggle"), "Space")
+        self.next = self.make_key("next", lambda: controller.transport("next"), "Ctrl+Right")
+        self.restore_button = self.make_key("restore", self.restoreRequested.emit, "Esc")
+        self.close_button = self.make_key("close", self.closeRequested.emit, "")
+        self.hidden_keys = self.keys_hidden_at_rest()
         self.fades = {}
-        for key in (self.play, *self.hidden_keys):
+        for key in (self.previous, self.play, self.next, self.restore_button, self.close_button):
             key.setParent(self)
         for key in self.hidden_keys:
             effect = QGraphicsOpacityEffect(key)
@@ -145,13 +175,377 @@ class MiniPlayer(QWidget):
             key.setGraphicsEffect(effect)
             self.fades[key] = effect
             key.hide()
-        QShortcut(QKeySequence("Space"), self, activated=lambda: controller.transport("toggle") if controller.track.connected else None)
+        connected = lambda action: (lambda: controller.transport(action) if controller.track.connected else None)
+        QShortcut(QKeySequence("Space"), self, activated=connected("toggle"))
         QShortcut(QKeySequence("Esc"), self, activated=self.restoreRequested.emit)
-        QShortcut(QKeySequence("Ctrl+Left"), self, activated=lambda: controller.transport("previous") if controller.track.connected else None)
-        QShortcut(QKeySequence("Ctrl+Right"), self, activated=lambda: controller.transport("next") if controller.track.connected else None)
+        QShortcut(QKeySequence("Ctrl+Left"), self, activated=connected("previous"))
+        QShortcut(QKeySequence("Ctrl+Right"), self, activated=connected("next"))
+        QShortcut(QKeySequence("Ctrl+Shift+M"), self, activated=self.next_style)
         controller.trackChanged.connect(self.refresh)
         self.arrange()
         self.refresh()
+
+    # --- what each style supplies ---------------------------------------------------------
+
+    def prepare(self):
+        """Set up the style's own state, before its keys are made."""
+
+    def make_key(self, kind, callback, hint):
+        raise NotImplementedError
+
+    def keys_hidden_at_rest(self):
+        return (self.previous, self.next, self.restore_button, self.close_button)
+
+    def arrange(self):
+        """Place the keys for the current reveal. Styles move their keys, then call show_revealed()."""
+        self.show_revealed()
+
+    def art_rect(self):
+        """Where the cover sits; a click there brings Halo back."""
+        return QRectF()
+
+    def seek_rect(self):
+        """A progress bar that can be clicked to move through the song, or an empty rect for none."""
+        return QRectF()
+
+    def song_changed(self, first):
+        """A new song (or new artwork) arrived. first is True when it is the window's first song."""
+
+    def advance(self, step, reduced):
+        """Move this style's own animations along, once a tick while visible."""
+
+    def menu_extras(self):
+        """Extra rows for the right-click menu, under the Style flyout."""
+        return []
+
+    # --- shared state ----------------------------------------------------------------------
+
+    def show_revealed(self):
+        shown = _smooth(self.revealed)
+        for key, effect in self.fades.items():
+            effect.setOpacity(shown)
+            key.setVisible(self.revealed > .02)
+
+    def wants_keys(self):
+        keys = (self.previous, self.play, self.next, self.restore_button, self.close_button)
+        return self.hovered or any(getattr(key, "keyboard_focus", False) for key in keys)
+
+    def refresh(self):
+        c = self.c
+        self.play.setText("Ⅱ" if c.track.playing else "▶")
+        for button in (self.previous, self.play, self.next):
+            button.setEnabled(c.track.connected)
+        key = (c.track.key, len(c.track.artwork))
+        if key != self.track_key:
+            first = self.track_key is None
+            self.song_changed(first)
+            self.track_key = key
+            self.pixmap = QPixmap()
+            if c.track.artwork:
+                self.pixmap.loadFromData(c.track.artwork)
+            self.art_cache.clear()
+        self.update()
+
+    def connected(self):
+        return self.c.track.connected or getattr(self.c, "demo", False)
+
+    def has_lyrics(self):
+        return bool(getattr(self.c.lyrics, "lines", None)) and self.connected()
+
+    def reduced(self):
+        return getattr(self.c, "reduced_motion", False)
+
+    def position(self):
+        return self.c.position + getattr(self.c, "offset", 0) / 1000
+
+    def fraction(self):
+        duration = max(0., float(self.c.track.duration or 0))
+        return max(0., min(1., self.c.position / duration)) if duration > 0 else 0.
+
+    def line(self):
+        """(text, words, index of the word being sung, line index) for the lyric at this moment."""
+        lyrics = self.c.lyrics
+        if not getattr(lyrics, "lines", None):
+            return "", [], -1, -1
+        position = self.position()
+        _, line, index, waiting = wall_lines(lyrics, position)
+        if line is None or not line.text.strip():
+            return "", [], -1, index
+        words = line_words(line)
+        later = [item.time for item in lyrics.lines[index + 1:] if item.time > line.time]
+        current = -1 if waiting else sung_word(line, words, position, later[0] if later else None)
+        return line.text.strip(), words, current, index
+
+    def neighbours(self, index):
+        """The nearest lines with words before and after a line index."""
+        lines = getattr(self.c.lyrics, "lines", None) or []
+        before = next((lines[i].text.strip() for i in range(index - 1, -1, -1) if lines[i].text.strip()), "")
+        after = next((lines[i].text.strip() for i in range(index + 1, len(lines)) if lines[i].text.strip()), "")
+        return before, after
+
+    def note_line(self, index, text):
+        """Start the settle animation when the line being sung changes."""
+        if index != self.shown_index:
+            if self.shown_index is not None and not self.reduced():
+                self.changed_at = time.monotonic()
+            self.shown_index = index
+            self.setAccessibleDescription(text)
+            return True
+        return False
+
+    def settle(self):
+        """0 just after the line changed, 1 once it has settled."""
+        return _ease((time.monotonic() - self.changed_at) / self.RISE) if self.changed_at else 1.
+
+    def lyric_status(self):
+        """What to say with no line to show: the search while it runs, otherwise Halo's tagline."""
+        if not self.connected():
+            return ""
+        return "Finding lyrics…" if finding_lyrics(self.c.lyrics) else TAGLINE
+
+    def art(self, side, radius=0., round_=False):
+        """The cover cropped to a square of this side (rounded, or a circle), cached for the song."""
+        dpr = self.devicePixelRatioF()
+        key = (round(side), round(radius, 1), round_, dpr, self.c.halo_primary.rgba() if self.pixmap.isNull() else 0)
+        cached = self.art_cache.get(key)
+        if cached is not None:
+            return cached
+        image = QPixmap(round(side * dpr), round(side * dpr))
+        image.setDevicePixelRatio(dpr)
+        image.fill(Qt.GlobalColor.transparent)
+        p = QPainter(image)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        rect = QRectF(0, 0, side, side)
+        clip = QPainterPath()
+        if round_:
+            clip.addEllipse(rect)
+        else:
+            clip.addRoundedRect(rect, radius, radius)
+        p.setClipPath(clip)
+        if not self.pixmap.isNull():
+            scaled = self.pixmap.scaled(round(side * dpr), round(side * dpr), Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                                        Qt.TransformationMode.SmoothTransformation)
+            scaled.setDevicePixelRatio(dpr)
+            p.drawPixmap(QPointF(side / 2 - scaled.width() / dpr / 2, side / 2 - scaled.height() / dpr / 2), scaled)
+        else:
+            paint_dark_placeholder(p, rect, song_light(self.c))
+        p.end()
+        if len(self.art_cache) > 8:
+            self.art_cache.clear()
+        self.art_cache[key] = image
+        return image
+
+    # --- placing ---------------------------------------------------------------------------
+
+    def place(self):
+        """Back where it was left, or the lower right of the screen; always fully on a screen."""
+        settings = self.c.settings
+        saved = settings.value("mini_position", None)
+        screen = QGuiApplication.primaryScreen()
+        target = None
+        if isinstance(saved, (list, tuple)) and len(saved) == 2:
+            try:
+                target = QPoint(int(saved[0]), int(saved[1]))
+            except (TypeError, ValueError):
+                target = None
+        elif isinstance(saved, str) and "," in saved:
+            try:
+                x, y = saved.split(",", 1)
+                target = QPoint(int(x), int(y))
+            except ValueError:
+                target = None
+        if target is not None:
+            screen = QGuiApplication.screenAt(target + QPoint(self.width() // 2, self.height() // 2)) or None
+            if screen is None:
+                target = None
+                screen = QGuiApplication.primaryScreen()
+        area = screen.availableGeometry()
+        if target is None:
+            target = QPoint(area.right() - self.width() - 12, area.bottom() - self.height() - 12)
+        self.move(self._inside(target, area))
+
+    def place_like(self, previous):
+        """Take the place of another mini player, holding to whichever screen edges it was nearer."""
+        screen = QGuiApplication.screenAt(previous.center()) or QGuiApplication.primaryScreen()
+        area = screen.availableGeometry()
+        x = previous.right() + 1 - self.width() if previous.center().x() > area.center().x() else previous.left()
+        y = previous.bottom() + 1 - self.height() if previous.center().y() > area.center().y() else previous.top()
+        self.move(self._inside(QPoint(x, y), area))
+
+    def _inside(self, target, area):
+        return QPoint(max(area.left(), min(target.x(), area.right() + 1 - self.width())),
+                      max(area.top(), min(target.y(), area.bottom() + 1 - self.height())))
+
+    def remember(self):
+        self.c.settings.setValue("mini_position", f"{self.x()},{self.y()}")
+
+    # --- the menu --------------------------------------------------------------------------
+
+    def choose_style(self, key):
+        """Ask for another style. The main window swaps the mini player once the setting changes."""
+        if key in MINI_STYLE_KEYS and key != getattr(self.c, "mini_style", ""):
+            self.c.set("mini_style", key)
+
+    def next_style(self):
+        self.choose_style(next_mini_style(getattr(self.c, "mini_style", self.STYLE)))
+
+    def menu_entries(self):
+        from .room_menu import MenuEntry, separator
+        styles = lambda: [MenuEntry("radio", name, run=lambda key=key: self.choose_style(key), tip=description,
+                                    checked=lambda key=key: self.STYLE == key)
+                          for key, name, description in MINI_STYLES]
+        entries = [MenuEntry("submenu", "Style", "mini", submenu=styles, detail=lambda: mini_style_name(self.STYLE)),
+                   MenuEntry("action", "Next style", "forward", run=self.next_style, shortcut="Ctrl+Shift+M")]
+        entries += self.menu_extras()
+        entries += [separator(),
+                    MenuEntry("action", "Back to Halo", "restore", run=self.restoreRequested.emit, shortcut="Esc"),
+                    MenuEntry("action", "Close to the tray", "close", run=self.closeRequested.emit)]
+        return entries
+
+    def open_menu(self, global_point):
+        from .room_menu import RoomMenu
+        if self.menu is not None:
+            self.menu.close()
+            self.menu.deleteLater()
+        self.menu = RoomMenu(self.menu_entries, self, title="Mini player menu")
+        self.menu.open_at(global_point)
+        return self.menu
+
+    def contextMenuEvent(self, event):
+        self.open_menu(event.globalPos())
+        event.accept()
+
+    # --- moving it -------------------------------------------------------------------------
+
+    def tick(self):
+        if not self.isVisible():
+            return
+        now = time.monotonic()
+        elapsed = 0. if self._last_tick is None else now - self._last_tick
+        self._last_tick = now
+        reduced = self.reduced()
+        # At least one step a tick, so the keys still come up when frames are slow or come in a burst.
+        step = 1. if reduced else max(.1, elapsed / self.REVEAL)
+        target = 1. if self.wants_keys() else 0.
+        if self.revealed != target:
+            self.revealed = min(target, self.revealed + step) if target > self.revealed else max(target, self.revealed - step)
+            self.arrange()
+        self.advance(step, reduced)
+        self.advance_time(elapsed, reduced)
+        self.update()
+
+    def advance_time(self, elapsed, reduced):
+        """Animations measured in seconds rather than reveal steps (a turning record, a moving meter)."""
+
+    def enterEvent(self, event):
+        self.hovered = True
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self.hovered = False
+        super().leaveEvent(event)
+
+    def hideEvent(self, event):
+        self.hovered = False
+        self.revealed = 0.
+        self._last_tick = None
+        self.arrange()
+        if self.menu is not None:
+            self.menu.close()
+        super().hideEvent(event)
+
+    def _seek_to(self, x):
+        bar = self.seek_rect()
+        duration = float(self.c.track.duration or 0)
+        if bar.isEmpty() or duration <= 0 or not self.c.track.connected:
+            return
+        fraction = max(0., min(1., (x - bar.left()) / max(1., bar.width())))
+        self.c.seek(fraction * duration)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            if self.seek_rect().contains(event.position()) and self.c.track.connected and self.c.track.duration:
+                self._seeking = True
+                self._seek_to(event.position().x())
+                event.accept()
+                return
+            self._drag = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            self._pressed_at = event.globalPosition().toPoint()
+            event.accept()
+        else:
+            super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self._seeking and event.buttons() & Qt.MouseButton.LeftButton:
+            self._seek_to(event.position().x())
+            event.accept()
+        elif self._drag is not None and event.buttons() & Qt.MouseButton.LeftButton:
+            self.move(event.globalPosition().toPoint() - self._drag)
+            event.accept()
+        else:
+            super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if self._seeking:
+            self._seeking = False
+            event.accept()
+            return
+        if self._drag is not None:
+            moved = self._pressed_at is not None and (event.globalPosition().toPoint() - self._pressed_at).manhattanLength() > 3
+            self._drag = None
+            self._pressed_at = None
+            if moved:
+                self.remember()
+            elif self.art_rect().contains(event.position()):
+                # A click on the cover brings Halo back, like the back-to-Halo key.
+                self.restoreRequested.emit()
+        super().mouseReleaseEvent(event)
+
+    def mouseDoubleClickEvent(self, event):
+        if not self.seek_rect().contains(event.position()):
+            self.restoreRequested.emit()
+
+
+def paint_dark_placeholder(p, rect, light):
+    """No cover yet: the halo ring in the song's light on a dark square, for the dark styles."""
+    p.save()
+    p.setPen(Qt.PenStyle.NoPen)
+    wash = QLinearGradient(rect.topLeft(), rect.bottomRight())
+    wash.setColorAt(0, mix(QColor("#202422"), light, .22))
+    wash.setColorAt(1, QColor("#121514"))
+    p.setBrush(wash)
+    p.drawRect(rect)
+    centre, radius = rect.center(), rect.width() * .24
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.setPen(QPen(tint(WHITE, 26), max(2.5, radius * .12)))
+    p.drawEllipse(centre, radius, radius)
+    p.setPen(QPen(light, max(2., radius * .08), Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+    p.drawArc(QRectF(centre.x() - radius, centre.y() - radius, radius * 2, radius * 2), 40 * 16, 245 * 16)
+    inner = radius * .58
+    p.setPen(QPen(tint(WHITE, 150), max(1.5, radius * .06), Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+    p.drawArc(QRectF(centre.x() - inner, centre.y() - inner, inner * 2, inner * 2), 170 * 16, 220 * 16)
+    p.restore()
+
+
+class MiniPlayer(MiniBase):
+    """The Case: a small always-on-top case with the print, the song, the line being sung, and playback."""
+    STYLE = "case"
+    SIZE = (384, 136)
+    REHANG = .6
+
+    def prepare(self):
+        self.print_cache = QPixmap()
+        self.print_key = None
+        self.previous_print = QPixmap()
+        self.hung_at = 0.
+        self.scroll = 0.
+        self.lyric_room = 0.
+
+    def make_key(self, kind, callback, hint):
+        if kind in ("restore", "close"):
+            return CaseChip(kind, callback, self.c, hint)
+        return MiniKey(kind, callback, self.c, hint)
 
     # --- geometry ---------------------------------------------------------------------
 
@@ -163,6 +557,8 @@ class MiniPlayer(QWidget):
         card = self.card()
         side = card.height() - 24
         return QRectF(card.left() + 12, card.top() + 12, side, side)
+
+    art_rect = frame_rect
 
     def play_rest(self):
         """Where play sits at rest; it steps left to make room for next while the keys are up."""
@@ -193,91 +589,34 @@ class MiniPlayer(QWidget):
         chip_y = round(card.top() - 12 + 4 * (1 - shown))
         self.close_button.move(round(card.right() - 16 - self.close_button.width()), chip_y)
         self.restore_button.move(round(self.close_button.x() - 6 - self.restore_button.width()), chip_y)
-        for key, effect in self.fades.items():
-            effect.setOpacity(shown)
-            key.setVisible(self.revealed > .02)
-
-    def wants_keys(self):
-        return self.hovered or any(getattr(key, "keyboard_focus", False) for key in (self.play, *self.hidden_keys))
+        self.show_revealed()
 
     # --- state ------------------------------------------------------------------------
 
-    def refresh(self):
+    def song_changed(self, first):
         c = self.c
-        playing = c.track.playing
-        self.play.setText("Ⅱ" if playing else "▶")
-        for button in (self.previous, self.play, self.next):
-            button.setEnabled(c.track.connected)
-        key = (c.track.key, len(c.track.artwork))
-        if key != self.track_key:
-            new_song = self.track_key is not None and self.track_key[0] != c.track.key
-            if (new_song and not self.print_cache.isNull() and self.isVisible()
-                    and not getattr(c, "reduced_motion", False)):
-                self.previous_print = QPixmap(self.print_cache)
-                self.hung_at = time.monotonic()
-            else:
-                self.previous_print = QPixmap()
-            self.track_key = key
-            self.pixmap = QPixmap()
-            if c.track.artwork:
-                self.pixmap.loadFromData(c.track.artwork)
-            self.print_key = None
+        if (not first and self.track_key[0] != c.track.key and not self.print_cache.isNull() and self.isVisible()
+                and not self.reduced()):
+            self.previous_print = QPixmap(self.print_cache)
+            self.hung_at = time.monotonic()
+        else:
+            self.previous_print = QPixmap()
+        self.print_key = None
+
+    def refresh(self):
+        super().refresh()
         if not self.isVisible():
             # Opening on a song with words starts with its line in place, not sliding in.
             self.lyric_room = 1. if self.has_lyrics() else 0.
-        self.update()
-
-    def has_lyrics(self):
-        return bool(getattr(self.c.lyrics, "lines", None)) and (self.c.track.connected or getattr(self.c, "demo", False))
 
     def rehanging(self):
         return not self.previous_print.isNull() and time.monotonic() - self.hung_at < self.REHANG
 
-    def place(self):
-        """Back where it was left, or the lower right of the screen; always fully on a screen."""
-        settings = self.c.settings
-        saved = settings.value("mini_position", None)
-        screen = QGuiApplication.primaryScreen()
-        target = None
-        if isinstance(saved, (list, tuple)) and len(saved) == 2:
-            try:
-                target = QPoint(int(saved[0]), int(saved[1]))
-            except (TypeError, ValueError):
-                target = None
-        elif isinstance(saved, str) and "," in saved:
-            try:
-                x, y = saved.split(",", 1)
-                target = QPoint(int(x), int(y))
-            except ValueError:
-                target = None
-        if target is not None:
-            screen = QGuiApplication.screenAt(target + QPoint(self.width() // 2, self.height() // 2)) or None
-            if screen is None:
-                target = None
-                screen = QGuiApplication.primaryScreen()
-        area = screen.availableGeometry()
-        if target is None:
-            target = QPoint(area.right() - self.width() - 12, area.bottom() - self.height() - 12)
-        target.setX(max(area.left(), min(target.x(), area.right() - self.width())))
-        target.setY(max(area.top(), min(target.y(), area.bottom() - self.height())))
-        self.move(target)
-
-    def remember(self):
-        self.c.settings.setValue("mini_position", f"{self.x()},{self.y()}")
-
-    def line(self):
-        """(text, words, index of the word being sung, line index) for the lyric at this moment."""
-        lyrics = self.c.lyrics
-        if not getattr(lyrics, "lines", None):
-            return "", [], -1, -1
-        position = self.c.position + getattr(self.c, "offset", 0) / 1000
-        _, line, index, waiting = wall_lines(lyrics, position)
-        if line is None or not line.text.strip():
-            return "", [], -1, index
-        words = line_words(line)
-        later = [item.time for item in lyrics.lines[index + 1:] if item.time > line.time]
-        current = -1 if waiting else sung_word(line, words, position, later[0] if later else None)
-        return line.text.strip(), words, current, index
+    def advance(self, step, reduced):
+        room = 1. if self.has_lyrics() else 0.
+        if self.lyric_room != room:
+            self.lyric_room = room if reduced else (min(room, self.lyric_room + step * .5) if room > self.lyric_room
+                                                    else max(room, self.lyric_room - step * .5))
 
     # --- painting -----------------------------------------------------------------------
 
@@ -333,7 +672,7 @@ class MiniPlayer(QWidget):
         card = self.card()
         frame = self.frame_rect()
         light = song_light(c)
-        moving = c.track.playing and not getattr(c, "reduced_motion", False)
+        moving = c.track.playing and not self.reduced()
         motion = getattr(c, "motion_time", 0.)
 
         # The case: a dark, slightly lit box with a soft shadow on the desktop.
@@ -382,16 +721,12 @@ class MiniPlayer(QWidget):
         c = self.c
         area = self.text_rect()
         dpr = self.devicePixelRatioF()
-        connected = c.track.connected or getattr(c, "demo", False)
+        connected = self.connected()
         text, words, current, index = self.line()
         now = time.monotonic()
-        if index != self.shown_index:
-            if self.shown_index is not None and not getattr(c, "reduced_motion", False):
-                self.changed_at = now
-            self.shown_index = index
+        if self.note_line(index, text):
             self.scroll = 0.
-            self.setAccessibleDescription(text)
-        if getattr(c, "reduced_motion", False):
+        if self.reduced():
             self.lyric_room = 1. if self.has_lyrics() else 0.
         room = _smooth(self.lyric_room)
 
@@ -435,23 +770,11 @@ class MiniPlayer(QWidget):
         c = self.c
         font = face(13, QFont.Weight.DemiBold, display=True)
         metrics = QFontMetricsF(font)
-        space = metrics.horizontalAdvance(" ")
         lettering = [word for word, _ in words]
         lit = current if c.track.playing else -1
-        lefts, x = [], 0.
-        for word in lettering:
-            lefts.append(x)
-            x += metrics.horizontalAdvance(word) + space
-        total = max(0., x - space)
-        target = 0.
-        if total > width - 20 and 0 <= current < len(lettering):
-            end = lefts[current] + metrics.horizontalAdvance(lettering[current])
-            target = max(0., min(total - width + 24, end - width * .62))
-        if getattr(c, "reduced_motion", False) or self.scroll == 0. and target == 0.:
-            self.scroll = target
-        else:
-            self.scroll += (target - self.scroll) * .14
-        progress = _ease((now - self.changed_at) / self.RISE) if self.changed_at else 1.
+        lefts, total = word_lefts(lettering, metrics)
+        self.scroll = glide(self.scroll, lefts, lettering, metrics, current, total, width, self.reduced())
+        progress = self.settle()
         q.save()
         q.setFont(font)
         q.setOpacity(room * (.3 + .7 * progress))
@@ -473,7 +796,7 @@ class MiniPlayer(QWidget):
         y = self.strip_centre()
         card = self.card()
         duration = max(0., float(c.track.duration or 0))
-        fraction = max(0., min(1., c.position / duration)) if duration > 0 else 0.
+        fraction = self.fraction()
         shown = _smooth(self.revealed)
         left, right = self.frame_rect().right() + 14, card.right() - 18
         if shown > .01:
@@ -501,68 +824,23 @@ class MiniPlayer(QWidget):
             p.setBrush(mix(light, WHITE, .35))
             p.drawEllipse(QPointF(x, y), 1.6 + .6 * shown, 1.6 + .6 * shown)
 
-    # --- moving it ----------------------------------------------------------------------
 
-    def tick(self):
-        if not self.isVisible():
-            return
-        now = time.monotonic()
-        elapsed = 0. if self._last_tick is None else now - self._last_tick
-        self._last_tick = now
-        reduced = getattr(self.c, "reduced_motion", False)
-        # At least one step a tick, so the keys still come up when frames are slow or come in a burst.
-        step = 1. if reduced else max(.1, elapsed / self.REVEAL)
-        target = 1. if self.wants_keys() else 0.
-        if self.revealed != target:
-            self.revealed = min(target, self.revealed + step) if target > self.revealed else max(target, self.revealed - step)
-            self.arrange()
-        room = 1. if self.has_lyrics() else 0.
-        if self.lyric_room != room:
-            self.lyric_room = room if reduced else (min(room, self.lyric_room + step * .5) if room > self.lyric_room
-                                                    else max(room, self.lyric_room - step * .5))
-        self.update()
+def word_lefts(lettering, metrics):
+    """Where each word starts on one row, and the row's whole width."""
+    space = metrics.horizontalAdvance(" ")
+    lefts, x = [], 0.
+    for word in lettering:
+        lefts.append(x)
+        x += metrics.horizontalAdvance(word) + space
+    return lefts, max(0., x - space)
 
-    def enterEvent(self, event):
-        self.hovered = True
-        super().enterEvent(event)
 
-    def leaveEvent(self, event):
-        self.hovered = False
-        super().leaveEvent(event)
-
-    def hideEvent(self, event):
-        self.hovered = False
-        self.revealed = 0.
-        self._last_tick = None
-        self.arrange()
-        super().hideEvent(event)
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            self._drag = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
-            self._pressed_at = event.globalPosition().toPoint()
-            event.accept()
-        else:
-            super().mousePressEvent(event)
-
-    def mouseMoveEvent(self, event):
-        if self._drag is not None and event.buttons() & Qt.MouseButton.LeftButton:
-            self.move(event.globalPosition().toPoint() - self._drag)
-            event.accept()
-        else:
-            super().mouseMoveEvent(event)
-
-    def mouseReleaseEvent(self, event):
-        if self._drag is not None:
-            moved = self._pressed_at is not None and (event.globalPosition().toPoint() - self._pressed_at).manhattanLength() > 3
-            self._drag = None
-            self._pressed_at = None
-            if moved:
-                self.remember()
-            elif self.frame_rect().contains(event.position()):
-                # A click on the print brings Halo back, like the case's back-to-Halo key.
-                self.restoreRequested.emit()
-        super().mouseReleaseEvent(event)
-
-    def mouseDoubleClickEvent(self, event):
-        self.restoreRequested.emit()
+def glide(scroll, lefts, lettering, metrics, current, total, width, reduced):
+    """How far a too-long row has slid along so the word being sung stays in view."""
+    target = 0.
+    if total > width - 20 and 0 <= current < len(lettering):
+        end = lefts[current] + metrics.horizontalAdvance(lettering[current])
+        target = max(0., min(total - width + 24, end - width * .62))
+    if reduced or scroll == 0. and target == 0.:
+        return target
+    return scroll + (target - scroll) * .14

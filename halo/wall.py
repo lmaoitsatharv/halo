@@ -6,6 +6,7 @@ from PySide6.QtCore import Qt, QRectF, QPointF, Signal, QVariantAnimation, QEasi
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QLinearGradient, QPixmap, QFont, QFontMetricsF
 from PySide6.QtWidgets import QWidget, QFrame, QSizePolicy, QGraphicsOpacityEffect
 
+from .models import TAGLINE, finding_lyrics
 from .gallery import (INK, INK_SOFT, INK_MUTED, CARD, MAT, FRAME, WALL, WHITE, FOCUS, ACCENT_INK, face, tint, mix,
                       paint_shadow, spotlight_colour, ink_accent)
 
@@ -427,6 +428,13 @@ class WallLyrics(QWidget):
         self._layout = (font, rows, line_height, space, metrics.ascent())
         return self._layout
 
+    def empty_text(self):
+        """The wall with no words: the tagline when none were found, the search while it runs."""
+        c = self.c
+        if not (c.track.connected or c.demo):
+            return "Play a song anywhere, and its words will be lettered here."
+        return c.lyrics.message if finding_lyrics(c.lyrics) else TAGLINE
+
     def paintEvent(self, event):
         c = self.c
         p = QPainter(self)
@@ -435,11 +443,10 @@ class WallLyrics(QWidget):
         width, height = self.width(), self.height()
         lines = getattr(c.lyrics, "lines", None) or []
         if not lines:
-            message = c.lyrics.message if c.track.connected or c.demo else "Play a song anywhere, and its words will be lettered here."
             p.setFont(face(19, QFont.Weight.Normal, display=True))
             p.setPen(INK_MUTED)
             p.drawText(QRectF(0, 0, width, height * .7), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter | Qt.TextFlag.TextWordWrap,
-                       message or "No timed lyrics for this song.")
+                       self.empty_text())
             return
         position = self.position()
         previous, line, index, waiting = wall_lines(c.lyrics, position)
