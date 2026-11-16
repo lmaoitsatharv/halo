@@ -4,12 +4,14 @@ These are complete scene compositions rather than colour presets. Layout and
 painting share the same geometry so both the immersive window and the Modes
 library can render the real scene at their own logical reference size.
 """
-from functools import lru_cache
 import math
 
-from PySide6.QtCore import QBuffer, QIODevice, QPointF, QRect, QRectF, QSize, Qt
-from PySide6.QtGui import (QColor, QFont, QFontMetrics, QImage, QImageReader,
-                          QLinearGradient, QPainterPath, QPen, QRadialGradient)
+from PySide6.QtCore import QPointF, QRect, QRectF, Qt
+from PySide6.QtGui import (QColor, QImage, QLinearGradient, QPainter,
+                          QPainterPath, QPen, QRadialGradient)
+
+from .room_light import _artwork_image
+from .scene_rooms import ROOM_CAPTIONS, ROOM_SCENES, paint_room, room_layout
 
 
 EXTRA_SCENES = (
@@ -18,11 +20,16 @@ EXTRA_SCENES = (
     ("scene_refraction", "Refraction", "Drifting glass facets, spectral ribbons and an offset album portrait."),
 )
 
-SCENE_CAPTIONS = {
+_EXTRA_CAPTIONS = {
     "scene_gallery": "THE SOUND GALLERY",
     "scene_runway": "FOLLOW THE LIGHT",
     "scene_refraction": "COLOUR IN A DIFFERENT LIGHT",
 }
+# Every room drawn by a scene painter (the built-in Flow, Vinyl and Horizon, and the extras).
+SCENE_CAPTIONS = {**ROOM_CAPTIONS, **_EXTRA_CAPTIONS}
+PAINTED_SCENES = tuple(ROOM_SCENES) + EXTRA_SCENES
+# Rooms that keep the song's credits small in a lower corner, beside a thumbnail.
+COMPACT_CREDITS = frozenset({"cinema", "scene_runway", "horizon"})
 
 
 def _colour(value, opacity):
@@ -56,7 +63,10 @@ def extra_scene_layout(scene, w, h):
     Header and transport remain owned by Immersive. Rectangles are logical
     pixels; the library may paint them at a scaled reference resolution.
     """
-    if scene not in SCENE_CAPTIONS:
+    room = room_layout(scene, w, h)
+    if room is not None:
+        return room
+    if scene not in _EXTRA_CAPTIONS:
         return None
     w, h = max(480, int(w)), max(400, int(h))
     margin, top, bottom, body = _body(w, h)
@@ -104,35 +114,6 @@ def extra_scene_layout(scene, w, h):
     }
 
 
-@lru_cache(maxsize=4)
-def _artwork_image(data):
-    """Bound the decorative artwork copies without decoding on every frame."""
-    if not isinstance(data, bytes) or not data or len(data) > 12 * 1024 * 1024:
-        return QImage()
-    buffer = QBuffer()
-    buffer.setData(data)
-    buffer.open(QIODevice.OpenModeFlag.ReadOnly)
-    reader = QImageReader(buffer)
-    size = reader.size()
-    if not size.isValid() or size.width() > 12000 or size.height() > 12000 or size.width() * size.height() > 36_000_000:
-        return QImage()
-    if max(size.width(), size.height()) > 640:
-        size.scale(QSize(640, 640), Qt.AspectRatioMode.KeepAspectRatio)
-        reader.setScaledSize(size)
-    return reader.read()
-
-
-def _micro(p, text, rect, colour, pixels=10, tracking=1.5):
-    font = QFont("Segoe UI")
-    font.setPixelSize(pixels)
-    font.setWeight(QFont.Weight.DemiBold)
-    font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, tracking)
-    p.setFont(font)
-    p.setPen(colour)
-    shown = QFontMetrics(font).elidedText(text, Qt.TextElideMode.ElideRight, max(1, round(rect.width())))
-    p.drawText(rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, shown)
-
-
 def _image_crop(p, image, rect, opacity=1.):
     if image.isNull():
         return
@@ -159,8 +140,6 @@ def _gallery(p, w, h, c, phase, layout):
     p.setPen(QPen(_colour(c.primary, .10), 1))
     p.drawLine(QPointF(divider, top - 12), QPointF(divider, bottom + 4))
     p.drawLine(QPointF(margin, top - 12), QPointF(divider - 32, top - 12))
-    _micro(p, "01  /  THE SOUND GALLERY", QRectF(margin, top - 43, divider - margin, 22),
-           _colour(c.primary, .64), 9 if w < 1100 else 11)
     spot = QRadialGradient(art.center().x() + math.sin(phase * .10) * art.width() * .12,
                            art.top() - art.width() * .15, art.width() * 1.2)
     spot.setColorAt(0, _colour(c.primary, .15))
@@ -200,10 +179,6 @@ def _gallery(p, w, h, c, phase, layout):
     p.drawRect(frame.adjusted(.5, .5, -.5, -.5))
     p.setPen(QPen(QColor(0, 0, 0, 150), 1))
     p.drawRect(art.adjusted(-2, -2, 2, 2))
-    # Catalogue number sits beside the physical frame, outside the lyric stage.
-    tag_y = min(bottom - 18, art.bottom() + 1)
-    _micro(p, "A SIDE  /  ORIGINAL COLOUR", QRectF(art.left(), tag_y, art.width(), 13),
-           QColor(20, 20, 20, 185), 7 if w < 1100 else 9, .9)
     # Quiet typographic rule on the right echoes a printed exhibition label.
     p.setPen(QPen(_colour(c.primary, .22), 1))
     p.drawLine(QPointF(canvas.left() + 8, bottom + 3), QPointF(canvas.left() + min(140, canvas.width() * .27), bottom + 3))
@@ -267,18 +242,60 @@ def _runway(p, w, h, c, phase, layout):
     beacon.setColorAt(.25, _colour(c.secondary, .055))
     beacon.setColorAt(1, _colour(c.primary, 0))
     p.fillRect(QRectF(centre - w * .16, horizon - 20, w * .32, 70), beacon)
-    _micro(p, "L I V E   I N   T H E   L I G H T", QRectF(centre - 180, top - 27, 360, 20),
-           _colour(c.primary, .34), 8 if w < 1100 else 10, .4)
+
+
+_GLASS_LAYERS = {}
 
 
 def _refraction(p, w, h, c, phase, layout):
     margin, top, bottom, body = _body(w, h)
     art = QRectF(layout["cover"])
+    # The glass field is drawn on its own layer and faded out at its edges;
+    # a hard clip used to leave a visible rectangle in the room.
+    region = QRectF(w * .53, top - 40, w * .47, body + 105)
+    transform = p.worldTransform()
+    scale = max(.25, min(2., math.hypot(transform.m11(), transform.m12())))
+    size = (max(1, round(region.width() * scale)), max(1, round(region.height() * scale)))
+    layer = _GLASS_LAYERS.get(size)
+    if layer is None:
+        # One reusable layer per drawn size avoids a large allocation on every frame.
+        if len(_GLASS_LAYERS) >= 3:
+            _GLASS_LAYERS.clear()
+        layer = _GLASS_LAYERS[size] = QImage(*size, QImage.Format.Format_ARGB32_Premultiplied)
+    layer.fill(Qt.GlobalColor.transparent)
+    q = QPainter(layer)
+    q.setRenderHint(QPainter.RenderHint.Antialiasing)
+    q.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+    q.scale(scale, scale)
+    q.translate(-region.x(), -region.y())
+    _glass_field(q, w, c, phase, art, top, bottom, body)
+    q.setCompositionMode(QPainter.CompositionMode.CompositionMode_DestinationIn)
+    across = QLinearGradient(w * .53, 0, w * .62, 0)
+    across.setColorAt(0, QColor(0, 0, 0, 0))
+    across.setColorAt(1, QColor(0, 0, 0, 255))
+    q.fillRect(region, across)
+    span = body + 95
+    down = QLinearGradient(0, top - 35, 0, bottom + 60)
+    down.setColorAt(0, QColor(0, 0, 0, 0))
+    down.setColorAt(min(.45, 75 / span), QColor(0, 0, 0, 255))
+    down.setColorAt(max(.55, 1 - 80 / span), QColor(0, 0, 0, 255))
+    down.setColorAt(1, QColor(0, 0, 0, 0))
+    q.fillRect(region, down)
+    q.end()
+    p.drawImage(region, layer)
+    # A fine corner bracket turns the foreground artwork into an object.
+    p.setPen(QPen(_colour(c.primary, .32), 1))
+    for point, dx, dy in ((art.topLeft() - QPointF(9, 9), 1, 1),
+                          (art.bottomRight() + QPointF(9, 9), -1, -1)):
+        p.drawLine(point, point + QPointF(dx * 26, 0))
+        p.drawLine(point, point + QPointF(0, dy * 26))
+
+
+def _glass_field(p, w, c, phase, art, top, bottom, body):
     image = _artwork_image(getattr(c.track, "artwork", b""))
     x0 = w * .59
     # A diagonal architectural glass field counterbalances the left lyric stage.
     p.save()
-    p.setClipRect(QRectF(w * .56, top - 40, w * .44, body + 70))
     for i in range(7):
         offset = (i - 3) * art.width() * .16
         drift = math.sin(phase * (.09 + i * .005) + i * .65) * art.width() * .025
@@ -331,18 +348,12 @@ def _refraction(p, w, h, c, phase, layout):
                       Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
         p.drawPath(ribbon)
     p.restore()
-    # A fine corner bracket turns the foreground artwork into an object.
-    p.setPen(QPen(_colour(c.primary, .32), 1))
-    for point, dx, dy in ((art.topLeft() - QPointF(9, 9), 1, 1),
-                          (art.bottomRight() + QPointF(9, 9), -1, -1)):
-        p.drawLine(point, point + QPointF(dx * 26, 0))
-        p.drawLine(point, point + QPointF(0, dy * 26))
-    _micro(p, "REFRACTION  /  COLOUR STUDY", QRectF(art.left() - 6, top - 14, w - art.left() - margin, 20),
-           _colour(c.primary, .55), 8 if w < 1100 else 10, 1.2)
 
 
-def paint_extra_scene(p, w, h, controller, scene, phase):
+def paint_extra_scene(p, w, h, controller, scene, phase, backdrop=False):
     """Paint an optional scene behind the real native cover, text and controls."""
+    if room_layout(scene, w, h) is not None:
+        return paint_room(p, w, h, controller, scene, phase, backdrop)
     layout = extra_scene_layout(scene, w, h)
     if layout is None:
         return False

@@ -19,8 +19,10 @@ from .lyric_rendering import LYRIC_STYLES, canonical_lyric_style
 from .mode_catalog import available_specs
 from .glass import GlassPanel, GlassSlider, SeekSlider
 from .gallery import HandsetButton, mix, song_light
-from .scene_extras import EXTRA_SCENES, SCENE_CAPTIONS, extra_scene_layout, paint_extra_scene
+from .scene_extras import COMPACT_CREDITS, EXTRA_SCENES, SCENE_CAPTIONS, extra_scene_layout, paint_extra_scene
+from .scene_rooms import OWN_BACKDROP, ROOM_SCENES
 from .room_menu import RoomMenu, MenuButton, MenuEntry, separator
+from .room_light import mix as blend, swell, vivid
 
 
 IMMERSIVE_SCENES = (
@@ -28,7 +30,7 @@ IMMERSIVE_SCENES = (
     ("lyrics", "Lyrics only", "Just the words. Move your mouse to reveal the controls."),
     ("cinema", "Cinema", "A wide stage of light, with the words at its centre."),
     ("orbit", "Orbit", "A record suspended inside slow, luminous orbits."),
-) + EXTRA_SCENES
+) + ROOM_SCENES + EXTRA_SCENES
 
 
 SCENE_STYLE = """
@@ -137,12 +139,18 @@ class Immersive(QWidget):
         self.album = _label(self, "", "roomAlbum")
         self.artist.setWordWrap(True)
         self.album.setWordWrap(True)
+        # Kept for layout code and older tests, but never shown: the cover and the words need no captions.
         self.now_label = _label(self, "NOW LISTENING", "roomCaption")
         self.words_label = _label(self, "IN THE WORDS", "roomCaption")
+        self.now_label.hide()
+        self.words_label.hide()
         self.canvas = LyricCanvas(controller, "immersive")
         self.canvas.setParent(self)
         self.canvas.setMinimumHeight(100)
+        # The timing note ("LINE SYNCED", "LEARNING WORD TIMING") is kept up to date but never
+        # shown in the rooms: Immersive carries no small print.
         self.lyrics_status = _label(self, "", "roomStatus")
+        self.lyrics_status.hide()
 
         # The same audio-guide handset as the main window: raised keys, the song-lit timeline,
         # and on the right the mini player and the way back out (where the main window has the way in).
@@ -334,7 +342,9 @@ class Immersive(QWidget):
             MenuEntry("submenu", "Lighting", "halo", submenu=self._lighting_choices, detail=self._lighting_name),
             separator(),
             MenuEntry("toggle", "Background", "image", run=self.toggle_background, checked=self.background_on,
-                      tip="Your background, or Halo's own light"),
+                      tip=("This room draws its whole scene, so your background is not shown here"
+                           if self.scene in OWN_BACKDROP else "Your background, or Halo's own light"),
+                      enabled=lambda: self.scene not in OWN_BACKDROP),
             MenuEntry("action", "Background settings…", "settings", run=self._open_background),
             MenuEntry("action", "Browse modes", "modes", run=self.modesRequested.emit),
             separator(),
@@ -370,8 +380,10 @@ class Immersive(QWidget):
 
     def _sync_background(self):
         host = self.window()
+        # A video background rests while a whole-scene room (Vinyl, Horizon) hides it.
         self.media_background.sync(self.controller, active=(
-            self.isVisible() and host.isActiveWindow() and not host.isMinimized()))
+            self.isVisible() and host.isActiveWindow() and not host.isMinimized()
+            and self.scene not in OWN_BACKDROP))
         self.background_status = self.media_background.status or ""
         self.update()
 
@@ -423,7 +435,7 @@ class Immersive(QWidget):
         height = max(1, self.title.height())
         width = max(1, self.title.width())
         text = self.controller.track.title
-        if self.scene in {"cinema", "scene_runway"}:
+        if self.scene in COMPACT_CREDITS:
             face = QFont("Segoe UI")
             face.setPixelSize(14)
             face.setWeight(QFont.Weight.DemiBold)
@@ -460,23 +472,24 @@ class Immersive(QWidget):
         margin = max(28, min(64, w // 25))
         compact = h < 720
         self.header.setGeometry(margin, 19 if compact else 27, w - 2 * margin, 44)
-        self.scene_caption.setVisible(w >= 1100)
+        # The room's name is in the menu; no small caption beside the wordmark.
+        self.scene_caption.setVisible(False)
         footer_width = min(940, w - 2 * margin)
         # 84px tall like the main window's handset; it keeps the old bar's distance from the bottom edge.
         self.player.setGeometry((w - footer_width) // 2, h - 124 if compact else h - 140, footer_width, 84)
         top, bottom = (88 if compact else 108), self.player.y() - (22 if compact else 32)
         body_height = max(200, bottom - top)
         lyrics_only = self.scene == "lyrics"
-        for widget in (self.cover, self.title, self.artist, self.album, self.now_label, self.words_label, self.lyrics_status):
+        for widget in (self.cover, self.title, self.artist, self.album):
             widget.setVisible(not lyrics_only)
         self.left_column.setVisible(False)
-        compact_credits = self.scene in {"cinema", "scene_runway"}
+        compact_credits = self.scene in COMPACT_CREDITS
         self.title.setWordWrap(not compact_credits)
         self.artist.setStyleSheet("font-size: 11px; color: #9da9a5;" if compact_credits else "")
         self.album.setStyleSheet("font-size: 10px;" if compact_credits else "")
         shadow = self.cover.graphicsEffect()
-        shadow.setBlurRadius(18 if self.scene == "cinema" else 52)
-        shadow.setOffset(0, 3 if self.scene == "cinema" else 14)
+        shadow.setBlurRadius(18 if compact_credits else 52)
+        shadow.setOffset(0, 3 if compact_credits else 14)
         extra_layout = extra_scene_layout(self.scene, w, h)
         if extra_layout is not None:
             self.cover.setFixedSize(extra_layout["cover"].size())
@@ -485,6 +498,8 @@ class Immersive(QWidget):
                                 ("album", self.album), ("status", self.lyrics_status)):
                 widget.setGeometry(extra_layout[key])
             self.canvas.set_alignment(extra_layout["alignment"])
+            # A room that paints the artwork itself (Vinyl's turning label) hides the flat cover.
+            self.cover.setVisible(not extra_layout.get("paints_cover", False))
             self.now_label.hide()
             self.words_label.hide()
         elif self.scene == "lyrics":
@@ -741,7 +756,9 @@ class Immersive(QWidget):
 
     def _prepare_backdrop(self):
         c, w, h = self.controller, self.width(), self.height()
-        key = (self.scene, w, h, c.primary.rgba(), c.secondary.rgba())
+        # The rooms are lit by the song's own vivid colours, softened a little towards the lyric tints.
+        first, second = (blend(soft, strong, .65) for soft, strong in zip((c.primary, c.secondary), vivid(c)))
+        key = (self.scene, w, h, first.rgba(), second.rgba())
         if key == self.scene_key:
             return
         self.scene_key = key
@@ -750,10 +767,10 @@ class Immersive(QWidget):
         painter = QPainter(self.backdrop)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         atmospheres = {
-            "studio": [(.18, .53, .6, c.primary, 44), (.85, .22, .75, c.secondary, 29), (.8, 1.2, .65, c.primary, 19)],
-            "lyrics": [(.14, .85, .62, c.secondary, 15), (.85, .2, .72, c.primary, 11)],
-            "cinema": [(.5, -.22, .88, c.primary, 65), (.09, .62, .63, c.secondary, 32), (.92, .62, .63, c.secondary, 32)],
-            "orbit": [(.27, .43, .51, c.primary, 50), (.9, .1, .7, c.secondary, 26)],
+            "studio": [(.18, .53, .6, first, 50), (.85, .22, .75, second, 34), (.8, 1.2, .65, first, 22)],
+            "lyrics": [(.14, .85, .62, second, 22), (.85, .2, .72, first, 16)],
+            "cinema": [(.5, -.22, .88, first, 65), (.09, .62, .63, second, 34), (.92, .62, .63, second, 34)],
+            "orbit": [(.27, .43, .51, first, 56), (.9, .1, .7, second, 30)],
         }
         for x, y, radius, color, alpha in atmospheres.get(self.scene, atmospheres["studio"]):
             gradient = QRadialGradient(w * x, h * y, w * radius)
@@ -763,8 +780,8 @@ class Immersive(QWidget):
             painter.fillRect(self.backdrop.rect(), gradient)
         if self.scene == "cinema":
             beam = QLinearGradient(0, h * .2, 0, h * .82)
-            beam.setColorAt(0, tint(c.primary, 12))
-            beam.setColorAt(1, tint(c.primary, 0))
+            beam.setColorAt(0, tint(first, 14))
+            beam.setColorAt(1, tint(first, 0))
             path = QPainterPath()
             path.moveTo(w * .36, -20)
             path.lineTo(w * .64, -20)
@@ -789,8 +806,10 @@ class Immersive(QWidget):
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         p.drawPixmap(0, 0, self.backdrop)
         phase = 0 if getattr(c, "reduced_motion", False) else getattr(c, "motion_time", 0.0)
-        self.media_background.paint(p, QRectF(self.rect()), phase)
-        paint_extra_scene(p, w, h, c, self.scene, phase)
+        # Vinyl and Horizon paint a whole scene, so your Background is not drawn under them.
+        backdrop = self.scene not in OWN_BACKDROP and self.media_background.paint(p, QRectF(self.rect()), phase)
+        paint_extra_scene(p, w, h, c, self.scene, phase, backdrop)
+        self._paint_breath(p, w, h, phase)
         if self.scene == "orbit":
             center = self.cover.geometry().center()
             base = self.cover.width() * .75
@@ -821,3 +840,25 @@ class Immersive(QWidget):
             p.fillRect(self.rect(), haze)
         if getattr(c, "glow", False) and c.track.connected and c.track.playing and getattr(c, "intensity", 0) > 0:
             paint_edge_glow(p, w, h, c)
+
+    def _paint_breath(self, p, w, h, phase):
+        """A light in the song's colour that drifts slowly and swells with the music in the original rooms."""
+        if self.scene not in ("studio", "lyrics", "cinema", "orbit"):
+            return
+        c = self.controller
+        energy = swell(c)
+        light = vivid(c)[0]
+        if self.scene in ("studio", "orbit") and self.cover.isVisible():
+            art = QRectF(self.cover.geometry())
+            centre = art.center() + QPointF(math.sin(phase * .21) * art.width() * .06, math.cos(phase * .17) * art.width() * .05)
+            radius = art.width() * (1.15 + .12 * energy)
+            alpha = 30 + 34 * energy
+        else:
+            centre = QPointF(w * (.5 + .22 * math.sin(phase * .07)), h * (.42 + .12 * math.cos(phase * .053)))
+            radius = max(w, h) * (.42 + .05 * energy)
+            alpha = (16 if self.scene == "lyrics" else 12) + 22 * energy
+        pool = QRadialGradient(centre, radius)
+        pool.setColorAt(0, tint(light, alpha))
+        pool.setColorAt(.5, tint(light, alpha * .3))
+        pool.setColorAt(1, tint(light, 0))
+        p.fillRect(QRectF(centre.x() - radius, centre.y() - radius, radius * 2, radius * 2), pool)

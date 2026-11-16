@@ -24,6 +24,8 @@ The included Ship, Fisheye and Visual styles remain available. Their line symbol
 
 ## Immersive rooms
 
+**Flow**, **Vinyl** and **Horizon** are included with Halo, beside Listening room, Lyrics only, Cinema and Orbit. Flow pours your cover into a bright, slowly turning river of colour that fills the screen; its dark folds glow in the song's own colours, and soft shadows sit only behind the words and the credits so they stay readable. Vinyl shows a turntable up close with your record's sleeve beside it; your cover turns slowly on the label, and the tonearm moves across the record as the song plays. Horizon sets a sun in your song's colours over still water as the song goes on. With **Music sync** or **Momentum** on, the rooms swell with the loud moments Halo hears; without it they still move slowly with the song. They hold still when the song is paused or under Reduce motion, except that Vinyl's tonearm and Horizon's sun keep showing how far through the song you are. Flow keeps your Background if you choose one; Vinyl and Horizon draw their own scene, so the Background switch is off in them. No room shows small print: only the lyrics, the song's title, artist and album, and the controls.
+
 **Gallery** presents album art inside a physical matte and frame, with a grazing key-light and exhibition typography. **Runway** places panoramic lyrics inside a perspective corridor of moving light. **Refraction** combines offset artwork, translucent panes and independently drifting spectral ribbons.
 
 These rooms work with the existing image, muted video and album-art background choices. Lyrics, room and halo-light choices stay independent.

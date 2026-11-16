@@ -391,7 +391,7 @@ class LyricCanvas(QWidget):
         if self.mode == "floating":
             scale = self.text_scale()
             return min(48 * scale, max(20 * scale, w / 15))
-        giant = self.scene_mode in {"lyrics", "cinema", "orbit", "scene_runway"}
+        giant = self.scene_mode in {"lyrics", "cinema", "orbit", "scene_runway", "horizon"}
         return min(110 if giant else 76, max(25, min(w / (9 if giant else 11), h / 7)))
 
     def _line_emblem(self, p, kind, x, y, radius, focus, opacity, phase):

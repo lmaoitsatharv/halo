@@ -26,7 +26,7 @@ from .gallery import INK, SHADOW
 from .theme import hexc, pick, style, painted_icon, APPEARANCES
 from .mini_player import MINI_STYLES
 from .updates import AUTO_UPDATE_HINT
-from .scene_extras import extra_scene_layout, paint_extra_scene
+from .scene_extras import COMPACT_CREDITS, extra_scene_layout, paint_extra_scene
 
 
 STUDIO_STYLE = """
@@ -507,12 +507,14 @@ class PreviewScreen(QWidget):
                 self.lyrics(p, QRectF(40, 40, 920, 545))
         elif extra_scene_layout(scene, 1000, 625) is not None:
             layout = extra_scene_layout(scene, 1000, 625)
-            paint_extra_scene(p, 1000, 625, self.proxy, scene, self.proxy.motion_time)
-            self.cover(p, QRectF(layout["cover"]))
+            paint_extra_scene(p, 1000, 625, self.proxy, scene, self.proxy.motion_time, bool(painted))
+            if not layout.get("paints_cover"):
+                self.cover(p, QRectF(layout["cover"]))
             self.lyrics(p, QRectF(layout["canvas"]), scene, alignment=layout["alignment"])
-            credits = (("song", self.c.track.title if self.c.track.connected else "Your favourite record", 14 if scene == "scene_runway" else 22),
-                       ("artist", self.c.track.artist if self.c.track.connected else "In your own atmosphere", 11 if scene == "scene_runway" else 16),
-                       ("album", self.c.track.album or "Sound in colour", 10 if scene == "scene_runway" else 12))
+            compact = scene in COMPACT_CREDITS
+            credits = (("song", self.c.track.title if self.c.track.connected else "Your favourite record", 14 if compact else 22),
+                       ("artist", self.c.track.artist if self.c.track.connected else "In your own atmosphere", 11 if compact else 16),
+                       ("album", self.c.track.album or "Sound in colour", 10 if compact else 12))
             for key, value, pixels in credits:
                 self.text(p, QRectF(layout[key]), value, pixels, QColor("#d9dee5"))
         elif scene == "studio":

@@ -2,7 +2,7 @@
 
 A Windows companion for the music you play, inspired by ambient music lighting and desktop lyrics. It follows **Spotify**, a browser tab (Spotify or Apple Music on the web, YouTube, YouTube Music) or a music app. Independent software; not affiliated with Spotify, Apple, Google, Lumn or Verci.
 
-> **Version:** this guide describes **Halo 0.7.0**. Since 0.6.0 Halo has been the **Gallery wall** design; 0.4.0 and 0.5.0 used a dark glass window with a sidebar, with the same pages and settings.
+> **Version:** this guide describes **Halo 0.8.0**. Since 0.6.0 Halo has been the **Gallery wall** design; 0.4.0 and 0.5.0 used a dark glass window with a sidebar, with the same pages and settings.
 
 ## Download for Windows
 
@@ -19,13 +19,23 @@ Keep **Halo.exe**, **_internal** and **licenses** together in the extracted fold
 
 **Updating.** From 0.7.0 on, Halo updates itself: it checks GitHub's releases when it starts and every six hours, downloads a new version in the background and asks before installing it (**Update now** or **Later**). Halo then closes, puts the new version in place and opens again; if the new version doesn't start, Halo puts the old one back. Your preferences are kept separately in Windows and are not touched. Turn the checks off in **Settings → General → Updates**, or use **Check now** there or **Check for updates** in the tray menu. Halo updates itself only when its folder can be changed without administrator rights; otherwise, download the new ZIP as before.
 
-**Coming from 0.6.0 or earlier?** Those versions can't update themselves, so download 0.7.0 once by hand: quit Halo from its tray icon, extract the new ZIP into a fresh folder, then open the new **Halo.exe**. Your preferences carry over.
+**Coming from 0.6.0 or earlier?** Those versions can't update themselves, so download the latest version once by hand: quit Halo from its tray icon, extract the new ZIP into a fresh folder, then open the new **Halo.exe**. Your preferences carry over.
 
 [Website](https://halo-music-companion.vercel.app) · [All releases and checksums](https://github.com/lmaoitsatharv/halo/releases) · [Troubleshooting](#troubleshooting)
 
 ![Halo's Listening page on the light wall, playing its original visual demo](docs/images/halo-desktop.png)
 
-## What's new in 0.7.0
+## What's new in 0.8.0
+
+- **Three new Immersive rooms.** **Flow** pours your cover into a bright, slowly turning river of colour that fills the screen; dark covers glow in the song's own colours. **Vinyl** is a turntable up close with the record's sleeve beside it: your cover turns on the label, and the tonearm moves across the record as the song plays. **Horizon** sets a sun in your song's colours over still water, lower and lower as the song goes on. Choose them from Immersive's **Room ›** menu or in **Immersive** at the top of Halo.
+- **The original rooms take the song's colours.** Listening room, Lyrics only, Cinema and Orbit are lit by the cover's vivid colours instead of pale tints, with a light that drifts slowly and swells with the music when **Music sync** or **Momentum** is on.
+- **Nothing but the song.** Immersive no longer shows small print: no timing note, no room name beside the wordmark, and no captions inside Gallery, Runway or Refraction. The title, artist and album stay.
+- **Backgrounds.** Flow keeps your own background (image, video or cover) under its light. Vinyl and Horizon draw a whole scene, so the menu's **Background** switch is off in those two, and a background video rests while they show.
+- **Fix.** Refraction's glass fades out instead of ending in a hard-edged rectangle.
+
+![Halo's new Immersive rooms with original demo covers: Flow, Vinyl, Horizon, and Flow with a pale cover](docs/images/halo-immersive-rooms.png)
+
+## In 0.7.0
 
 - **Halo updates itself.** New versions download in the background, are checked against the release's SHA-256 checksums, and install when you choose **Update now**; a version that fails to start is rolled back. See [Download](#download-for-windows).
 - **Five mini player styles.** **Case** (the lit case), **Notch** (a tall card with Halo's mark, the clock on a bright tab, the cover with three lines of lyrics, a seek bar and big keys; green, or the song's colour with **Song colour accent**), **Capsule** (a slim pill with a round cover ringed by progress), **Disc** (the cover as a record that turns while the song plays) and **Poster** (the cover edge to edge with the lyric lettered over it). Right-click the mini player to switch, press **Ctrl+Shift+M** inside it for the next style, or choose in the tray menu or **Settings → General → Mini player**. A new style takes the old one's corner of the screen.
@@ -64,7 +74,7 @@ Earlier highlights: the Modes library with live previews, smoother audio pulses,
 4. The handset holds previous, play, next and the timeline, then **Share** (**Ctrl+Shift+S**), **Mini player** (**Ctrl+Shift+M**) and **Immersive** (**F11**). **Space** plays and pauses; **Ctrl+Left** and **Ctrl+Right** skip. The mini player stays on top in the style you choose (Case, Notch, Capsule, Disc or Poster); drag it anywhere, click its cover or press **Esc** to bring Halo back, and right-click it to change its style.
 5. In **Lyrics**, turn on **Floating lyrics**, then minimize Halo or close its window to the tray. Lyrics keep advancing above your desktop with clicks passing through them. Restoring the window, or opening the mini player, hides the floating text.
    Use **Adjust…** in the **Position & size** row to choose a monitor, drag the preview, adjust horizontal/vertical position, use the nine presets, or make the words larger or smaller with **Size** (50–200%). **Preview on desktop** shows the actual placement while the settings are open. **Reset position** restores bottom-center placement on the primary display.
-6. **Immersive** (**F11**) opens the selected room inside the same window: Listening room, Lyrics only, Cinema or Orbit. The menu key at its top left changes the room, lyric style and lighting, switches your background on or off, and returns to Halo. The header and player fade, and the cursor hides, after 1.5 seconds without cursor movement; move the mouse to reveal them. Press **Space** to play/pause and **Esc** or **F11** to return.
+6. **Immersive** (**F11**) opens the selected room inside the same window: Listening room, Lyrics only, Cinema, Orbit, Flow, Vinyl or Horizon. The menu key at its top left changes the room, lyric style and lighting, switches your background on or off, and returns to Halo. The header and player fade, and the cursor hides, after 1.5 seconds without cursor movement; move the mouse to reveal them. Press **Space** to play/pause and **Esc** or **F11** to return.
 7. Right-click Halo's icon in the system tray to open Halo, Settings, Modes, the mini player (and choose its style) or immersive view, toggle the screen-edge glow, **Check for updates**, or **Quit Halo** completely.
 
 **Try the visual demo** on the Listening page previews lighting and original timed text without a player. **Back to your music** ends the demo. The demo does not play audio.
@@ -125,7 +135,7 @@ For different or incorrect words, use **Wrong lyrics? Choose a match…** to com
 
 ## Immersive backgrounds
 
-Open **Immersive** at the top, or **Background settings…** in Immersive's menu. Select the original **Ambient** scene, current-song **Album artwork**, a local **Image**, or a local **Video**. The menu's **Background** switch turns your background off (Halo's own light) and back on, remembering the last one. These choices apply inside Halo's immersive view; they do not change the Windows desktop wallpaper.
+Open **Immersive** at the top, or **Background settings…** in Immersive's menu. Select the original **Ambient** scene, current-song **Album artwork**, a local **Image**, or a local **Video**. The menu's **Background** switch turns your background off (Halo's own light) and back on, remembering the last one. These choices apply inside Halo's immersive view; they do not change the Windows desktop wallpaper. Flow shows your background in place of its own colour field. Vinyl and Horizon draw a whole scene, so your background isn't shown in them and the **Background** switch is off there.
 
 The right-hand preview uses the actual media and rendering controls. Start with **Cinematic**, **Soft focus**, **Vivid**, **Monochrome** or **Dreamy**, then adjust blur, dimming, saturation, vignette and album-colour tint. Framing controls include fill/fit, zoom and horizontal/vertical focus. Still, drift and breathe motion have an adjustable speed.
 

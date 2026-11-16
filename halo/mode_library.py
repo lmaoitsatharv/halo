@@ -16,7 +16,7 @@ from .glow import paint_halo_preview
 from .lyric_rendering import canonical_lyric_style
 from .mode_catalog import all_modes, find_mode, MODE_TITLES
 from .models import Lyrics, LyricLine, Track
-from .scene_extras import extra_scene_layout, paint_extra_scene, _artwork_image
+from .scene_extras import COMPACT_CREDITS, extra_scene_layout, paint_extra_scene, _artwork_image
 from .widgets import LyricCanvas
 
 
@@ -355,10 +355,12 @@ class ModePreview(QWidget):
         layout = extra_scene_layout(scene, 1000, 625)
         if layout:
             paint_extra_scene(p, 1000, 625, c, scene, phase)
-            self._cover(p, QRectF(layout["cover"]))
+            if not layout.get("paints_cover"):
+                self._cover(p, QRectF(layout["cover"]))
             self._lyrics(p, QRectF(layout["canvas"]), scene, layout.get("alignment", "left"))
-            for key, text, size in (("song", c.track.title, 14 if scene == "scene_runway" else 22),
-                                     ("artist", c.track.artist, 11 if scene == "scene_runway" else 13),
+            compact = scene in COMPACT_CREDITS
+            for key, text, size in (("song", c.track.title, 14 if compact else 22),
+                                     ("artist", c.track.artist, 11 if compact else 13),
                                      ("album", c.track.album, 10)):
                 _text(p, QRectF(layout[key]), text, size, QColor("#c2becf"))
         elif scene == "studio":

@@ -8,7 +8,7 @@ MODE_FIELDS = {"lyrics": "lyric_style", "scenes": "immersive_mode", "halo": "hal
 MODE_TITLES = {"lyrics": "Lyrics", "scenes": "Immersive", "halo": "Halo light"}
 BASE_MODE_KEYS = {
     "lyrics": ("ship_visual", "fisheye_visual", "visual"),
-    "scenes": ("studio", "lyrics", "cinema", "orbit"),
+    "scenes": ("studio", "lyrics", "cinema", "orbit", "flow", "vinyl", "horizon"),
     "halo": ("aura", "orbit", "wave", "pulse", "prism", "neon", "liquid"),
 }
 
