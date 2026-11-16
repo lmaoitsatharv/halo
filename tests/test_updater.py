@@ -126,7 +126,7 @@ class VersionTests(unittest.TestCase):
 
 
 class ReleaseTests(unittest.TestCase):
-    def test_the_zip_and_checksums_are_picked_with_short_notes(self):
+    def test_the_zip_and_checksums_are_picked_with_a_one_line_summary(self):
         release = updater.pick_release(release_json(digest="ab" * 32))
         self.assertEqual(release.version, "0.7.0")
         self.assertEqual(release.tag, "v0.7.0")
@@ -134,8 +134,7 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual(release.sums_url, PREFIX + "SHA256SUMS.txt")
         self.assertEqual(release.zip_size, 100)
         self.assertEqual(release.zip_digest, "ab" * 32)
-        self.assertEqual(release.notes, "Halo gets better.\n\n• Updates. Halo updates itself.\n• Faster start.")
-        self.assertNotIn("detail", release.notes)
+        self.assertEqual(release.notes, "Halo gets better.")
 
     def test_a_release_without_its_checksum_list_is_refused(self):
         data = release_json()
@@ -169,13 +168,23 @@ class ReleaseTests(unittest.TestCase):
         with self.assertRaises(UpdateError):
             updater.pick_release(["not", "a", "release"])
 
-    def test_notes_are_plain_text(self):
-        notes = updater.short_notes("Intro with [a link](https://x.test) and `code`.\n\n## What's new\n\n"
+    def test_the_summary_is_one_short_plain_line(self):
+        line = updater.summary_line("Intro with [a link](https://x.test) and `code`.\n\n## What's new\n\n"
                                     "- **Bold** <b>tag</b> point\n* second\n")
-        self.assertEqual(notes, "Intro with a link and code.\n\n• Bold tag point\n• second")
-        self.assertEqual(updater.short_notes(None), "")
-        many = "\n".join(f"- point {n}" for n in range(9))
-        self.assertTrue(updater.short_notes("## New\n" + many).endswith("…and more in the full notes."))
+        self.assertEqual(line, "Intro with a link and code.")
+        self.assertEqual(updater.summary_line(None), "")
+        self.assertEqual(updater.summary_line("   "), "")
+        # Without an opening paragraph, the first point stands in.
+        self.assertEqual(updater.summary_line("## What's new\n- **Bold** <b>tag</b> point\n- second"), "Bold tag point")
+        # Long openings keep whole sentences while they fit, and never run past the limit.
+        long = "Halo has three new rooms to listen in. " * 6
+        self.assertEqual(updater.summary_line(long), ("Halo has three new rooms to listen in. " * 3).strip())
+        cut = updater.summary_line("word " * 60)
+        self.assertLessEqual(len(cut), 140)
+        self.assertTrue(cut.endswith("…"))
+        # The opening paragraph ends at its first blank line or heading; numbered steps below are never used.
+        self.assertEqual(updater.summary_line("Short.\nStill the opening.\n\n1. Download it."), "Short. Still the opening.")
+        self.assertEqual(updater.summary_line("## Download and run\n\n1. Download it.\n\n## What's new\n- Rooms."), "Rooms.")
 
     def test_a_local_feed_can_stand_in_for_github_for_testing(self):
         with mock.patch.dict(os.environ, {updater.FEED_VARIABLE: "http://127.0.0.1:8123/latest.json"}):

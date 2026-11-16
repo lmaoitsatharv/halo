@@ -147,37 +147,42 @@ def shorten(text, limit=170, minimum=40):
     return (cut.rsplit(" ", 1)[0] if " " in cut else cut).rstrip(" ,;:") + "…"
 
 
-def short_notes(body, bullets=6):
-    """The release's opening paragraph and its "What's new" points, as short plain text."""
+def summary_line(body, limit=140):
+    """The release in one short line for the update card: its opening paragraph, or its first point.
+
+    Whole sentences are kept while they fit; a single long sentence is cut at a word.
+    The full notes stay one click away on GitHub.
+    """
     if not isinstance(body, str) or not body.strip():
         return ""
-    lines = body[:20000].replace("\r\n", "\n").replace("\r", "\n").split("\n")
-    intro, section, points, in_new = [], None, [], False
-    for line in lines:
+    intro, first_point, seen_heading = [], "", False
+    for line in body[:20000].replace("\r\n", "\n").replace("\r", "\n").split("\n"):
         stripped = line.strip()
+        point = re.match(r"^[-*+] (.*)", stripped)
         if stripped.startswith("#"):
-            section = stripped.lstrip("#").strip().casefold()
-            in_new = "new" in section or "change" in section
-            continue
-        if section is None:
-            if stripped:
-                intro.append(stripped)
-            elif intro:
-                section = ""  # the opening paragraph ends at its first blank line
-            continue
-        if in_new and re.match(r"^[-*+] ", line):  # top-level points only
-            point = plain(stripped[2:])
-            if point:
-                points.append(shorten(point))
-    text = shorten(plain(" ".join(intro)), limit=320, minimum=60) if intro else ""
-    if points:
-        listed = "\n".join("• " + point for point in points[:bullets])
-        if len(points) > bullets:
-            listed += "\n…and more in the full notes."
-        text = (text + "\n\n" + listed) if text else listed
-    if not text:
-        text = shorten(plain(body), limit=320, minimum=60)
-    return text
+            if intro:
+                break
+            seen_heading = True
+        elif point:
+            first_point = first_point or point.group(1)
+            if intro:
+                break
+        elif not stripped:
+            if intro:
+                break
+        elif not seen_heading:
+            intro.append(stripped)
+        elif first_point:
+            break
+    text = plain(" ".join(intro) or first_point)
+    if len(text) <= limit:
+        return text
+    kept = ""
+    for sentence in re.findall(r"\S[^.!?]*[.!?]+(?=\s|$)", text):
+        if len((kept + " " + sentence).strip()) > limit:
+            break
+        kept = (kept + " " + sentence).strip()
+    return kept or shorten(text, limit, minimum=1)
 
 
 def pick_release(data, prefix=DOWNLOAD_PREFIX, page_fallback=RELEASES_PAGE):
@@ -215,7 +220,7 @@ def pick_release(data, prefix=DOWNLOAD_PREFIX, page_fallback=RELEASES_PAGE):
     version = tag.strip()
     version = version[1:] if version[:1] in "vV" else version
     return Release(version=version, tag=tag.strip(), title=plain(str(data.get("name") or ""))[:120],
-                   notes=short_notes(data.get("body")), page=page, zip_url=zip_url, zip_size=size,
+                   notes=summary_line(data.get("body")), page=page, zip_url=zip_url, zip_size=size,
                    zip_digest=digest, sums_url=sums_url)
 
 

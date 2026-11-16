@@ -169,7 +169,9 @@ class SheetLayer(QWidget):
         dialog.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.scroll.setWidget(dialog)
         self.panel.setFixedWidth(min(self.preferred_width, self.parentWidget().width() - 64))
-        self.panel.setFixedHeight(min(self.parentWidget().height() - 46, max(430, dialog.sizeHint().height() + 100)))
+        # Most sheets keep a roomy minimum; a short one (the update card) can ask to fit its content.
+        self.panel.setFixedHeight(min(self.parentWidget().height() - 46,
+                                      max(getattr(dialog, "sheet_minimum_height", 430), dialog.sizeHint().height() + 100)))
         self.setGeometry(self.parentWidget().rect())
         self.show()
         self.raise_()
@@ -188,7 +190,8 @@ class SheetLayer(QWidget):
     def resizeEvent(self, event):
         self.panel.setFixedWidth(min(self.preferred_width, self.width() - 64))
         if self.dialog is not None:
-            self.panel.setFixedHeight(min(self.height() - 46, max(430, self.dialog.sizeHint().height() + 100)))
+            self.panel.setFixedHeight(min(self.height() - 46, max(getattr(self.dialog, "sheet_minimum_height", 430),
+                                                                  self.dialog.sizeHint().height() + 100)))
         super().resizeEvent(event)
 
     def paintEvent(self, event):

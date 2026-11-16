@@ -227,13 +227,15 @@ class UpdateServiceTests(unittest.TestCase):
         self.assertEqual(self.settings.value("update_failed_version", "", type=str), "0.7.0")
         self.assertIn("went back to 0.6.0", service.status_text())
 
-    def test_the_prompt_shows_the_version_and_notes_and_later_defers(self):
+    def test_the_prompt_is_short_and_later_defers(self):
         service = self.ready_service()
         prompt = UpdatePrompt(service)
         self.assertEqual(prompt.title(), "Update ready")
         self.assertEqual(prompt.headline.text(), "Halo 0.7.0")
-        self.assertIn("You have 0.6.0", prompt.summary.text())
-        self.assertIn("• Updates. Halo updates itself.", prompt.notes.text())
+        # One line about the version and one about what happens: no list, no checksum talk.
+        self.assertEqual(prompt.notes.text(), "Halo gets better.")
+        self.assertEqual(prompt.summary.text(), "Halo restarts and is back in a few seconds.")
+        self.assertIn("comes back", prompt.update_button.toolTip())
         self.assertEqual(prompt.update_button.text(), "Update now")
         self.assertTrue(prompt.update_button.isEnabled())
         prompt.later()

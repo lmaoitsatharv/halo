@@ -2,7 +2,7 @@
 
 A Windows companion for the music you play, inspired by ambient music lighting and desktop lyrics. It follows **Spotify**, a browser tab (Spotify or Apple Music on the web, YouTube, YouTube Music) or a music app. Independent software; not affiliated with Spotify, Apple, Google, Lumn or Verci.
 
-> **Version:** this guide describes **Halo 0.8.0**. Since 0.6.0 Halo has been the **Gallery wall** design; 0.4.0 and 0.5.0 used a dark glass window with a sidebar, with the same pages and settings.
+> **Version:** this guide describes **Halo 0.8.1**. Since 0.6.0 Halo has been the **Gallery wall** design; 0.4.0 and 0.5.0 used a dark glass window with a sidebar, with the same pages and settings.
 
 ## Download for Windows
 
@@ -17,7 +17,7 @@ Windows 10 (1809+) or Windows 11 · 64-bit · Portable · No Python or GitHub ac
 
 Keep **Halo.exe**, **_internal** and **licenses** together in the extracted folder. Run the app from that folder, after extraction. No installation is needed. To quit completely, right-click the Halo icon in the system tray → **Quit Halo**.
 
-**Updating.** From 0.7.0 on, Halo updates itself: it checks GitHub's releases when it starts and every six hours, downloads a new version in the background and asks before installing it (**Update now** or **Later**). Halo then closes, puts the new version in place and opens again; if the new version doesn't start, Halo puts the old one back. Your preferences are kept separately in Windows and are not touched. Turn the checks off in **Settings → General → Updates**, or use **Check now** there or **Check for updates** in the tray menu. Halo updates itself only when its folder can be changed without administrator rights; otherwise, download the new ZIP as before.
+**Updating.** From 0.7.0 on, Halo updates itself: it checks GitHub's releases when it starts and every six hours, downloads a new version in the background and asks before installing it (**Update now** or **Later**). **Update history**, in **Settings → General → Updates** and the tray menu, lists every version with its date and one line about it. Halo then closes, puts the new version in place and opens again; if the new version doesn't start, Halo puts the old one back. Your preferences are kept separately in Windows and are not touched. Turn the checks off in **Settings → General → Updates**, or use **Check now** there or **Check for updates** in the tray menu. Halo updates itself only when its folder can be changed without administrator rights; otherwise, download the new ZIP as before.
 
 **Coming from 0.6.0 or earlier?** Those versions can't update themselves, so download the latest version once by hand: quit Halo from its tray icon, extract the new ZIP into a fresh folder, then open the new **Halo.exe**. Your preferences carry over.
 
@@ -25,7 +25,12 @@ Keep **Halo.exe**, **_internal** and **licenses** together in the extracted fold
 
 ![Halo's Listening page on the light wall, playing its original visual demo](docs/images/halo-desktop.png)
 
-## What's new in 0.8.0
+## What's new in 0.8.1
+
+- **A shorter update card.** When a new version is ready, Halo shows the version, one line about it and **Update now**; the full notes are a click away on GitHub.
+- **Update history.** Every version, newest first, with its date and one short line, and any waiting update on top. Open it from **Settings → General → Updates** or the tray menu.
+
+## In 0.8.0
 
 - **Three new Immersive rooms.** **Flow** pours your cover into a bright, slowly turning river of colour that fills the screen; dark covers glow in the song's own colours. **Vinyl** is a turntable up close with the record's sleeve beside it: your cover turns on the label, and the tonearm moves across the record as the song plays. **Horizon** sets a sun in your song's colours over still water, lower and lower as the song goes on. Choose them from Immersive's **Room ›** menu or in **Immersive** at the top of Halo.
 - **The original rooms take the song's colours.** Listening room, Lyrics only, Cinema and Orbit are lit by the cover's vivid colours instead of pale tints, with a light that drifts slowly and swells with the music when **Music sync** or **Momentum** is on.
@@ -75,7 +80,7 @@ Earlier highlights: the Modes library with live previews, smoother audio pulses,
 5. In **Lyrics**, turn on **Floating lyrics**, then minimize Halo or close its window to the tray. Lyrics keep advancing above your desktop with clicks passing through them. Restoring the window, or opening the mini player, hides the floating text.
    Use **Adjust…** in the **Position & size** row to choose a monitor, drag the preview, adjust horizontal/vertical position, use the nine presets, or make the words larger or smaller with **Size** (50–200%). **Preview on desktop** shows the actual placement while the settings are open. **Reset position** restores bottom-center placement on the primary display.
 6. **Immersive** (**F11**) opens the selected room inside the same window: Listening room, Lyrics only, Cinema, Orbit, Flow, Vinyl or Horizon. The menu key at its top left changes the room, lyric style and lighting, switches your background on or off, and returns to Halo. The header and player fade, and the cursor hides, after 1.5 seconds without cursor movement; move the mouse to reveal them. Press **Space** to play/pause and **Esc** or **F11** to return.
-7. Right-click Halo's icon in the system tray to open Halo, Settings, Modes, the mini player (and choose its style) or immersive view, toggle the screen-edge glow, **Check for updates**, or **Quit Halo** completely.
+7. Right-click Halo's icon in the system tray to open Halo, Settings, Modes, the mini player (and choose its style) or immersive view, toggle the screen-edge glow, **Check for updates**, see the **Update history**, or **Quit Halo** completely.
 
 **Try the visual demo** on the Listening page previews lighting and original timed text without a player. **Back to your music** ends the demo. The demo does not play audio.
 

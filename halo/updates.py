@@ -2,7 +2,7 @@
 
 The work itself is in updater.py (find, download, verify, stage) and update_helper.py (swap the
 files once Halo has closed). This module schedules it, keeps its state for the tray and
-Settings, and shows the "Update ready" card in Halo's own sheet.
+Settings, shows the "Update ready" card in Halo's own sheet, and the Update history.
 """
 import logging
 import os
@@ -11,13 +11,15 @@ import sys
 import threading
 import time
 
-from PySide6.QtCore import QObject, QTimer, QUrl, Qt, Signal
-from PySide6.QtGui import QDesktopServices
-from PySide6.QtWidgets import QDialog, QHBoxLayout, QVBoxLayout
+from PySide6.QtCore import QObject, QPointF, QTimer, QUrl, Qt, Signal
+from PySide6.QtGui import QDesktopServices, QPainter, QPen
+from PySide6.QtWidgets import QDialog, QFrame, QHBoxLayout, QVBoxLayout, QWidget
 
 from . import __version__
 from . import updater
 from .frontend import action, text_label
+from .release_history import RELEASES
+from .theme import hexc, style
 from .update_helper import read_json
 
 STARTUP_DELAY_MS = 20_000          # let Halo settle and find the song first
@@ -353,10 +355,11 @@ class UpdateService(QObject):
 
 
 class UpdatePrompt(QDialog):
-    """Asks before installing: the new version, what's new, Update now or Later.
+    """Asks before installing, in a few words: the new version, one line about it, Update now or Later.
 
-    Presented in the window's sheet, like Halo's other dialogs.
+    Presented in the window's sheet, like Halo's other dialogs, sized to its few lines. The full notes are on GitHub.
     """
+    sheet_minimum_height = 0
     def __init__(self, service, parent=None):
         super().__init__(parent)
         self.service = service
@@ -370,22 +373,15 @@ class UpdatePrompt(QDialog):
         self.headline = text_label("", "title")
         self.headline.setAccessibleName("New version")
         layout.addWidget(self.headline)
-        self.summary = text_label("", "muted")
-        self.summary.setWordWrap(True)
-        layout.addWidget(self.summary)
-        layout.addSpacing(8)
-        layout.addWidget(text_label("WHAT'S NEW", "eyebrow"))
+        # One line about the version, then one line about what happens; nothing more.
         self.notes = text_label("", "updateNotes")
         self.notes.setWordWrap(True)
         self.notes.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        self.notes.setAccessibleName("Release notes")
+        self.notes.setAccessibleName("What's new")
         layout.addWidget(self.notes)
-        layout.addSpacing(6)
-        self.restart = text_label("Halo will close, put the new version in place and open again. Your settings, "
-                                  "saved lyrics and modes stay as they are. If the new version doesn't start, "
-                                  "Halo puts this one back.", "muted")
-        self.restart.setWordWrap(True)
-        layout.addWidget(self.restart)
+        self.summary = text_label("", "muted")
+        self.summary.setWordWrap(True)
+        layout.addWidget(self.summary)
         self.status = text_label("", "badge")
         self.status.setWordWrap(True)
         layout.addWidget(self.status)
@@ -401,6 +397,8 @@ class UpdatePrompt(QDialog):
         buttons.addWidget(self.later_button)
         self.update_button = action("Update now", self.update_now, "primary")
         self.update_button.setMinimumWidth(132)
+        self.update_button.setToolTip("Halo closes, puts the new version in place and opens again. Your settings, "
+                                      "saved lyrics and modes stay. If the new version doesn't start, this one comes back.")
         buttons.addWidget(self.update_button)
         layout.addLayout(buttons)
         self.rejected.connect(service.defer)
@@ -417,13 +415,11 @@ class UpdatePrompt(QDialog):
         available, installing = service.state == "available", service.state == "installing"
         self.headline.setText(f"Halo {release.version}")
         if available:
-            self.summary.setText(f"You have {service.version}. {service.blocker}".strip())
-            self.restart.hide()
+            self.summary.setText(service.blocker or f"Download it from GitHub to replace {service.version}.")
         else:
-            self.summary.setText(f"You have {service.version}. The new version is downloaded and matches "
-                                 "its published checksum.")
-            self.restart.show()
-        self.notes.setText(release.notes or "What's new is on GitHub: choose Full notes on GitHub below.")
+            self.summary.setText("Halo restarts and is back in a few seconds.")
+        self.notes.setText(release.notes)
+        self.notes.setVisible(bool(release.notes))
         self.update_button.setText("Open download page" if available else "Updating…" if installing else "Update now")
         self.update_button.setEnabled(service.state in ("ready", "available"))
         self.later_button.setEnabled(not installing)
@@ -443,3 +439,154 @@ class UpdatePrompt(QDialog):
 
     def later(self):
         self.reject()
+
+
+class _Rail(QWidget):
+    """The timeline beside one version: a dot, and the line down to the next."""
+    def __init__(self, newest, last, parent=None):
+        super().__init__(parent)
+        self.newest, self.last = newest, last
+        self.setFixedWidth(22)
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        x, y = self.width() / 2, 13.
+        if not self.last:
+            p.setPen(QPen(hexc("#c9d2cc"), 2))
+            p.drawLine(QPointF(x, y), QPointF(x, self.height()))
+        p.setPen(QPen(hexc("#1c2a26") if self.newest else hexc("#a7b1ac"), 2))
+        p.setBrush(hexc("#1c2a26") if self.newest else hexc("#e7ece6"))
+        p.drawEllipse(QPointF(x, y), 5.5, 5.5)
+
+
+HISTORY_CSS = """
+QFrame#historyBanner { background: #ffffff; border: 1px solid rgba(28,42,38,40); border-radius: 14px; }
+QFrame#historyCard { background: #ffffff; border: 1px solid rgba(28,42,38,26); border-radius: 12px; }
+QLabel#historyVersion { color: #1c2a26; font-size: 15px; font-weight: 600; }
+QLabel#historyBannerTitle { color: #1c2a26; font-size: 15px; font-weight: 600; }
+QLabel#historyBadge { color: #24685b; background: rgba(36,104,91,26); border-radius: 9px; padding: 1px 9px;
+                      font-size: 11px; font-weight: 600; }
+QLabel#historyDate { color: #55625e; font-size: 12px; }
+QLabel#historyText { color: #1c2a26; font-size: 13px; }
+"""
+
+
+class UpdateHistory(QDialog):
+    """What changed in each version, newest first, with the waiting update on top.
+
+    Each version has its date and one short line. The lines ship with Halo, so the history reads
+    offline; a newer release found on GitHub joins the top with its own one-line summary.
+    """
+    def __init__(self, service, parent=None):
+        super().__init__(parent)
+        self.service = service
+        self.setObjectName("updateHistory")
+        self.setWindowTitle("Halo · Update history")
+        style(self, "QDialog#updateHistory { background: transparent; }" + HISTORY_CSS)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(4, 0, 4, 4)
+        layout.setSpacing(14)
+        self.banner = QFrame(self)
+        self.banner.setObjectName("historyBanner")
+        row = QHBoxLayout(self.banner)
+        row.setContentsMargins(18, 14, 14, 14)
+        row.setSpacing(14)
+        words = QVBoxLayout()
+        words.setSpacing(3)
+        self.banner_title = text_label("", "historyBannerTitle")
+        self.banner_text = text_label("", "historyDate")
+        self.banner_text.setWordWrap(True)
+        words.addWidget(self.banner_title)
+        words.addWidget(self.banner_text)
+        row.addLayout(words, 1)
+        self.banner_button = action("Update now", self.update_now, "primary")
+        self.banner_button.setMinimumWidth(132)
+        row.addWidget(self.banner_button, 0, Qt.AlignmentFlag.AlignVCenter)
+        layout.addWidget(self.banner)
+        self.timeline = QVBoxLayout()
+        self.timeline.setSpacing(0)
+        layout.addLayout(self.timeline)
+        layout.addStretch()
+        self.entries = []
+        service.changed.connect(self.sync)
+        self.sync()
+
+    def versions(self):
+        """(version, date, line, badges) newest first: a newer release from GitHub, then Halo's own list."""
+        service, release = self.service, self.service.release
+        rows = [list(item) for item in RELEASES]
+        known = {item[0] for item in RELEASES}
+        if release is not None and release.version not in known and updater.is_newer(release.version, rows[0][0]):
+            rows.insert(0, [release.version, "Ready to install" if service.state == "ready" else "Available",
+                            release.notes or "See the full notes on GitHub."])
+        result = []
+        for index, (version, date, line) in enumerate(rows):
+            badges = []
+            if index == 0:
+                badges.append("Newest")
+            if version == service.version:
+                badges.append("This version")
+            result.append((version, date, line, badges))
+        return result
+
+    def sync(self):
+        service, release = self.service, self.service.release
+        waiting = service.state in ("ready", "available", "installing") and release is not None
+        self.banner.setVisible(waiting)
+        if waiting:
+            available, installing = service.state == "available", service.state == "installing"
+            self.banner_title.setText(f"Halo {release.version} is {'out' if available else 'ready'}")
+            self.banner_text.setText(service.blocker if available and service.blocker else
+                                     "Halo restarts and is back in a few seconds.")
+            self.banner_button.setText("Open download page" if available else "Updating…" if installing else "Update now")
+            self.banner_button.setEnabled(service.state in ("ready", "available"))
+        rows = self.versions()
+        if [row[:3] + (tuple(row[3]),) for row in rows] == self.entries:
+            return
+        self.entries = [row[:3] + (tuple(row[3]),) for row in rows]
+        while self.timeline.count():
+            item = self.timeline.takeAt(0)
+            if item.widget() is not None:
+                item.widget().deleteLater()
+        for index, (version, date, line, badges) in enumerate(rows):
+            self.timeline.addWidget(self._entry(version, date, line, badges, index == 0, index == len(rows) - 1))
+
+    def _entry(self, version, date, line, badges, newest, last):
+        entry = QWidget(self)
+        row = QHBoxLayout(entry)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(12)
+        row.addWidget(_Rail(newest, last, entry))
+        column = QVBoxLayout()
+        column.setSpacing(8)
+        head = QHBoxLayout()
+        head.setSpacing(8)
+        title = text_label(f"Halo {version}" if version[:1].isdigit() else f"Halo {version.lower()}", "historyVersion")
+        head.addWidget(title)
+        for badge in badges:
+            head.addWidget(text_label(badge, "historyBadge"))
+        head.addWidget(text_label(date, "historyDate"))
+        head.addStretch()
+        column.addLayout(head)
+        card = QFrame(entry)
+        card.setObjectName("historyCard")
+        inside = QVBoxLayout(card)
+        inside.setContentsMargins(16, 12, 16, 12)
+        words = text_label(line, "historyText")
+        words.setWordWrap(True)
+        words.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        inside.addWidget(words)
+        column.addWidget(card)
+        if not last:
+            column.addSpacing(18)  # inside the row, so the rail's line runs on to the next version
+        row.addLayout(column, 1)
+        entry.setAccessibleName(f"Halo {version}, {date}: {line}")
+        return entry
+
+    def update_now(self):
+        if self.service.state == "available":
+            if self.service.release is not None:
+                QDesktopServices.openUrl(QUrl(self.service.release.page))
+        elif self.service.install():
+            self.sync()

@@ -35,7 +35,7 @@ from .wheel_guard import install as install_wheel_guard
 from .gallery import song_light, mix
 from . import theme
 from .share_card import ShareCardDialog
-from .updates import UpdateService, UpdatePrompt
+from .updates import UpdateService, UpdatePrompt, UpdateHistory
 
 from .frontend import STYLE, build_main
 from .immersive import Immersive, IMMERSIVE_SCENES
@@ -894,6 +894,7 @@ class MainWindow(DesktopBackdrop):
         # Settings shows the update state, so the service exists before the pages are built.
         self.updates = UpdateService(controller, parent=self)
         self.update_prompt = None
+        self.update_history = None
         build_main(self, controller)
         # Windows' ordinary frame, kept for the fullscreen room; the workspace lets the wall run to the top.
         self._framed_flags = self.windowFlags()
@@ -956,6 +957,7 @@ class MainWindow(DesktopBackdrop):
         self.tray_glow.triggered.connect(self.glow.setChecked)
         menu.addSeparator()
         self.tray_update = menu.addAction(self.updates.action_text(), self.update_clicked)
+        menu.addAction("Update history", self.open_update_history)
         menu.addAction("Quit Halo", self.quit)
         self.tray.setContextMenu(menu)
         self.tray.activated.connect(lambda reason: self.reopen() if reason == QSystemTrayIcon.ActivationReason.Trigger else None)
@@ -1458,6 +1460,19 @@ class MainWindow(DesktopBackdrop):
         self.showFullScreen()
         self.activateWindow()
         self._sync_preview_activity()
+
+    def open_update_history(self):
+        """Every version in one short line, newest first, with any waiting update on top."""
+        if self.exiting:
+            return
+        if self._immersive_active():
+            self.immersive.leave()
+        if not self.isVisible() or self.isMinimized():
+            self.reopen()
+        if self.update_history is None:
+            self.update_history = UpdateHistory(self.updates, self)
+        self.update_history.sync()
+        self.show_sheet(self.update_history, "Update history")
 
     def update_clicked(self):
         """The tray's and Settings' update key: check now, or open the update that is waiting."""
