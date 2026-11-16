@@ -74,3 +74,45 @@ body{background:var(--cream);color:var(--ink);font-size:16px;line-height:1.6}bod
 .download-notes li::before{content:'';position:absolute;left:0;top:.6em;width:7px;height:7px;border-radius:50%;background:var(--blue)}
 .download-notes a{color:var(--blue);font-weight:800;text-decoration:underline;text-underline-offset:3px;overflow-wrap:anywhere}
 @media(max-width:740px){.hero-footnote .small-divider:last-of-type{display:none}.download-notes{margin-top:28px;padding:20px 18px}.download-notes h3{font-size:18px}.download-notes li{font-size:12px}}
+
+/* Halo 0.8.0 rooms: Flow, Vinyl and Horizon. Sizes follow the preview's height (cqh), so they hold their shape at any width. */
+.scene-preview{container-type:size}
+.scene-room{display:none;position:absolute;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+.scene-picker button:nth-child(4n+1){background:var(--yellow);color:var(--ink)}
+.scene-picker button:nth-child(4n+2){background:var(--pink);color:var(--ink)}
+.scene-picker button:nth-child(4n+3){background:var(--blue);color:var(--cream)}
+.scene-picker button:nth-child(4n+4){background:var(--cream);color:var(--ink)}
+@media(min-width:1191px){.scene-picker{grid-template-columns:repeat(7,1fr);gap:12px}.scene-picker button{padding:18px 14px}}
+.scene-preview[data-scene=flow] .scene-flow,.scene-preview[data-scene=vinyl] .scene-vinyl,.scene-preview[data-scene=horizon] .scene-horizon{display:block}
+.scene-preview[data-scene=flow] .scene-gradient,.scene-preview[data-scene=horizon] .scene-gradient{opacity:0}
+.scene-flow{background:#3a2550}
+.scene-flow>i{position:absolute;border-radius:50%;filter:blur(48px);opacity:1}
+.scene-flow>i:nth-child(1){width:95cqh;height:90cqh;left:-14cqh;top:-26cqh;background:var(--pink)}
+.scene-flow>i:nth-child(2){width:80cqh;height:80cqh;right:-8cqh;top:-24cqh;background:var(--yellow)}
+.scene-flow>i:nth-child(3){width:110cqh;height:80cqh;left:26%;bottom:-36cqh;background:var(--blue)}
+.scene-flow>i:nth-child(4){width:64cqh;height:64cqh;right:6%;bottom:-20cqh;background:#ff8a3d}
+.scene-flow::after{content:"";position:absolute;inset:0;background:radial-gradient(ellipse 26% 38% at 64% 50%,#191b2e8c,#191b2e40 62%,transparent 82%)}
+.scene-preview[data-scene=vinyl] .scene-art{display:none}
+.scene-preview[data-scene=vinyl] .scene-song{visibility:hidden}
+.scene-preview[data-scene=vinyl] .scene-content{justify-content:flex-end}
+.scene-preview[data-scene=vinyl] .scene-gradient{background:radial-gradient(ellipse at 14% 0%,#f47b9b66,transparent 62%),radial-gradient(ellipse at 92% 58%,#2450e84d,transparent 60%)}
+.vinyl-sleeve{position:absolute;left:3cqw;top:12cqh;width:26cqh;height:26cqh;transform:rotate(-6deg);border:2px solid var(--cream);border-radius:6px;box-shadow:5px 7px 0 #0007}
+.vinyl-deck{position:absolute;left:-4cqw;top:37cqh;width:92cqh;height:80cqh;border-radius:3cqh;background:linear-gradient(#3a3746,#1d1c26);border:2px solid #fffbea2e;box-shadow:7px 7px 0 #0008}
+.vinyl-record,.vinyl-sheen{position:absolute;left:6cqh;top:8cqh;width:62cqh;height:62cqh;border-radius:50%}
+.vinyl-record{background:radial-gradient(circle,transparent 31%,#0c0c11 31.5% 40%,transparent 40.5%),repeating-radial-gradient(circle,#121217 0 2px,#1d1d25 2px 4px);box-shadow:0 0 0 1.2cqh #a8adb6,0 0 0 1.5cqh #191b2e}
+.vinyl-record img{position:absolute;left:31%;top:31%;width:38%;height:38%;border-radius:50%;object-fit:cover}
+.vinyl-sheen{background:conic-gradient(from 38deg,#fffbea00,#fffbea3d 6%,#fffbea00 13%,#fffbea00 50%,#fffbea3d 56%,#fffbea00 63%,#fffbea00);-webkit-mask:radial-gradient(circle,transparent 39%,#000 40%);mask:radial-gradient(circle,transparent 39%,#000 40%)}
+.vinyl-arm{position:absolute;left:74cqh;top:6cqh;width:1.1cqh;height:48cqh;border-radius:1cqh;background:linear-gradient(90deg,#8d929b,#f0f2f6,#8d929b);transform-origin:50% 0;transform:rotate(24deg);box-shadow:4px 6px 0 #0006}
+.vinyl-arm::before{content:"";position:absolute;left:50%;top:0;width:7cqh;height:7cqh;border-radius:50%;transform:translate(-50%,-50%);background:radial-gradient(circle at 35% 35%,#f1f3f6,#8e939b 60%,#3a3d43);box-shadow:0 0 0 1.2cqh #2a2c31 inset}
+.vinyl-arm::after{content:"";position:absolute;left:50%;bottom:-3cqh;width:3.4cqh;height:6cqh;border-radius:.8cqh;transform:translateX(-50%) rotate(-20deg);background:#c9cdd4;border-bottom:1.4cqh solid var(--pink)}
+.vinyl-keys{position:absolute;left:72cqh;top:58cqh;width:16cqh;height:4cqh;border-radius:1cqh;background:linear-gradient(90deg,#45434f 0 46%,transparent 46% 54%,#45434f 54%);box-shadow:0 -2.6cqh 0 -1.6cqh var(--yellow)}
+.scene-preview[data-scene=horizon] .scene-art{display:none}
+.scene-preview[data-scene=horizon] .scene-content{inset:56px 70px 50cqh}
+.scene-preview[data-scene=horizon] .scene-words{text-align:center}
+.scene-preview[data-scene=horizon] .scene-words>p{font-size:40px;margin:12px 0}
+.scene-horizon{background:linear-gradient(#0d1128,#24204a 42%,#6b3a6a 64%,#d9708a 76cqh,#14162a 76cqh,#0b0c18)}
+.horizon-sky{position:absolute;left:0;right:0;top:0;height:76cqh;overflow:hidden}
+.horizon-sun{position:absolute;left:50%;top:59cqh;width:34cqh;height:34cqh;margin-left:-17cqh;border-radius:50%;background:linear-gradient(#fff3c4,var(--yellow) 45%,var(--pink));box-shadow:0 0 70px 28px #f47b9b5c}
+.horizon-hills{position:absolute;left:0;right:0;top:66cqh;height:10.2cqh;background:linear-gradient(#1b1a33,#14162a);clip-path:polygon(0 60%,9% 35%,18% 52%,27% 30%,36% 70%,40% 100%,60% 100%,64% 66%,72% 28%,82% 50%,91% 22%,100% 46%,100% 100%,0 100%)}
+.horizon-water{position:absolute;left:50%;top:77cqh;width:40cqh;height:22cqh;margin-left:-20cqh;background:repeating-linear-gradient(#ffd42a 0 3px,transparent 3px 11px);-webkit-mask:radial-gradient(ellipse 50% 100% at 50% 0,#000 20%,transparent 75%);mask:radial-gradient(ellipse 50% 100% at 50% 0,#000 20%,transparent 75%);opacity:.75}
+@media(max-width:740px){.vinyl-sleeve{display:none}.vinyl-deck{left:-14cqw;top:48cqh}.scene-preview[data-scene=vinyl] .scene-content{justify-content:flex-start}.scene-preview[data-scene=horizon] .scene-content{inset:58px 24px 50cqh}.scene-preview[data-scene=horizon] .scene-words>p{font-size:27px}}

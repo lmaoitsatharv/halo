@@ -267,7 +267,10 @@
     listening: ['Listening Room', 'Artwork, lyrics and soft light. Everything in its place.'],
     lyrics: ['Lyrics Only', 'The words, with the whole screen to themselves.'],
     cinema: ['Cinema', 'Just the atmosphere. A quiet song block in the bottom-left.'],
-    orbit: ['Orbit', 'A little artwork, at the centre of its own universe.']
+    orbit: ['Orbit', 'A little artwork, at the centre of its own universe.'],
+    flow: ['Flow', 'Your cover, poured into a slow river of colour.'],
+    vinyl: ['Vinyl', 'A turntable up close. Your cover turns on the label.'],
+    horizon: ['Horizon', 'A sun in your song\u2019s colours, setting as the song plays.']
   };
   const scenePreview = $('#scene-preview');
   let controlsTimer;

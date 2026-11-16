@@ -70,3 +70,16 @@
   #hero-play::after{content:'';position:absolute;inset:calc(var(--installation-hit-pad,0px)*-1);border-radius:50%}
 }
 @media(prefers-reduced-motion:reduce){.journey-light-canvas{display:none}}
+
+/* Flow drifts, Vinyl's label turns once every 7.5 s, Horizon's sun sinks and its reflection ripples. */
+.scene-preview[data-scene=flow] .scene-flow>i{animation:flow-drift 14s ease-in-out infinite alternate;animation-play-state:var(--motion)}
+.scene-preview[data-scene=flow] .scene-flow>i:nth-child(2){animation-duration:17s;animation-delay:-5s}
+.scene-preview[data-scene=flow] .scene-flow>i:nth-child(3){animation-duration:19s;animation-delay:-9s}
+.scene-preview[data-scene=flow] .scene-flow>i:nth-child(4){animation-duration:12s;animation-delay:-3s}
+.scene-preview[data-scene=vinyl] .vinyl-record{animation:vinyl-turn 7.5s linear infinite;animation-play-state:var(--motion)}
+.scene-preview[data-scene=horizon] .horizon-sun{animation:sun-set 40s ease-in-out infinite alternate;animation-play-state:var(--motion)}
+.scene-preview[data-scene=horizon] .horizon-water{animation:water-shimmer 3.2s linear infinite;animation-play-state:var(--motion)}
+@keyframes flow-drift{0%{transform:translate(0,0) scale(1) rotate(0)}50%{transform:translate(8cqh,-6cqh) scale(1.12) rotate(18deg)}100%{transform:translate(-6cqh,7cqh) scale(.92) rotate(-12deg)}}
+@keyframes vinyl-turn{to{transform:rotate(360deg)}}
+@keyframes sun-set{from{transform:translateY(-6cqh)}to{transform:translateY(12cqh)}}
+@keyframes water-shimmer{to{background-position:0 11px}}
